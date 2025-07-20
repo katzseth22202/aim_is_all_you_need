@@ -1,0 +1,11 @@
+name: balloon_math_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - poliastro
+  - jupyter
+  - mypy
+  - pytest
+prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env
