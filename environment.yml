@@ -8,4 +8,6 @@ dependencies:
   - jupyter
   - mypy
   - pytest
+  - black
+  - isort
 prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env

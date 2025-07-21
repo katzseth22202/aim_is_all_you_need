@@ -15,7 +15,7 @@ aim_is_all_you_need/
 ├── pyproject.toml         # Project configuration and dependencies
 ├── requirements.txt       # Development dependencies
 ├── Makefile              # Convenient commands for development
-
+├── environment.yml       # Conda environment (auto-updated)
 └── README.md            # This file
 ```
 
@@ -54,7 +54,7 @@ pip install -e ".[dev]"
 ### 2. Run the Complete Workflow
 
 ```bash
-# Run mypy, tests, and then the main script
+# Run mypy, tests, main script, and update environment.yml
 make all
 ```
 
@@ -67,9 +67,6 @@ make mypy
 # Run tests
 make test
 
-# Run tests with coverage
-make test-cov
-
 # Run the main script
 make run
 
@@ -81,6 +78,9 @@ make check-format
 
 # Clean build artifacts
 make clean
+
+# Export the current conda environment to environment.yml
+make export-env
 ```
 
 ## Available Commands
@@ -91,62 +91,11 @@ Run `make help` to see all available commands:
 make help
 ```
 
-## Development
-
-### Adding New Code
-
-1. Add your code to the `src/` directory
-2. Add corresponding tests to the `tests/` directory
-3. Ensure type hints are properly added
-4. Run `make all` to verify everything works
-
-### Testing
-
-The project includes:
-- Unit tests for all functions
-- Integration tests (marked with `@pytest.mark.slow`)
-- Coverage reporting
-- Type checking with mypy
-
-### Code Quality
-
-The project enforces:
-- Black code formatting
-- isort import sorting
-- mypy type checking with strict settings
-
-## Example Usage
-
-```python
-from src.main import greet, calculate_sum
-
-# Greet someone
-message = greet("Alice")
-print(message)  # "Hello, Alice! Welcome to AIM is all you need!"
-
-# Calculate sum of numbers
-total = calculate_sum([1, 2, 3, 4, 5])
-print(total)  # 15
-```
-
-## Running the Main Script
-
-```bash
-# Using make
-make run
-
-# Using python directly
-python -m src.main
-
-# Using the installed script
-main
-```
-
 ## Environment Management
 
 ### Conda Environment
 
-The project includes an `environment.yml` file for reproducible conda environments:
+The project includes an `environment.yml` file for reproducible conda environments. This file is automatically updated every time you run `make all` or `make export-env`:
 
 ```bash
 # Create the environment
@@ -159,7 +108,7 @@ conda activate balloon_math_env
 conda env update -f environment.yml
 
 # Export current environment (if you make changes)
-conda env export > environment.yml
+make export-env  # or make all
 ```
 
 ### Virtual Environment (Alternative)

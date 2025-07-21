@@ -17,6 +17,7 @@ exclude = ["tests/*", "docs/*"]
 enabled = true
 prefer_explicit_types = true
 use_typing_extensions = true  # For Annotated, Literal, etc.
+require_explicit_none_return = true  # Require '-> None' for functions that return nothing
 
 [mypy]
 strict = true

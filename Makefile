@@ -1,4 +1,4 @@
-.PHONY: help install install-dev clean test mypy format check-format run all
+.PHONY: help install install-dev clean test mypy format check-format run all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -37,4 +37,7 @@ check-format:  ## Check if code is formatted correctly
 run:  ## Run the main script
 	python -m src.main
 
-all: mypy test run  ## Run mypy, tests, and then the main script 
+export-env:  ## Export the current conda environment to environment.yml
+	conda env export --no-builds --from-history > environment.yml
+
+all: format mypy test run export-env  ## Format code, run mypy, tests, main script, and export environment 
