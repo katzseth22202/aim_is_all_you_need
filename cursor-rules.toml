@@ -1,0 +1,56 @@
+# cursor-rules.toml — Python + mypy + NumPy annotations
+# You can place this file in your project root to guide Cursor's code suggestions.
+
+[global]
+language = "python"
+style = "pep8"
+type_annotations = "mypy"
+strict_optional = true
+prefer_type_hints = true
+include_docstrings = true
+
+[files]
+include = ["*.py"]
+exclude = ["tests/*", "docs/*"]
+
+[annotations]
+enabled = true
+prefer_explicit_types = true
+use_typing_extensions = true  # For Annotated, Literal, etc.
+
+[mypy]
+strict = true
+ignore_missing_imports = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[numpy]
+prefer_np_typing = true  # Use numpy.typing.NDArray when possible
+shape_annotations = true
+dtypes = ["float64", "int32", "bool"]
+
+# Example: specify shape for typical arrays
+[numpy.array_shapes]
+default = "NDArray[float64]"  # Fallback
+vectors = "NDArray[float64]"  # 1D
+matrices = "NDArray[float64]"  # 2D
+
+# Encourage generation of stub files
+[stubs]
+generate = true
+output_dir = "typings"
+prefer_partial_stubs = false
+include_comments = true
+
+[completion]
+rank_by_type_safety = true
+prefer_named_args = true
+prefer_keyword_defaults = true
+include_unit_tests = true
+
+[docstrings]
+format = "google"  # Options: "numpy", "google", "sphinx"
+include_examples = true
+describe_types = true
+suggest_related_functions = true 
