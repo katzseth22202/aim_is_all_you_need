@@ -1,4 +1,4 @@
-.PHONY: help install install-dev clean test test-cov mypy lint format run all
+.PHONY: help install install-dev clean test mypy format check-format run all
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -22,12 +22,6 @@ clean:  ## Clean up build artifacts
 
 test:  ## Run tests
 	pytest
-
-test-cov:  ## Run tests with coverage report
-	pytest --cov=src --cov-report=html --cov-report=term-missing
-
-test-simple:  ## Run tests without coverage (if pytest-cov not available)
-	pytest --no-cov
 
 mypy:  ## Run mypy type checking
 	mypy src/
