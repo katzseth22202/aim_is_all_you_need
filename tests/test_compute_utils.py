@@ -2,11 +2,16 @@ import pytest
 from astropy import units as u
 from poliastro.bodies import Earth
 
-from src.compute_utils import STD_FUDGE_FACTOR, balloon_mass, body_speed
+from src.compute_utils import (
+    STD_FUDGE_FACTOR,
+    balloon_mass,
+    body_speed,
+    speed_around_attractor,
+)
 
 
 def is_nearly_equal(
-    actual: u.Quantity, expected: u.Quantity, percent: float = 0.01
+    actual: u.Quantity, expected: u.Quantity, percent: float = 0.001
 ) -> bool:
     """Return True if two astropy Quantity values are within a certain percentage of each other.
     If expected is zero, use absolute difference.
@@ -25,6 +30,11 @@ def test_body_speed_earth_low_orbit() -> None:
     # The expected speed is about 7.67 km/s for a 400 km LEO
     expected = 7.67 * u.km / u.s
     assert is_nearly_equal(speed, expected, percent=0.01)
+
+
+def test_body_speed_earth_around_sun() -> None:
+    speed: u.Quantity = speed_around_attractor(a=1 * u.AU)
+    assert is_nearly_equal(speed, 29.78 * u.km / u.s)
 
 
 def test_balloon_mass() -> None:

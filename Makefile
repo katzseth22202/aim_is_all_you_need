@@ -21,7 +21,7 @@ clean:  ## Clean up build artifacts
 	find . -type f -name "*.pyc" -delete
 
 test:  ## Run tests
-	pytest
+	pytest -s
 
 mypy:  ## Run mypy type checking
 	mypy src/

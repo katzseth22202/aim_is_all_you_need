@@ -1,6 +1,6 @@
 import numpy as np
 from astropy import units as u
-from poliastro.bodies import Body
+from poliastro.bodies import Body, Sun
 from poliastro.twobody import Orbit
 
 STD_FUDGE_FACTOR: float = 0.8
@@ -16,10 +16,18 @@ def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
     Returns:
         The orbital speed at the given altitude (astropy Quantity, m/s)
     """
+
     orbit: Orbit = Orbit.circular(body, altitude)
-    velocity_vector = orbit.rv()[1]
+    _, velocity_vector = orbit.rv()
     speed = np.linalg.norm(velocity_vector.value) * velocity_vector.unit
-    return speed.to(u.m / u.s)
+    return speed.to(u.km / u.s)
+
+
+def speed_around_attractor(a: u.Quantity, attractor: Body = Sun) -> u.Quantity:
+    orbit: Orbit = Orbit.circular(attractor, a - attractor.R)
+    _, velocity_vector = orbit.rv()
+    speed = np.linalg.norm(velocity_vector.value) * velocity_vector.unit
+    return speed.to(u.km / u.s)
 
 
 def balloon_mass(
