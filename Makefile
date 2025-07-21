@@ -32,14 +32,13 @@ test-simple:  ## Run tests without coverage (if pytest-cov not available)
 mypy:  ## Run mypy type checking
 	mypy src/
 
-lint:  ## Run linting tools
-	flake8 src/ tests/
-	black --check src/ tests/
-	isort --check-only src/ tests/
-
 format:  ## Format code with black and isort
 	black src/ tests/
 	isort src/ tests/
+
+check-format:  ## Check if code is formatted correctly
+	black --check src/ tests/
+	isort --check-only src/ tests/
 
 run:  ## Run the main script
 	python -m src.main

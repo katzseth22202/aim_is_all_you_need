@@ -1,1 +1,1 @@
-"""Test package for AIM is all you need.""" 
+"""Test package for AIM is all you need."""

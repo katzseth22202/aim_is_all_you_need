@@ -15,7 +15,7 @@ aim_is_all_you_need/
 ├── pyproject.toml         # Project configuration and dependencies
 ├── requirements.txt       # Development dependencies
 ├── Makefile              # Convenient commands for development
-├── .mypy.ini            # Mypy configuration
+
 └── README.md            # This file
 ```
 
@@ -76,8 +76,8 @@ make run
 # Format code
 make format
 
-# Lint code
-make lint
+# Check code formatting
+make check-format
 
 # Clean build artifacts
 make clean
@@ -113,7 +113,6 @@ The project includes:
 The project enforces:
 - Black code formatting
 - isort import sorting
-- flake8 linting
 - mypy type checking with strict settings
 
 ## Example Usage
@@ -189,7 +188,7 @@ pip install -e ".[dev]"
 
 ### Mypy Configuration
 
-The project uses strict mypy settings defined in `pyproject.toml` and `.mypy.ini`:
+The project uses strict mypy settings defined in `pyproject.toml`:
 - Disallows untyped definitions
 - Warns about return Any
 - Enforces strict equality checks

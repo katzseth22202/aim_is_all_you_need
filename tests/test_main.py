@@ -1,7 +1,8 @@
 """Tests for the main module."""
 
 import pytest
-from src.main import greet, calculate_sum
+
+from src.main import calculate_sum, greet
 
 
 class TestGreet:
@@ -69,11 +70,11 @@ class TestIntegration:
         # This is a simple integration test
         greeting = greet("TestUser")
         assert "TestUser" in greeting
-        
+
         numbers = [10, 20, 30]
         total = calculate_sum(numbers)
         assert total == 60
-        
+
         # Verify both results are as expected
         assert greeting == "Hello, TestUser! Welcome to AIM is all you need!"
-        assert total == 60 
+        assert total == 60

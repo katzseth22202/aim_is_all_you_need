@@ -12,6 +12,9 @@ build/
 develop-eggs/
 dist/
 downloads/
+htmlcov/
+.mypy_cache/
+.pytest_cache/
 eggs/
 .eggs/
 lib/
