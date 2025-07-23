@@ -1,11 +1,17 @@
+from typing import Tuple
+
+import numpy as np
 import pytest
 from astropy import units as u
 from poliastro.bodies import Earth
+from poliastro.maneuver import Maneuver
 
 from src.compute_utils import (
     STD_FUDGE_FACTOR,
     balloon_mass,
     body_speed,
+    get_hohmann_burns,
+    hohmann_transfer,
     speed_around_attractor,
 )
 
@@ -37,6 +43,13 @@ def test_body_speed_earth_around_sun() -> None:
     assert is_nearly_equal(speed, 29.78 * u.km / u.s)
 
 
+def test_hohmann_transfer() -> None:
+    transfer: Maneuver = hohmann_transfer(r_i=1 * u.AU, r_f=5.2 * u.AU)
+    initial_burn, final_burn = get_hohmann_burns(transfer)
+    assert is_nearly_equal(initial_burn, 8.756 * u.km / u.s)
+    assert is_nearly_equal(final_burn, 5.628 * u.km / u.s)
+
+
 def test_balloon_mass() -> None:
     # This is just formula for velocity after elastic colliions from Wikpeida
     def rocket_new_velocity(
@@ -65,3 +78,11 @@ def test_balloon_mass() -> None:
                 break
             mass += m_b
         return m_r * STD_FUDGE_FACTOR / mass
+
+    v_b = 11 * u.km / u.s
+    v_rf = 8 * u.km / u.s
+    v_ri = 2 * u.km / u.s
+    assert is_nearly_equal(
+        balloon_mass_test(v_rf=v_rf, v_b=v_b, v_ri=v_ri),
+        balloon_mass(v_rf=v_rf, v_ri=v_ri, v_b=v_b),
+    )

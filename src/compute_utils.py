@@ -1,9 +1,28 @@
+from typing import List, Tuple
+
 import numpy as np
 from astropy import units as u
 from poliastro.bodies import Body, Sun
+from poliastro.maneuver import Maneuver
 from poliastro.twobody import Orbit
 
 STD_FUDGE_FACTOR: float = 0.8
+
+
+def get_burn(impulse: Tuple[np.ndarray, np.ndarray]) -> u.Quantity:
+    return np.linalg.norm(impulse[1])
+
+
+def get_hohmann_burns(h: Maneuver) -> List[u.Quantity]:
+    i_1, i_2 = h.impulses
+    return [get_burn(i_1), get_burn(i_2)]
+
+
+def hohmann_transfer(
+    r_i: u.Quantity, r_f: u.Quantity, attractor: Body = Sun
+) -> Maneuver:
+    initial_orbit: Orbit = Orbit.circular(attractor, r_i)
+    return Maneuver.hohmann(initial_orbit, r_f)
 
 
 def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
