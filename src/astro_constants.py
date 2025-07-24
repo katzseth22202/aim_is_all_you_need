@@ -14,4 +14,4 @@ PLUTO_A = 39.482 * u.AU  # Pluto (dwarf planet)
 MOON_A = 384400 * u.km  # Moon (semi-major axis of orbit around Earth, in km)
 LEO_ALTITUDE = 200 * u.km  # Low Earth Orbit altitude, in km
 
-PARKER_PERIAPSIS = 6.9e6 * u.km # lowest Parker periapsis
+PARKER_PERIAPSIS = 6.9e6 * u.km  # lowest Parker periapsis

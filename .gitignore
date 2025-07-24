@@ -204,6 +204,9 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Idea
+.idea
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

@@ -6,11 +6,17 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
-from poliastro.bodies import Body, Earth, Jupiter, Sun
+from poliastro.bodies import Body, Earth, Moon, Sun
 from poliastro.maneuver import Maneuver
 from poliastro.twobody import Orbit
 
-from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, MOON_A
+from src.astro_constants import (
+    EARTH_A,
+    JUPITER_A,
+    LEO_ALTITUDE,
+    MOON_A,
+    PARKER_PERIAPSIS,
+)
 
 STD_FUDGE_FACTOR: float = 0.8
 
@@ -471,8 +477,10 @@ class BalloonScenario:
             periapsis_radius=low_earth_periapsis,
             attractor_body=Earth,
         )
-        lunar_transfer_periapsis_velocity = periapsis_velocity(lunar_transfer_orbit)
-        leo_speed = speed_around_attractor(low_earth_periapsis, attractor=Earth)
+        lunar_transfer_periapsis_velocity = periapsis_velocity(
+            orbit=lunar_transfer_orbit
+        )
+        leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
         desc = """Eccentric balloons with apogee at lunar distance pushes
 rocket to minimal low Earth orbit"""
         scenario_table = BalloonScenario.scenario_table()
@@ -480,9 +488,38 @@ rocket to minimal low Earth orbit"""
             v_rf=leo_speed, v_b=lunar_transfer_periapsis_velocity, desc=desc
         ).append(scenario_table)
         desc = """Decelerate intercity rocket for powered reentry with retrograde balloons in low orbit"""
-        BalloonScenario(
-            v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(scenario_table)
+        BalloonScenario(v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(
+            scenario_table
+        )
         desc = """Decelerate intercity rocket for powered reentry with retrograde balloons from lunar orbit"""
         BalloonScenario(
-            v_rf=0, v_b=-lunar_transfer_periapsis_velocity, desc=desc, v_ri=leo_speed).append(scenario_table)
+            v_rf=0, v_b=-lunar_transfer_periapsis_velocity, desc=desc, v_ri=leo_speed
+        ).append(scenario_table)
+        parker_orbit = orbit_from_rp_ra(
+            apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
+        )
+        parker_apoapsis_velocity = apoapsis_velocity(orbit=parker_orbit)
+        earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
+        prograde_dv_earth_to_parker = earth_speed - parker_apoapsis_velocity
+        retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
+        desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
+        BalloonScenario(
+            v_rf=prograde_dv_earth_to_parker, v_b=retrograde_jovian_speed, desc=desc
+        ).append(scenario_table)
+        desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun"""
+        retrograde_dv_earth_to_parker = earth_speed + parker_apoapsis_velocity
+        BalloonScenario(
+            v_rf=retrograde_dv_earth_to_parker, v_b=retrograde_jovian_speed, desc=desc
+        ).append(scenario_table)
+        desc = """Balloons approach Earth from Jupiter and push a rocket into an elliptical orbit"""
+        BalloonScenario(
+            v_rf=lunar_transfer_periapsis_velocity,
+            v_b=retrograde_jovian_speed,
+            desc=desc,
+        ).append(scenario_table)
+        desc = """Decelerate trans-lunar payloads to land on the moon"""
+        lunar_esc = escape_velocity(body=Moon)
+        BalloonScenario(
+            v_rf=0 * u.km / u.s, v_b=-lunar_esc, desc=desc, v_ri=lunar_esc
+        ).append(scenario_table)
         return scenario_table
