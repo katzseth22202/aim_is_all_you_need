@@ -1,14 +1,16 @@
 import re
+from dataclasses import dataclass
 from typing import List, Tuple
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 from astropy import units as u
 from poliastro.bodies import Body, Earth, Jupiter, Sun
 from poliastro.maneuver import Maneuver
 from poliastro.twobody import Orbit
 
-from src.astro_constants import EARTH_A, JUPITER_A
+from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, MOON_A
 
 STD_FUDGE_FACTOR: float = 0.8
 
@@ -424,4 +426,63 @@ def retrograde_orbit(orbit: Orbit) -> Orbit:
     """
     r_vec, v_vec = orbit.rv()
     retrograde_v_vec = -v_vec
-    return Orbit.from_vectors(orbit.attractor, r_vec, retrograde_v_vec, epoch=orbit.epoch)
+    return Orbit.from_vectors(
+        orbit.attractor, r_vec, retrograde_v_vec, epoch=orbit.epoch
+    )
+
+
+@dataclass(frozen=True)
+class BalloonScenario:
+    v_rf: u.Quantity
+    v_b: u.Quantity
+    desc: str
+    v_ri: u.Quantity = 0
+
+    @staticmethod
+    def scenario_table() -> pd.DataFrame:
+        """Create an empty DataFrame for storing balloon scenario results.
+
+        Returns:
+            A pandas DataFrame with columns for payload/balloon mass ratio, velocities, and description.
+        """
+        df = pd.DataFrame(
+            columns=["payload_balloon_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
+        )
+        return df
+
+    def append(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Append this scenario's results to the provided DataFrame.
+
+        Args:
+            df: The DataFrame to append to.
+
+        Returns:
+            The DataFrame with this scenario's results added as a new row.
+        """
+        mass_ratio = payload_mass_ratio(v_rf=self.v_rf, v_b=self.v_b, v_ri=self.v_ri)
+        df.loc[len(df)] = [mass_ratio, self.v_rf, self.v_ri, self.v_b, self.desc]
+        return df
+
+    @staticmethod
+    def paper_scenarios() -> pd.DataFrame:
+        low_earth_periapsis = Earth.R + LEO_ALTITUDE
+        lunar_transfer_orbit = orbit_from_rp_ra(
+            apoapsis_radius=MOON_A,
+            periapsis_radius=low_earth_periapsis,
+            attractor_body=Earth,
+        )
+        lunar_transfer_periapsis_velocity = periapsis_velocity(lunar_transfer_orbit)
+        leo_speed = speed_around_attractor(low_earth_periapsis, attractor=Earth)
+        desc = """Eccentric balloons with apogee at lunar distance pushes
+rocket to minimal low Earth orbit"""
+        scenario_table = BalloonScenario.scenario_table()
+        BalloonScenario(
+            v_rf=leo_speed, v_b=lunar_transfer_periapsis_velocity, desc=desc
+        ).append(scenario_table)
+        desc = """Decelerate intercity rocket for powered reentry with retrograde balloons in low orbit"""
+        BalloonScenario(
+            v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(scenario_table)
+        desc = """Decelerate intercity rocket for powered reentry with retrograde balloons from lunar orbit"""
+        BalloonScenario(
+            v_rf=0, v_b=-lunar_transfer_periapsis_velocity, desc=desc, v_ri=leo_speed).append(scenario_table)
+        return scenario_table
