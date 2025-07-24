@@ -10,4 +10,5 @@ dependencies:
   - pytest
   - black
   - isort
+  - pandas
 prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env
