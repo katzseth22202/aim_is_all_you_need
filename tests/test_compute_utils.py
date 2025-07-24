@@ -6,10 +6,11 @@ from astropy import units as u
 from poliastro.bodies import Earth, Sun
 from poliastro.maneuver import Maneuver
 
-from src.astro_constants import EARTH_A, JUPITER_A
+from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE
 from src.compute_utils import (
     STD_FUDGE_FACTOR,
     body_speed,
+    distance_to_center,
     escape_velocity,
     get_hohmann_burns,
     get_period,
@@ -116,3 +117,8 @@ def test_period() -> None:
 def test_semi_major_axis() -> None:
     a = get_semimajor_axis(Sun, 1 * u.year)
     assert is_nearly_equal(a, EARTH_A)
+
+
+def test_distance_to_center() -> None:
+    d = distance_to_center(LEO_ALTITUDE, Earth)
+    assert is_nearly_equal(d, Earth.R + LEO_ALTITUDE)

@@ -2,6 +2,7 @@ import re
 from typing import List, Tuple
 
 import numpy as np
+import numpy.typing as npt
 from astropy import units as u
 from poliastro.bodies import Body, Earth, Jupiter, Sun
 from poliastro.maneuver import Maneuver
@@ -12,7 +13,7 @@ from src.astro_constants import EARTH_A, JUPITER_A
 STD_FUDGE_FACTOR: float = 0.8
 
 
-def get_burn(impulse: Tuple[np.ndarray, np.ndarray]) -> u.Quantity:
+def get_burn(impulse: Tuple[npt.ArrayLike, npt.ArrayLike]) -> u.Quantity:
     """Compute the magnitude of the second impulse vector in a maneuver.
 
     Args:
@@ -21,7 +22,7 @@ def get_burn(impulse: Tuple[np.ndarray, np.ndarray]) -> u.Quantity:
     Returns:
         The magnitude of the second impulse (astropy Quantity).
     """
-    return np.linalg.norm(impulse[1])
+    return as_scalar(impulse[1])
 
 
 def get_hohmann_burns(h: Maneuver) -> List[u.Quantity]:
@@ -185,7 +186,7 @@ def distance_to_center(altitute: u.Quantity, body: Body) -> u.Quantity:
     return (body.R + altitute).to(u.km)
 
 
-def generate_aligned_orbit(
+def orbit_from_rp_ra(
     apoapsis_radius: u.Quantity,
     periapsis_radius: u.Quantity,
     attractor_body: Body = Sun,
@@ -262,9 +263,18 @@ def periapsis_velocity(orbit: Orbit) -> u.Quantity:
     Returns:
         The velocity vector at periapsis (astropy Quantity, km/s).
     """
-    # Get position and velocity at periapsis (true anomaly = 0)
-    _, v_vec = orbit.rv(0 * u.deg)
-    return v_vec.to(u.km / u.s)
+    # Create a new orbit at true anomaly = 0 deg (periapsis)
+    orbit_at_periapsis = Orbit.from_classical(
+        orbit.attractor,
+        orbit.a,
+        orbit.ecc,
+        orbit.inc,
+        orbit.raan,
+        orbit.argp,
+        0 * u.deg,
+    )
+    _, v_vec = orbit_at_periapsis.rv()
+    return as_scalar(v_vec)
 
 
 def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
@@ -276,9 +286,28 @@ def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
     Returns:
         The velocity vector at apoapsis (astropy Quantity, km/s).
     """
-    # Get position and velocity at apoapsis (true anomaly = 180 deg)
-    _, v_vec = orbit.rv(180 * u.deg)
-    return v_vec.to(u.km / u.s)
+    # Create a new orbit at true anomaly = 180 deg (apoapsis)
+    orbit_at_apoapsis = Orbit.from_classical(
+        orbit.attractor,
+        orbit.a,
+        orbit.ecc,
+        orbit.inc,
+        orbit.raan,
+        orbit.argp,
+        180 * u.deg,
+    )
+    _, v_vec = orbit_at_apoapsis.rv()
+    return as_scalar(v_vec)
+
+
+def as_scalar(vec: npt.ArrayLike) -> u.Quantity:
+    """Return the norm of a vector as an astropy Quantity in km/s if possible, else as a float."""
+    norm = np.linalg.norm(vec)
+    # If input is an astropy Quantity, norm will be a Quantity; else, it's a float
+    if isinstance(norm, u.Quantity):
+        return norm.to(u.km / u.s)
+    else:
+        return norm * u.dimensionless_unscaled
 
 
 def orbit_from_radius_velocity(
@@ -382,3 +411,17 @@ def get_orbital_velocity_at_radius(orbit: Orbit, radius: u.Quantity) -> u.Quanti
     velocity = np.sqrt(velocity_squared)
 
     return velocity
+
+
+def retrograde_orbit(orbit: Orbit) -> Orbit:
+    """Return a new Orbit with the same shape as the input but with retrograde velocity.
+
+    Args:
+        orbit: A poliastro Orbit object.
+
+    Returns:
+        A new Orbit object with the same position but velocity reversed (retrograde).
+    """
+    r_vec, v_vec = orbit.rv()
+    retrograde_v_vec = -v_vec
+    return Orbit.from_vectors(orbit.attractor, r_vec, retrograde_v_vec, epoch=orbit.epoch)

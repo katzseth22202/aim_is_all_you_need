@@ -2,6 +2,17 @@
 
 from typing import List
 
+from astropy import units as u
+from poliastro.bodies import Earth
+
+from src.astro_constants import LEO_ALTITUDE, MOON_A
+from src.compute_utils import (
+    apoapsis_velocity,
+    orbit_from_rp_ra,
+    payload_mass_ratio,
+    periapsis_velocity,
+)
+
 
 def greet(name: str) -> str:
     """Return a greeting message for the given name.
@@ -28,20 +39,14 @@ def calculate_sum(numbers: List[int]) -> int:
 
 
 def main() -> None:
-    """Main function that runs the application."""
-    print("=== AIM is all you need ===")
-    print()
-
-    # Example usage of our functions
-    greeting = greet("Developer")
-    print(greeting)
-
-    numbers = [1, 2, 3, 4, 5]
-    total = calculate_sum(numbers)
-    print(f"Sum of {numbers} is: {total}")
-
-    print()
-    print("Application completed successfully!")
+    print(payload_mass_ratio(v_rf=11 * u.km / u.s, v_b=69 * u.km / u.s))
+    orb = orbit_from_rp_ra(
+        apoapsis_radius=MOON_A,
+        periapsis_radius=Earth.R + LEO_ALTITUDE,
+        attractor_body=Earth,
+    )
+    print(periapsis_velocity(orb))
+    print(apoapsis_velocity(orb))
 
 
 if __name__ == "__main__":
