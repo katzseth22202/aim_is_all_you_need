@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import pytest
 from astropy import units as u
-from poliastro.bodies import Earth
+from poliastro.bodies import Earth, Sun
 from poliastro.maneuver import Maneuver
 
 from src.astro_constants import EARTH_A, JUPITER_A
@@ -12,6 +12,8 @@ from src.compute_utils import (
     body_speed,
     escape_velocity,
     get_hohmann_burns,
+    get_period,
+    get_semimajor_axis,
     hohmann_transfer,
     payload_mass_ratio,
     retrograde_jovian_hohmann_transfer,
@@ -104,3 +106,13 @@ def test_retrograde_jovian_hohmann_transfer() -> None:
     speed = retrograde_jovian_hohmann_transfer()
     expected = 69.272 * u.km / u.s
     assert is_nearly_equal(speed, expected)
+
+
+def test_period() -> None:
+    T = get_period(Sun, EARTH_A)
+    assert is_nearly_equal(T, 1 * u.year)
+
+
+def test_semi_major_axis() -> None:
+    a = get_semimajor_axis(Sun, 1 * u.year)
+    assert is_nearly_equal(a, EARTH_A)

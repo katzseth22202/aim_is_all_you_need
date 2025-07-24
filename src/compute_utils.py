@@ -141,3 +141,244 @@ def retrograde_jovian_hohmann_transfer() -> u.Quantity:
     # add the poential energy of the Earth's orbit, which equals the kinetic energy of Earth's escape velocity
     earth_escape_velocity = escape_velocity(Earth)
     return np.sqrt(retrograde_speed**2 + earth_escape_velocity**2)
+
+
+def get_period(body: Body, a: u.Quantity) -> u.Quantity:
+    """Compute the orbital period for a given semi-major axis around a body.
+
+    Args:
+        body: A poliastro Body instance.
+        a: Semi-major axis (astropy Quantity).
+
+    Returns:
+        The orbital period (astropy Quantity, seconds).
+    """
+    T = (2 * np.pi / np.sqrt(body.k)) * (a**1.5)
+    return T.to(u.second)
+
+
+def get_semimajor_axis(body: Body, T: u.Quantity) -> u.Quantity:
+    """Compute the semi-major axis for a given orbital period around a body.
+
+    Args:
+        body: A poliastro Body instance.
+        T: Orbital period (astropy Quantity).
+
+    Returns:
+        The semi-major axis (astropy Quantity, km).
+    """
+    a_cubed = (T**2 * body.k) / (4 * np.pi**2)
+    a = a_cubed ** (1 / 3)
+    return a.to(u.km)
+
+
+def distance_to_center(altitute: u.Quantity, body: Body) -> u.Quantity:
+    """Compute the distance from the center of a body given altitude and body radius.
+
+    Args:
+        altitute: Altitude above the body's surface (astropy Quantity).
+        body_radius: Radius of the body (astropy Quantity).
+
+    Returns:
+        The distance from the center of the body (astropy Quantity, km).
+    """
+    return (body.R + altitute).to(u.km)
+
+
+def generate_aligned_orbit(
+    apoapsis_radius: u.Quantity,
+    periapsis_radius: u.Quantity,
+    attractor_body: Body = Sun,
+) -> Orbit:
+    """
+    Generates a poliastro Orbit object aligned with the y-axis (periapsis on +y)
+    and no z-component of motion (orbit in the XY-plane).
+
+    Parameters
+    ----------
+       apoapsis_radius : astropy.units.Quantity
+        The radius of the apoapsis (farthest point from the attractor).
+        Must be an astropy Quantity with units of length (e.g., 10000 * u.km).
+    periapsis_radius : astropy.units.Quantity
+        The radius of the periapsis (closest point to the attractor).
+        Must be an astropy Quantity with units of length (e.g., 6678 * u.km).
+    attractor_body : poliastro.bodies.Body
+        The central celestial body (e.g., Earth, Sun, Mars).
+
+    Returns
+    -------
+    poliastro.twobody.Orbit
+        The generated poliastro Orbit object.
+
+    Raises
+    ------
+    ValueError
+        If periapsis_radius is greater than or equal to apoapsis_radius.
+    """
+
+    if periapsis_radius >= apoapsis_radius:
+        raise ValueError(
+            "Periapsis radius must be less than apoapsis radius for a valid elliptical orbit."
+        )
+
+    # Calculate semi-major axis (a)
+    semimajor_axis: u.Quantity = (apoapsis_radius + periapsis_radius) / 2
+
+    # Calculate eccentricity (ecc)
+    eccentricity: float = (apoapsis_radius - periapsis_radius) / (
+        apoapsis_radius + periapsis_radius
+    )
+
+    # Set classical orbital elements for desired alignment
+    # Inclination: 0 degrees for orbit in the XY-plane (no Z component)
+    inclination: u.Quantity = 0 * u.deg
+    # Right Ascension of the Ascending Node (RAAN): 0 degrees
+    raan: u.Quantity = 0 * u.deg
+    # Argument of Periapsis: 90 degrees to align periapsis with the positive Y-axis
+    argp: u.Quantity = 90 * u.deg
+    # True Anomaly: 0 degrees to start at periapsis
+    true_anomaly: u.Quantity = 0 * u.deg
+
+    # Create the Orbit object
+    orbit: Orbit = Orbit.from_classical(
+        attractor_body,
+        semimajor_axis,
+        eccentricity,
+        inclination,
+        raan,
+        argp,
+        true_anomaly,
+    )
+
+    return orbit
+
+
+def periapsis_velocity(orbit: Orbit) -> u.Quantity:
+    """Return the velocity vector at periapsis for a given poliastro Orbit.
+
+    Args:
+        orbit: A poliastro Orbit object.
+
+    Returns:
+        The velocity vector at periapsis (astropy Quantity, km/s).
+    """
+    # Get position and velocity at periapsis (true anomaly = 0)
+    _, v_vec = orbit.rv(0 * u.deg)
+    return v_vec.to(u.km / u.s)
+
+
+def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
+    """Return the velocity vector at apoapsis for a given poliastro Orbit.
+
+    Args:
+        orbit: A poliastro Orbit object.
+
+    Returns:
+        The velocity vector at apoapsis (astropy Quantity, km/s).
+    """
+    # Get position and velocity at apoapsis (true anomaly = 180 deg)
+    _, v_vec = orbit.rv(180 * u.deg)
+    return v_vec.to(u.km / u.s)
+
+
+def orbit_from_radius_velocity(
+    radius: u.Quantity,
+    velocity: u.Quantity,
+    attractor_body: Body = Sun,
+) -> Orbit:
+    """Generate a poliastro Orbit aligned with the y-axis, given a scalar radius and velocity.
+
+    The position is set to (0, +radius, 0) and the velocity to (+velocity, 0, 0),
+    so the orbit is in the XY-plane and periapsis is on the +y axis.
+
+    Args:
+        radius: Distance from the attractor (astropy Quantity, length units).
+        velocity: Velocity magnitude at that position (astropy Quantity, speed units).
+        attractor_body: The central body (poliastro Body, default Sun).
+
+    Returns:
+        A poliastro Orbit object with the specified state.
+    """
+    r_vec = np.array([0.0, radius.to_value(u.km), 0.0]) * u.km
+    v_vec = np.array([velocity.to_value(u.km / u.s), 0.0, 0.0]) * (u.km / u.s)
+    return Orbit.from_vectors(attractor_body, r_vec, v_vec)
+
+
+def get_orbital_velocity_at_radius(orbit: Orbit, radius: u.Quantity) -> u.Quantity:
+    """
+    Calculates the scalar orbital velocity at a given radial distance from the attractor body.
+
+    Parameters
+    ----------
+    orbit : poliastro.twobody.orbit.Orbit
+        The poliastro Orbit object, containing the orbital elements and attractor body.
+    radius : astropy.units.Quantity
+        The radial distance from the attractor body at which to calculate the velocity.
+        Must be a scalar astropy Quantity with units of length.
+
+    Returns
+    -------
+    astropy.units.Quantity
+        The scalar orbital velocity at the given radius, with units of velocity.
+
+    Raises
+    ------
+    ValueError
+        If the provided radius is outside the valid range for the given orbit
+        (e.g., negative for elliptical/parabolic/hyperbolic orbits, or
+        greater than apoapsis for elliptical orbits if not handled correctly
+        for specific velocity calculations).
+    """
+    if not isinstance(radius, u.Quantity) or not radius.unit.is_equivalent(u.km):
+        raise TypeError("Radius must be an astropy Quantity with units of length.")
+    if radius.size != 1:
+        raise ValueError("Radius must be a scalar quantity.")
+
+    # Gravitational parameter of the attractor body
+    mu = orbit.attractor.k
+
+    # Semimajor axis
+    a = orbit.a
+
+    # Specific energy (epsilon) for the orbit
+    # epsilon = -mu / (2 * a)
+
+    # Velocity formula for any conic section (vis-viva equation):
+    # v = sqrt(mu * (2/r - 1/a))
+    # For parabolic orbit, a approaches infinity, so 1/a approaches 0.
+    # For hyperbolic orbit, a is negative, so 1/a is also negative.
+
+    # Check for valid radius range depending on orbit type
+    if orbit.ecc < 1:  # Elliptical orbit
+        if radius < orbit.r_p or radius > orbit.r_a:
+            # For an elliptical orbit, the radius must be between periapsis and apoapsis.
+            # However, the Vis-Viva equation itself doesn't strictly break outside this range;
+            # it would just give an imaginary velocity, indicating an invalid physical point.
+            # We can allow the calculation as long as 2/r - 1/a > 0.
+            pass  # The formula will handle it by returning a NaN if the sqrt is of a negative number
+    elif orbit.ecc == 1:  # Parabolic orbit
+        if radius < 0 * u.km:  # Radius must be non-negative
+            raise ValueError("Radius cannot be negative for a parabolic orbit.")
+        # For parabolic orbit, 1/a term becomes 0, Vis-Viva simplifies to sqrt(2*mu/r)
+        # However, the general formula still works as a approaches infinity.
+        pass
+    else:  # Hyperbolic orbit (ecc > 1)
+        if radius < 0 * u.km:  # Radius must be non-negative
+            raise ValueError("Radius cannot be negative for a hyperbolic orbit.")
+        # For hyperbolic orbits, 'a' is negative, but the Vis-Viva equation accounts for this.
+        pass
+
+    # Vis-viva equation
+    # Make sure units are consistent before calculation
+    velocity_squared = mu * (2 / radius - 1 / a)
+
+    # Ensure the term inside the square root is non-negative
+    if velocity_squared.value < 0:
+        raise ValueError(
+            f"The provided radius ({radius}) is not physically reachable for this orbit. "
+            "Velocity would be imaginary. Ensure radius is within the orbit's bounds."
+        )
+
+    velocity = np.sqrt(velocity_squared)
+
+    return velocity
