@@ -6,12 +6,15 @@ from astropy import units as u
 from poliastro.bodies import Earth
 from poliastro.maneuver import Maneuver
 
+from src.astro_constants import EARTH_A, JUPITER_A
 from src.compute_utils import (
     STD_FUDGE_FACTOR,
-    balloon_mass,
     body_speed,
+    escape_velocity,
     get_hohmann_burns,
     hohmann_transfer,
+    payload_mass_ratio,
+    retrograde_jovian_hohmann_transfer,
     speed_around_attractor,
 )
 
@@ -44,10 +47,10 @@ def test_body_speed_earth_around_sun() -> None:
 
 
 def test_hohmann_transfer() -> None:
-    transfer: Maneuver = hohmann_transfer(r_i=1 * u.AU, r_f=5.2 * u.AU)
+    transfer: Maneuver = hohmann_transfer(r_i=EARTH_A, r_f=JUPITER_A)
     initial_burn, final_burn = get_hohmann_burns(transfer)
-    assert is_nearly_equal(initial_burn, 8.756 * u.km / u.s)
-    assert is_nearly_equal(final_burn, 5.628 * u.km / u.s)
+    assert is_nearly_equal(initial_burn, 8757 * u.m / u.s)
+    assert is_nearly_equal(final_burn, 5628 * u.m / u.s)
 
 
 def test_balloon_mass() -> None:
@@ -84,5 +87,20 @@ def test_balloon_mass() -> None:
     v_ri = 2 * u.km / u.s
     assert is_nearly_equal(
         balloon_mass_test(v_rf=v_rf, v_b=v_b, v_ri=v_ri),
-        balloon_mass(v_rf=v_rf, v_ri=v_ri, v_b=v_b),
+        payload_mass_ratio(v_rf=v_rf, v_ri=v_ri, v_b=v_b),
     )
+
+
+def test_escape_velocity_earth_200km() -> None:
+    # 200 km altitude above Earth's surface
+    altitude = 200 * u.km
+    v_esc = escape_velocity(Earth, altitude)
+    # The expected escape velocity at 200 km altitude is about 11.0 km/s
+    expected = 11.0 * u.km / u.s
+    assert is_nearly_equal(v_esc, expected)
+
+
+def test_retrograde_jovian_hohmann_transfer() -> None:
+    speed = retrograde_jovian_hohmann_transfer()
+    expected = 69.272 * u.km / u.s
+    assert is_nearly_equal(speed, expected)
