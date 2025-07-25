@@ -15,3 +15,6 @@ MOON_A = 384400 * u.km  # Moon (semi-major axis of orbit around Earth, in km)
 LEO_ALTITUDE = 200 * u.km  # Low Earth Orbit altitude, in km
 
 PARKER_PERIAPSIS = 6.9e6 * u.km  # lowest Parker periapsis
+
+PHOEBE_A = 12952000 * u.km  # Phoebe (semi-major axis of orbit around Saturn, in km)
+LOW_SATURN_ALTITUDE = 500 * u.km  # Low Saturn orbit altitude, in km

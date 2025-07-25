@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
-from poliastro.bodies import Body, Earth, Moon, Sun
+from poliastro.bodies import Body, Earth, Moon, Saturn, Sun
 from poliastro.maneuver import Maneuver
 from poliastro.twobody import Orbit
 
@@ -14,8 +14,10 @@ from src.astro_constants import (
     EARTH_A,
     JUPITER_A,
     LEO_ALTITUDE,
+    LOW_SATURN_ALTITUDE,
     MOON_A,
     PARKER_PERIAPSIS,
+    PHOEBE_A,
 )
 
 STD_FUDGE_FACTOR: float = 0.8
@@ -522,4 +524,19 @@ rocket to minimal low Earth orbit"""
         BalloonScenario(
             v_rf=0 * u.km / u.s, v_b=-lunar_esc, desc=desc, v_ri=lunar_esc
         ).append(scenario_table)
+        min_saturn_altitude = Saturn.R + LOW_SATURN_ALTITUDE
+        min_saturn_speed = speed_around_attractor(
+            a=min_saturn_altitude, attractor=Saturn
+        )
+        phoebe_low_orbit = orbit_from_rp_ra(
+            apoapsis_radius=PHOEBE_A,
+            periapsis_radius=min_saturn_altitude,
+            attractor_body=Saturn,
+        )
+        phoebe_low_periapsis_velocity = periapsis_velocity(orbit=phoebe_low_orbit)
+        desc = """Balloons approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn"""
+        BalloonScenario(
+            v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
+        ).append(scenario_table)
+
         return scenario_table
