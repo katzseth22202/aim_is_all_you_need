@@ -310,6 +310,52 @@ def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
     return as_scalar(v_vec)
 
 
+def velocity_at_distance(
+    radius_periapsis: u.Quantity,
+    velocity_periapsis: u.Quantity,
+    distance: u.Quantity,
+    attractor_body: Body = Sun,
+) -> u.Quantity:
+    """
+    Compute the scalar orbital velocity at a given distance from the central body, given the periapsis radius and velocity.
+
+    Parameters
+    ----------
+    radius_periapsis : astropy.units.Quantity
+        The radius at periapsis (with length units).
+    velocity_periapsis : astropy.units.Quantity
+        The scalar velocity at periapsis (with velocity units).
+    distance : astropy.units.Quantity
+        The distance from the center of the attractor at which to compute the velocity (with length units).
+    attractor_body : poliastro.bodies.Body
+        The central celestial body (e.g., Earth, Sun).
+
+    Returns
+    -------
+    astropy.units.Quantity
+        The scalar orbital velocity at the given distance (with velocity units).
+
+    Raises
+    ------
+    ValueError
+        If the computed velocity is not real (e.g., for unphysical parameters).
+    """
+    mu = attractor_body.k
+    r_p = radius_periapsis
+    v_p = velocity_periapsis
+    # Compute semi-major axis from vis-viva at periapsis
+    # v_p^2 = mu * (2/r_p - 1/a)  => 1/a = 2/r_p - v_p^2/mu
+    one_over_a = 2 / r_p - v_p**2 / mu
+    if one_over_a == 0:
+        raise ValueError("Parabolic orbit (a = infinity) is not supported.")
+    a = 1 / one_over_a
+    # Now compute velocity at the given distance
+    v2 = mu * (2 / distance - 1 / a)
+    if v2 < 0 * (u.km**2 / u.s**2):
+        raise ValueError("No real velocity at this distance for the given orbit.")
+    return np.sqrt(v2).to(u.km / u.s)
+
+
 def as_scalar(vec: npt.ArrayLike) -> u.Quantity:
     """Return the norm of a vector as an astropy Quantity in km/s if possible, else as a float."""
     norm = np.linalg.norm(vec)
@@ -320,27 +366,71 @@ def as_scalar(vec: npt.ArrayLike) -> u.Quantity:
         return norm * u.dimensionless_unscaled
 
 
-def orbit_from_radius_velocity(
-    radius: u.Quantity,
-    velocity: u.Quantity,
+def find_periapsis_radius_from_apoapsis_and_velocity(
+    apoapsis_radius: u.Quantity,
+    periapsis_velocity: u.Quantity,
     attractor_body: Body = Sun,
-) -> Orbit:
-    """Generate a poliastro Orbit aligned with the y-axis, given a scalar radius and velocity.
-
-    The position is set to (0, +radius, 0) and the velocity to (+velocity, 0, 0),
-    so the orbit is in the XY-plane and periapsis is on the +y axis.
-
-    Args:
-        radius: Distance from the attractor (astropy Quantity, length units).
-        velocity: Velocity magnitude at that position (astropy Quantity, speed units).
-        attractor_body: The central body (poliastro Body, default Sun).
-
-    Returns:
-        A poliastro Orbit object with the specified state.
+) -> u.Quantity:
     """
-    r_vec = np.array([0.0, radius.to_value(u.km), 0.0]) * u.km
-    v_vec = np.array([velocity.to_value(u.km / u.s), 0.0, 0.0]) * (u.km / u.s)
-    return Orbit.from_vectors(attractor_body, r_vec, v_vec)
+    Compute the periapsis radius of an orbit given the apoapsis radius, the scalar velocity at periapsis, and the central attractor.
+
+    The function solves the vis-viva equation for the periapsis radius, assuming an elliptical orbit
+    aligned with the y-axis and no z-component (orbit in the XY-plane).
+
+    Parameters
+    ----------
+    apoapsis_radius : astropy.units.Quantity
+        The radius of the apoapsis (farthest point from the attractor), with length units.
+    periapsis_velocity : astropy.units.Quantity
+        The scalar velocity at periapsis, with velocity units.
+    attractor_body : poliastro.bodies.Body, optional
+        The central celestial body (default: Sun).
+
+    Returns
+    -------
+    astropy.units.Quantity
+        The computed periapsis radius (with length units).
+
+    Raises
+    ------
+    ValueError
+        If the input parameters do not yield a real, positive periapsis radius.
+    """
+    # The quadratic equation is: A * rp^2 + B * rp + C = 0
+    A = periapsis_velocity**2
+    B = periapsis_velocity**2 * apoapsis_radius
+    C = -2 * attractor_body.k * apoapsis_radius
+
+    # Calculate the discriminant
+    discriminant = B**2 - 4 * A * C
+
+    # Ensure the discriminant is non-negative for a real solution
+    if discriminant < 0:
+        raise ValueError(
+            "Invalid parameters: No real solution for periapsis radius. Check input values."
+        )
+
+    # Calculate the two possible solutions for periapsis radius
+    rp1 = (-B + np.sqrt(discriminant)) / (2 * A)
+    rp2 = (-B - np.sqrt(discriminant)) / (2 * A)
+    rp1 = rp1.to(u.km)
+    rp2 = rp2.to(u.km)
+
+    # In orbital mechanics, radius must be positive.
+    # We take the positive root. If both are positive, the problem context implies a physically
+    # meaningful solution. In this case, the larger velocity at periapsis implies a smaller
+    # periapsis radius, so we take the positive root.
+    if rp1 > 0 and rp2 > 0:
+        # Both roots are positive. Choose the one that makes physical sense.
+        # Since Vp is given as the periapsis velocity, it implies rp < ra.
+        # The equation derived earlier directly yields the correct physical radius.
+        return rp1 if rp1 < apoapsis_radius else rp2
+    elif rp1 > 0:
+        return rp1
+    elif rp2 > 0:
+        return rp2
+    else:
+        raise ValueError("No positive solution for periapsis radius found.")
 
 
 def get_orbital_velocity_at_radius(orbit: Orbit, radius: u.Quantity) -> u.Quantity:
@@ -437,6 +527,25 @@ def retrograde_orbit(orbit: Orbit) -> Orbit:
     return Orbit.from_vectors(
         orbit.attractor, r_vec, retrograde_v_vec, epoch=orbit.epoch
     )
+
+
+def rocket_equation(delta_v: u.Quantity, exhaust_v: u.Quantity) -> u.Quantity:
+    """
+    Compute the fractional propellant mass required for a given delta-v using the Tsoilkovksy trocket equation.
+
+    Parameters
+    ----------
+    delta_v : astropy.units.Quantity
+        The total change in velocity required (delta-v), with velocity units.
+    exhaust_v : astropy.units.Quantity
+        The effective exhaust velocity of the rocket, with velocity units.
+
+    Returns
+    -------
+    astropy.units.Quantity
+        The fractional propellant mass required (dimensionless, as a Quantity).
+    """
+    return 1 - np.exp(-delta_v / exhaust_v)
 
 
 @dataclass(frozen=True)
@@ -540,3 +649,63 @@ rocket to minimal low Earth orbit"""
         ).append(scenario_table)
 
         return scenario_table
+
+
+def orbit_from_periapsis_speed_and_apoapsis_radius(
+    periapsis_speed: u.Quantity,
+    apoapsis_radius: u.Quantity,
+    attractor_body: Body = Sun,
+) -> Orbit:
+    """
+    Generate a poliastro Orbit aligned with the y-axis (periapsis on +y, no z-component),
+    given the scalar speed at periapsis and the radius at apoapsis.
+
+    Parameters
+    ----------
+    periapsis_speed : astropy.units.Quantity
+        The scalar speed at periapsis (with velocity units).
+    apoapsis_radius : astropy.units.Quantity
+        The radius of the apoapsis (with length units).
+    attractor_body : poliastro.bodies.Body, optional
+        The central celestial body (default: Sun).
+
+    Returns
+    -------
+    poliastro.twobody.Orbit
+        The generated poliastro Orbit object.
+
+    Raises
+    ------
+    ValueError
+        If the computed periapsis radius is not physically valid (e.g., negative or zero).
+    """
+    # At periapsis, r = r_p, v = periapsis_speed
+    # At apoapsis, r = r_a
+    # Use vis-viva equation to solve for r_p:
+    # v_p^2 = mu * (2/r_p - 1/a)
+    # a = (r_p + r_a)/2
+    mu = attractor_body.k
+    r_a = apoapsis_radius
+    v_p = periapsis_speed
+
+    # Solve quadratic for r_p: v_p^2 = mu * (2/r_p - 2/(r_p + r_a))
+    # Rearranged: v_p^2 = mu * (2(r_a) / (r_p * (r_p + r_a)))
+    # Let x = r_p
+    # v_p^2 * x^2 + v_p^2 * r_a * x - 2 * mu * r_a = 0
+    # Quadratic: ax^2 + bx + c = 0
+    a = v_p**2
+    b = v_p**2 * r_a
+    c = -2 * mu * r_a
+    # Solve for x = r_p
+    discriminant = b**2 - 4 * a * c
+    if discriminant < 0:
+        raise ValueError("No real solution for periapsis radius with given parameters.")
+    r_p = (-b + np.sqrt(discriminant)) / (2 * a)
+    if r_p <= 0 * u.km:
+        r_p = (-b - np.sqrt(discriminant)) / (2 * a)
+    if r_p <= 0 * u.km:
+        raise ValueError("Computed periapsis radius is not physically valid.")
+    # Now use orbit_from_rp_ra to construct the orbit
+    return orbit_from_rp_ra(
+        apoapsis_radius=r_a, periapsis_radius=r_p, attractor_body=attractor_body
+    )

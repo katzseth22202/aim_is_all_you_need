@@ -12,14 +12,20 @@ from src.compute_utils import (
     body_speed,
     distance_to_center,
     escape_velocity,
+    find_periapsis_radius_from_apoapsis_and_velocity,
     get_hohmann_burns,
     get_period,
     get_semimajor_axis,
     hohmann_transfer,
     payload_mass_ratio,
     retrograde_jovian_hohmann_transfer,
+    rocket_equation,
     speed_around_attractor,
+    velocity_at_distance,
 )
+
+TEST_VP = 200 * u.km / u.s
+EXPECTED_TEST_RP = 6364822 * u.km
 
 
 def is_nearly_equal(
@@ -122,3 +128,31 @@ def test_semi_major_axis() -> None:
 def test_distance_to_center() -> None:
     d = distance_to_center(LEO_ALTITUDE, Earth)
     assert is_nearly_equal(d, Earth.R + LEO_ALTITUDE)
+
+
+def test_rocket_equation() -> None:
+    print(rocket_equation(9.8 * u.km / u.s, 4.5 * u.km / u.s))
+    assert is_nearly_equal(
+        u.Quantity(0.88670699, u.dimensionless_unscaled),
+        rocket_equation(9.8 * u.km / u.s, 4.5 * u.km / u.s),
+    )
+
+
+def test_find_periapsis_radius_from_apoapsis_and_velocity() -> None:
+    v_p = find_periapsis_radius_from_apoapsis_and_velocity(
+        apoapsis_radius=EARTH_A, periapsis_velocity=TEST_VP
+    )
+    assert is_nearly_equal(v_p, EXPECTED_TEST_RP)
+
+
+def test_velocity_at_distance() -> None:
+    speed_at_earth = velocity_at_distance(
+        radius_periapsis=EXPECTED_TEST_RP, velocity_periapsis=TEST_VP, distance=EARTH_A
+    )
+    after_burn = TEST_VP + 50 * u.km / u.s
+    speed_at_earth = velocity_at_distance(
+        radius_periapsis=EXPECTED_TEST_RP,
+        velocity_periapsis=after_burn,
+        distance=EARTH_A,
+    )
+    assert is_nearly_equal(speed_at_earth, 150.24114202 * u.km / u.s)
