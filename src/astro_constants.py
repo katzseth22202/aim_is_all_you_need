@@ -18,3 +18,7 @@ PARKER_PERIAPSIS = 6.9e6 * u.km  # lowest Parker periapsis
 
 PHOEBE_A = 12952000 * u.km  # Phoebe (semi-major axis of orbit around Saturn, in km)
 LOW_SATURN_ALTITUDE = 500 * u.km  # Low Saturn orbit altitude, in km
+EFFECTIVE_DV_LUNAR = 3 * u.km / u.s  # Effective exhaust for lunar posited in paper
+REQUIRED_DV_LUNAR_TRANFSFER = (
+    2.6 * u.km / u.s
+)  # How much to get off the moon and into a LEO transfer (varies depending on moon location)

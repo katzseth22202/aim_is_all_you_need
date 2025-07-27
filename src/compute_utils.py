@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -12,12 +12,14 @@ from poliastro.twobody import Orbit
 
 from src.astro_constants import (
     EARTH_A,
+    EFFECTIVE_DV_LUNAR,
     JUPITER_A,
     LEO_ALTITUDE,
     LOW_SATURN_ALTITUDE,
     MOON_A,
     PARKER_PERIAPSIS,
     PHOEBE_A,
+    REQUIRED_DV_LUNAR_TRANFSFER,
 )
 
 STD_FUDGE_FACTOR: float = 0.8
@@ -647,6 +649,12 @@ rocket to minimal low Earth orbit"""
         BalloonScenario(
             v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
         ).append(scenario_table)
+        lunar_balloon_speed: BurnInfo = find_best_lunar_return()
+        lunar_required_dv: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER
+        desc = """If the balloon comes towards the moon at optimal speed, get the mass ratio."""
+        BalloonScenario(
+            v_rf=lunar_required_dv, v_b=lunar_balloon_speed.incoming_v, desc=desc
+        ).append(scenario_table)
 
         return scenario_table
 
@@ -709,3 +717,79 @@ def orbit_from_periapsis_speed_and_apoapsis_radius(
     return orbit_from_rp_ra(
         apoapsis_radius=r_a, periapsis_radius=r_p, attractor_body=attractor_body
     )
+
+
+@dataclass(frozen=True)
+class BurnInfo:
+    burn: u.Quantity
+    combined_mass_ratio: u.Quantity
+    incoming_v: u.Quantity
+
+
+def find_best_lunar_return(
+    effective_exhaust_speed: u.Quantity = EFFECTIVE_DV_LUNAR,
+    dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER,
+) -> BurnInfo:
+    """Find the optimal burn for lunar return trajectory with maximum mass ratio.
+
+    This function analyzes various burn magnitudes to find the optimal trajectory
+    for returning from lunar orbit to Earth, maximizing the combined mass ratio
+    while meeting the required delta-v constraints.
+
+    Args:
+        effective_exhaust_speed: The effective exhaust velocity for the rocket
+            (astropy Quantity, default EFFECTIVE_DV_LUNAR).
+        dv_required: The required delta-v for lunar transfer
+            (astropy Quantity, default REQUIRED_DV_LUNAR_TRANFSFER).
+
+    Returns:
+        Optional[BurnInfo]: The optimal burn information containing the burn magnitude,
+            combined mass ratio, and incoming velocity. Returns None if no valid
+            solution is found.
+
+    Note:
+        The function evaluates burns from 0.01 to 6 km/s in 100 steps, calculating
+        the trajectory from lunar orbit back to Earth's low orbit. It considers
+        both the central body burn mass ratio and the target mass ratio to find
+        the optimal combined solution.
+    """
+    candidate_burns: npt.NDArray[u.Quantity] = np.linspace(
+        start=0.01 * u.km / u.s, stop=6 * u.km / u.s, num=100
+    )
+    periapsis_radius = Earth.R + LEO_ALTITUDE
+    orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=MOON_A, periapsis_radius=periapsis_radius, attractor_body=Earth
+    )
+    periapsis_v: u.Quantity = periapsis_velocity(orbit)
+    max_burn: Optional[BurnInfo] = None
+    for burn in candidate_burns:
+        after_burn: u.Quantity = periapsis_v + burn
+        incoming_v_before_moon_gravity = velocity_at_distance(
+            radius_periapsis=periapsis_radius,
+            velocity_periapsis=after_burn,
+            distance=MOON_A,
+            attractor_body=Earth,
+        )
+        incoming_v: u.Quantity = np.sqrt(
+            incoming_v_before_moon_gravity**2 + escape_velocity(Moon) ** 2
+        )
+        if incoming_v <= dv_required:
+            continue
+        target_mass_ratio = payload_mass_ratio(v_rf=dv_required, v_b=incoming_v)
+        if target_mass_ratio < 1:
+            continue
+        central_body_mass_ratio = 1 - rocket_equation(
+            delta_v=burn, exhaust_v=effective_exhaust_speed
+        )
+        combined_mass_ratio = target_mass_ratio * central_body_mass_ratio
+        burn_info = BurnInfo(
+            burn=burn, combined_mass_ratio=combined_mass_ratio, incoming_v=incoming_v
+        )
+        if not max_burn:
+            max_burn = burn_info
+        else:
+            if burn_info.combined_mass_ratio > max_burn.combined_mass_ratio:
+                max_burn = burn_info
+    if not max_burn:
+        raise ValueError("can't find max burn")
+    return max_burn

@@ -9,20 +9,19 @@ from poliastro.bodies import Earth
 from src.astro_constants import LEO_ALTITUDE, MOON_A
 from src.compute_utils import (
     BalloonScenario,
-    apoapsis_velocity,
+    find_best_lunar_return,
     orbit_from_rp_ra,
     payload_mass_ratio,
-    periapsis_velocity,
 )
 
 
 def main() -> None:
-    print(payload_mass_ratio(v_rf=11 * u.km / u.s, v_b=69 * u.km / u.s))
     orb = orbit_from_rp_ra(
         apoapsis_radius=MOON_A,
         periapsis_radius=Earth.R + LEO_ALTITUDE,
         attractor_body=Earth,
     )
+    print(f"best lunar return {find_best_lunar_return()}")
     with pd.option_context(
         "display.max_rows", None, "display.max_columns", None, "display.width", 1000
     ):
