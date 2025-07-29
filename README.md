@@ -144,4 +144,9 @@ This code implements calculations from the [Balloon Pulse Propulsion paper](http
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This repository uses a dual licensing structure:
+
+- **Code**: Licensed under Apache License 2.0 - see `LICENSE_OF_CODE_ONLY` for details
+- **Paper**: All rights reserved - see `paper/LICENSE` for details
+
+The source code and computational tools are open source and freely available for use, modification, and distribution. The research paper content is protected by copyright and requires explicit permission for reproduction or distribution.

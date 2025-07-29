@@ -351,12 +351,16 @@ def velocity_at_distance(
     # Compute semi-major axis from vis-viva at periapsis
     # v_p^2 = mu * (2/r_p - 1/a)  => 1/a = 2/r_p - v_p^2/mu
     one_over_a = 2 / r_p - v_p**2 / mu
-    if one_over_a == 0:
-        raise ValueError("Parabolic orbit (a = infinity) is not supported.")
-    a = 1 / one_over_a
-    # Now compute velocity at the given distance
-    v2 = mu * (2 / distance - 1 / a)
-    if v2 < 0 * (u.km**2 / u.s**2):
+
+    # Handle parabolic orbit case (1/a ≈ 0)
+    if np.isclose(one_over_a, 0, atol=1e-15):
+        # For parabolic orbit: v = sqrt(2*mu/r)
+        v2 = 2 * mu / distance
+    else:
+        a = 1 / one_over_a
+        # Now compute velocity at the given distance
+        v2 = mu * (2 / distance - 1 / a)
+    if v2 < 0 * v2.unit:
         raise ValueError("No real velocity at this distance for the given orbit.")
     return np.sqrt(v2).to(u.km / u.s)
 

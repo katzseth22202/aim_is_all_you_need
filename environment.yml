@@ -11,4 +11,5 @@ dependencies:
   - black
   - isort
   - pandas
+  - nbdime
 prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env
