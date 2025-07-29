@@ -1,6 +1,23 @@
-# AIM is All You Need
+# Balloon Pulse Propulsion Calculations
 
-A basic Python project demonstrating proper project structure with src and tests directories, type checking with mypy, and comprehensive testing with pytest.
+This repository contains Python implementations of the orbital mechanics calculations described in the [Balloon Pulse Propulsion paper](https://github.com/katzseth22202/Balloon-Pulse-Propulsion). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
+
+## Overview
+
+The calculations in this repository support the theoretical framework presented in the Balloon Pulse Propulsion paper, which explores the use of balloon-based propulsion systems for:
+
+- **Lunar Transfer Missions**: Optimizing trajectories from Earth to the Moon using balloon propulsion
+- **Interplanetary Travel**: Analyzing balloon propulsion for missions to Jupiter, Saturn, and other bodies
+- **Escape Velocity Calculations**: Computing optimal burn strategies for achieving escape velocities
+- **Mass Ratio Optimization**: Finding the best payload-to-propulsion mass ratios for various scenarios
+
+## Key Features
+
+- **Orbital Mechanics**: Comprehensive calculations for Hohmann transfers, escape velocities, and orbital maneuvers
+- **Balloon Propulsion Analysis**: Tools for analyzing balloon-based propulsion scenarios
+- **Mass Ratio Optimization**: Functions to find optimal payload-to-propulsion mass ratios
+- **Multi-body Systems**: Support for calculations involving Earth, Moon, Jupiter, Saturn, and other celestial bodies
+- **Type Safety**: Full mypy type checking with strict settings and comprehensive type annotations
 
 ## Project Structure
 
@@ -8,10 +25,12 @@ A basic Python project demonstrating proper project structure with src and tests
 aim_is_all_you_need/
 ├── src/                    # Source code
 │   ├── __init__.py
+│   ├── astro_constants.py  # Astronomical constants and parameters
+│   ├── compute_utils.py    # Core orbital mechanics calculations
 │   └── main.py            # Main application entry point
 ├── tests/                  # Test files
 │   ├── __init__.py
-│   └── test_main.py       # Tests for main module
+│   └── test_compute_utils.py # Tests for orbital mechanics functions
 ├── pyproject.toml         # Project configuration and dependencies
 ├── requirements.txt       # Development dependencies
 ├── Makefile              # Convenient commands for development
@@ -19,14 +38,28 @@ aim_is_all_you_need/
 └── README.md            # This file
 ```
 
-## Features
+## Core Calculations
 
-- **Python 3.10+**: Requires Python 3.10 or higher
-- **Type Safety**: Full mypy type checking with strict settings
-- **Testing**: Comprehensive pytest test suite with coverage reporting
-- **Code Quality**: Black formatting, isort import sorting, and flake8 linting
-- **Development Tools**: Makefile with convenient commands
-- **Modern Python**: Uses pyproject.toml for modern Python packaging
+### Orbital Mechanics Functions
+
+- `hohmann_transfer()`: Compute Hohmann transfer maneuvers between circular orbits
+- `escape_velocity()`: Calculate escape velocities from celestial bodies
+- `payload_mass_ratio()`: Determine optimal payload-to-balloon mass ratios
+- `find_best_lunar_return()`: Optimize lunar return trajectories with maximum mass ratios
+
+### Balloon Propulsion Scenarios
+
+The `BalloonScenario` class provides predefined scenarios from the paper:
+- Eccentric balloons for lunar transfer missions
+- Retrograde balloon deceleration for Earth reentry
+- Jupiter-to-Earth retrograde Hohmann transfers
+- Saturn and Phoebe orbital maneuvers
+
+### Advanced Features
+
+- **Retrograde Calculations**: Support for retrograde orbital maneuvers
+- **Multi-body Optimization**: Calculations involving multiple celestial bodies
+- **Launch Capacity Analysis**: Time calculations for achieving target launch capacities
 
 ## Quick Start
 
@@ -51,104 +84,50 @@ make install-dev
 pip install -e ".[dev]"
 ```
 
-### 2. Run the Complete Workflow
+### Run Calculations
 
 ```bash
-# Run mypy, tests, main script, and update environment.yml
+# Run the complete workflow including tests
 make all
+
+# Run specific calculations and generate output
+make run
 ```
 
-### 3. Individual Commands
+### Generate Calculation Output
+
+To see the results of the orbital mechanics calculations, run:
 
 ```bash
-# Type checking
-make mypy
+make run
+```
 
-# Run tests
+This will execute the main calculations and output the results to standard output, including:
+- Balloon propulsion scenario analysis
+- Optimal lunar return trajectories
+- Mass ratio calculations for various missions
+- Orbital mechanics computations
+
+## Dependencies
+
+The project uses several key libraries for orbital mechanics calculations:
+
+- **poliastro**: For orbital mechanics and celestial body definitions
+- **astropy**: For astronomical units and constants
+- **numpy**: For numerical computations
+- **pandas**: For data analysis and scenario tables
+
+## Testing
+
+The repository includes comprehensive tests for all orbital mechanics functions:
+
+```bash
+# Run all tests
 make test
 
-# Run the main script
-make run
-
-# Format code
-make format
-
-# Check code formatting
-make check-format
-
-# Clean build artifacts
-make clean
-
-# Export the current conda environment to environment.yml
-make export-env
+# Run with coverage
+make test-cov
 ```
-
-## Available Commands
-
-Run `make help` to see all available commands:
-
-```bash
-make help
-```
-
-## Environment Management
-
-### Conda Environment
-
-The project includes an `environment.yml` file for reproducible conda environments. This file is automatically updated every time you run `make all` or `make export-env`:
-
-```bash
-# Create the environment
-conda env create -f environment.yml
-
-# Activate the environment
-conda activate balloon_math_env
-
-# Update the environment (if environment.yml changes)
-conda env update -f environment.yml
-
-# Export current environment (if you make changes)
-make export-env  # or make all
-```
-
-### Virtual Environment (Alternative)
-
-If you prefer using venv instead of conda:
-
-```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# Install dependencies
-pip install pytest pytest-cov coverage
-pip install -r requirements.txt
-pip install -e ".[dev]"
-```
-
-**Note**: When using pip instead of conda, you'll need to manually install `pytest`, `pytest-cov`, and `coverage` as they are conda packages in the environment.yml.
-
-## Configuration
-
-### Mypy Configuration
-
-The project uses strict mypy settings defined in `pyproject.toml`:
-- Disallows untyped definitions
-- Warns about return Any
-- Enforces strict equality checks
-- Tests are exempted from some strict rules
-
-### Pytest Configuration
-
-Configured in `pyproject.toml`:
-- Test discovery in `tests/` directory
-- Coverage reporting
-- Custom markers for slow and integration tests
 
 ## Contributing
 
@@ -158,6 +137,10 @@ Configured in `pyproject.toml`:
 4. Add tests for new functionality
 5. Ensure all tests pass: `make all`
 6. Submit a pull request
+
+## Related Work
+
+This code implements calculations from the [Balloon Pulse Propulsion paper](https://github.com/katzseth22202/Balloon-Pulse-Propulsion), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
 
 ## License
 
