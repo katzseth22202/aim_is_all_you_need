@@ -1,10 +1,10 @@
 # Balloon Pulse Propulsion Calculations
 
-This repository contains Python implementations of the orbital mechanics calculations described in the [Balloon Pulse Propulsion paper](https://github.com/katzseth22202/Balloon-Pulse-Propulsion). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
+This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" (located in the `paper/` subdirectory). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
 
 ## Overview
 
-The calculations in this repository support the theoretical framework presented in the Balloon Pulse Propulsion paper, which explores the use of balloon-based propulsion systems for:
+The calculations in this repository support the theoretical framework presented in the "Aim Is All You Need" paper, which explores the use of balloon-based propulsion systems for:
 
 - **Lunar Transfer Missions**: Optimizing trajectories from Earth to the Moon using balloon propulsion
 - **Interplanetary Travel**: Analyzing balloon propulsion for missions to Jupiter, Saturn, and other bodies
@@ -140,7 +140,7 @@ make test-cov
 
 ## Related Work
 
-This code implements calculations from the [Balloon Pulse Propulsion paper](https://github.com/katzseth22202/Balloon-Pulse-Propulsion), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
+This code implements calculations from the research paper "Aim Is All You Need" (located in the `paper/` subdirectory), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
 
 ## License
 
