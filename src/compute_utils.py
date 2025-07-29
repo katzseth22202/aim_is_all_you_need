@@ -19,7 +19,10 @@ from src.astro_constants import (
     MOON_A,
     PARKER_PERIAPSIS,
     PHOEBE_A,
-    REQUIRED_DV_LUNAR_TRANFSFER,
+    REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
+    REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
+    RETROGRADE_FRACTION,
+    TARGET_LAUNCH_CAPACITY_MULTIPLE,
 )
 
 STD_FUDGE_FACTOR: float = 0.8
@@ -650,11 +653,18 @@ rocket to minimal low Earth orbit"""
             v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
         ).append(scenario_table)
         lunar_balloon_speed: BurnInfo = find_best_lunar_return()
-        lunar_required_dv: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER
-        desc = """If the balloon comes towards the moon at optimal speed, get the mass ratio."""
-        BalloonScenario(
-            v_rf=lunar_required_dv, v_b=lunar_balloon_speed.incoming_v, desc=desc
-        ).append(scenario_table)
+        lunar_required_dv_prograde: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE
+        desc = f"""After LEO Earth burn =  {lunar_balloon_speed.burn}, the balloon comes towards the moon at optimal speed."""
+        scenario_table.loc[len(scenario_table)] = [
+            lunar_balloon_speed.combined_mass_ratio,
+            (
+                REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
+                REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
+            ),
+            0 * u.km / u.s,
+            lunar_balloon_speed.incoming_v,
+            desc,
+        ]
 
         return scenario_table
 
@@ -726,9 +736,23 @@ class BurnInfo:
     incoming_v: u.Quantity
 
 
+def launch_capacity_time(
+    capacity_multiple_per_loop: float,
+    one_loop_elapsed_time: u.Quantity,
+    target_launch_capacity_multiple: float = TARGET_LAUNCH_CAPACITY_MULTIPLE,
+) -> u.Quantity:
+    time_elapsed: u.Quantity = (
+        np.log(target_launch_capacity_multiple)
+        / np.log(capacity_multiple_per_loop)
+        * one_loop_elapsed_time
+    )
+    return time_elapsed.to(u.year)
+
+
 def find_best_lunar_return(
     effective_exhaust_speed: u.Quantity = EFFECTIVE_DV_LUNAR,
-    dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER,
+    prograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
+    retrograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
 ) -> BurnInfo:
     """Find the optimal burn for lunar return trajectory with maximum mass ratio.
 
@@ -739,8 +763,9 @@ def find_best_lunar_return(
     Args:
         effective_exhaust_speed: The effective exhaust velocity for the rocket
             (astropy Quantity, default EFFECTIVE_DV_LUNAR).
-        dv_required: The required delta-v for lunar transfer
-            (astropy Quantity, default REQUIRED_DV_LUNAR_TRANFSFER).
+        prograde_dv_required: The required delta-v for pushing moon's off balloon to a prograde lunar transfer orbit with Earth leo periapsis
+        retrograde_dv_required: The required delta-v for pushing moon's off balloon to a retrograde lunar transfer orbit with Earth leo periapsis
+
 
     Returns:
         Optional[BurnInfo]: The optimal burn information containing the burn magnitude,
@@ -773,15 +798,33 @@ def find_best_lunar_return(
         incoming_v: u.Quantity = np.sqrt(
             incoming_v_before_moon_gravity**2 + escape_velocity(Moon) ** 2
         )
-        if incoming_v <= dv_required:
+        if incoming_v <= retrograde_dv_required:
             continue
-        target_mass_ratio = payload_mass_ratio(v_rf=dv_required, v_b=incoming_v)
-        if target_mass_ratio < 1:
+        prograde_lunar_payload_mass_ratio = payload_mass_ratio(
+            v_rf=prograde_dv_required, v_b=incoming_v
+        )
+        if prograde_lunar_payload_mass_ratio < 1:
             continue
-        central_body_mass_ratio = 1 - rocket_equation(
+        retrograde_lunar_payload_mass_ratio = payload_mass_ratio(
+            v_rf=retrograde_dv_required, v_b=incoming_v
+        )
+        leo_propulsion_mass_ratio = 1 - rocket_equation(
             delta_v=burn, exhaust_v=effective_exhaust_speed
         )
-        combined_mass_ratio = target_mass_ratio * central_body_mass_ratio
+        prograde_combined_ratio = (
+            prograde_lunar_payload_mass_ratio * leo_propulsion_mass_ratio
+        )
+        retrograde_combined_ratio = (
+            retrograde_lunar_payload_mass_ratio * leo_propulsion_mass_ratio
+        )
+        prograde_fraction = 1 - RETROGRADE_FRACTION
+
+        # we must send retrograde_fraction of the mass into a retrograde transfer orbit and the rest into a prograde orbit to achieve
+        # the effective velocity in the pulsed propulsion chamber when the masses collide at maximum speed in LEO around Earth.
+        combined_mass_ratio = (
+            RETROGRADE_FRACTION * retrograde_combined_ratio
+            + prograde_fraction * prograde_combined_ratio
+        )
         burn_info = BurnInfo(
             burn=burn, combined_mass_ratio=combined_mass_ratio, incoming_v=incoming_v
         )

@@ -6,10 +6,11 @@ import pandas as pd
 from astropy import units as u
 from poliastro.bodies import Earth
 
-from src.astro_constants import LEO_ALTITUDE, MOON_A
+from src.astro_constants import LEO_ALTITUDE, LUNAR_MONTH, MOON_A
 from src.compute_utils import (
     BalloonScenario,
     find_best_lunar_return,
+    launch_capacity_time,
     orbit_from_rp_ra,
     payload_mass_ratio,
 )
@@ -26,6 +27,10 @@ def main() -> None:
         "display.max_rows", None, "display.max_columns", None, "display.width", 1000
     ):
         print(BalloonScenario.paper_scenarios())
+    lunar_ratio = find_best_lunar_return().combined_mass_ratio
+    print(
+        f"lunarh launch cycle capacity time = {launch_capacity_time(lunar_ratio, LUNAR_MONTH)}"
+    )
 
 
 if __name__ == "__main__":
