@@ -31,6 +31,9 @@ def main() -> None:
     print(
         f"lunarh launch cycle capacity time = {launch_capacity_time(lunar_ratio, LUNAR_MONTH)}"
     )
+    print(
+        f"launch cycle capacity of solar periapsis scenario = {launch_capacity_time(2, 1/4*u.year)}"
+    )
 
 
 if __name__ == "__main__":
