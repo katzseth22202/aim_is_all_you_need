@@ -124,9 +124,6 @@ The repository includes comprehensive tests for all orbital mechanics functions:
 ```bash
 # Run all tests
 make test
-
-# Run with coverage
-make test-cov
 ```
 
 ## Contributing
