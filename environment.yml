@@ -12,4 +12,6 @@ dependencies:
   - isort
   - pandas
   - nbdime
+  - tabulate
+  - types-tabulate
 prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env
