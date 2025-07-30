@@ -31,7 +31,15 @@ def main() -> None:
     # Display the table using tabulate with better formatting
     print("\nBalloon Propulsion Scenarios:")
     print("=" * 80)
-    print(tabulate(scenarios_df, headers="keys", tablefmt="grid", showindex=False, maxcolwidths=[None, 15, 15, 15, 40]))
+    print(
+        tabulate(
+            scenarios_df,
+            headers="keys",
+            tablefmt="grid",
+            showindex=False,
+            maxcolwidths=[None, 15, 15, 15, 40],
+        )
+    )
     print("=" * 80)
     lunar_ratio = find_best_lunar_return().combined_mass_ratio
     print(
