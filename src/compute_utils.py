@@ -21,8 +21,8 @@ from src.astro_constants import (
     PERIAPSIS_SOLAR_BURN,
     PERIAPSIS_SOLAR_V,
     PHOEBE_A,
-    REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
-    REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
+    REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
+    REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
 )
@@ -190,17 +190,17 @@ def get_semimajor_axis(body: Body, T: u.Quantity) -> u.Quantity:
     return a.to(u.km)
 
 
-def distance_to_center(altitute: u.Quantity, body: Body) -> u.Quantity:
+def distance_to_center(altitude: u.Quantity, body: Body) -> u.Quantity:
     """Compute the distance from the center of a body given altitude and body radius.
 
     Args:
-        altitute: Altitude above the body's surface (astropy Quantity).
-        body_radius: Radius of the body (astropy Quantity).
+        altitude: Altitude above the body's surface (astropy Quantity).
+        body: The celestial body (poliastro Body).
 
     Returns:
         The distance from the center of the body (astropy Quantity, km).
     """
-    return (body.R + altitute).to(u.km)
+    return (body.R + altitude).to(u.km)
 
 
 def orbit_from_rp_ra(
@@ -659,13 +659,13 @@ rocket to minimal low Earth orbit"""
             v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
         ).append(scenario_table)
         lunar_balloon_speed: BurnInfo = find_best_lunar_return()
-        lunar_required_dv_prograde: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE
+        lunar_required_dv_prograde: u.Quantity = REQUIRED_DV_LUNAR_TRANSFER_PROGRADE
         desc = f"""After LEO Earth burn =  {lunar_balloon_speed.burn}, the balloon comes towards the moon at optimal speed."""
         scenario_table.loc[len(scenario_table)] = [
             lunar_balloon_speed.combined_mass_ratio,
             (
-                REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
-                REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
+                            REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
+            REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
             ),
             0 * u.km / u.s,
             lunar_balloon_speed.incoming_v,
@@ -757,8 +757,8 @@ def launch_capacity_time(
 
 def find_best_lunar_return(
     effective_exhaust_speed: u.Quantity = EFFECTIVE_DV_LUNAR,
-    prograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
-    retrograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
+    prograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
+    retrograde_dv_required: u.Quantity = REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
 ) -> BurnInfo:
     """Find the optimal burn for lunar return trajectory with maximum mass ratio.
 
@@ -825,8 +825,8 @@ def find_best_lunar_return(
         )
         prograde_fraction = 1 - RETROGRADE_FRACTION
 
-        # we must send retrograde_fraction of the mass into a retrograde transfer orbit and the rest into a prograde orbit to achieve
-        # the effective velocity in the pulsed propulsion chamber when the masses collide at maximum speed in LEO around Earth.
+        # Send retrograde_fraction of mass into retrograde transfer orbit and the rest into prograde orbit.
+        # This achieves the effective velocity in the pulsed propulsion chamber when masses collide at maximum speed in LEO.
         combined_mass_ratio = (
             RETROGRADE_FRACTION * retrograde_combined_ratio
             + prograde_fraction * prograde_combined_ratio
@@ -840,7 +840,7 @@ def find_best_lunar_return(
             if burn_info.combined_mass_ratio > max_burn.combined_mass_ratio:
                 max_burn = burn_info
     if not max_burn:
-        raise ValueError("can't find max burn")
+        raise ValueError("No valid burn found that maximizes combined mass ratio")
     return max_burn
 
 
@@ -889,9 +889,8 @@ def earth_velocity_200km_periapsis(
     return earth_velocity
 
 
-def solar_fusion_velocity() -> u.Quantity:
-    """Calculate the velocity of an orbit with periapsis at 2 solar radii and apoapsis at Earth's distance from the Sun, in reference frame of
-    the prograde rocket (both prograde and retrograde trajectories are the same velocity as described in the paper)
+def solar_impact_velocity() -> u.Quantity:
+    """Calculate the impact velocity in reference frame of the prograde rocket.
 
     This function creates an elliptical orbit around the Sun with:
     - Periapsis: 2 solar radii from the Sun's center
@@ -900,9 +899,8 @@ def solar_fusion_velocity() -> u.Quantity:
     Returns:
         The velocity at impact in reference frame of prograde rocket (astropy Quantity, km/s).
 
-    Note:
-        The orbit is aligned with the y-axis (periapsis on +y) and has no z-component
-        of motion (orbit in the XY-plane).
+    Note:       
+        The factor of 2 accounts for the relative velocity between prograde and retrograde trajectories.
     """
     # Calculate periapsis radius: 2 solar radii
     periapsis_radius: u.Quantity = 2 * Sun.R
@@ -917,5 +915,6 @@ def solar_fusion_velocity() -> u.Quantity:
         attractor_body=Sun,
     )
 
-    # the velocity of impact in reference frame of the rocket.
+    # The velocity of impact in reference frame of the rocket.
+    # Factor of 2 accounts for relative velocity between prograde and retrograde trajectories.
     return 2 * periapsis_velocity(orbit)
