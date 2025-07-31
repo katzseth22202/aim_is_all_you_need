@@ -47,7 +47,7 @@ def main() -> None:
         f"lunarh launch cycle capacity time = {launch_capacity_time(lunar_ratio, LUNAR_MONTH)}"
     )
     print(
-        f"launch cycle capacity of solar periapsis scenario = {launch_capacity_time(2, 1/4*u.year)}"
+        f"launch cycle capacity of solar periapsis scenario = {launch_capacity_time(2, 1/2*u.year)}"
     )
     print(
         f"Velocity of rocket at Earth distance after periapsis at 200km/s = {earth_velocity_200km_periapsis()}"
