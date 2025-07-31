@@ -63,26 +63,15 @@ The `BalloonScenario` class provides predefined scenarios from the paper:
 
 ## Quick Start
 
-### Option 1: Using Conda (Recommended)
+### Using Conda
 
 ```bash
 # Create and activate the conda environment
 conda env create -f environment.yml
 conda activate balloon_math_env
-
-# Install the package in development mode
-make install-dev
 ```
 
-### Option 2: Using pip
-
-```bash
-# Install the package with development dependencies
-make install-dev
-
-# Or manually:
-pip install -e ".[dev]"
-```
+The conda environment includes all necessary dependencies including development tools.
 
 ### Run Calculations
 

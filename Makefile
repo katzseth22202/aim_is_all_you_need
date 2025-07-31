@@ -1,14 +1,8 @@
-.PHONY: help install install-dev clean test mypy format check-format run all export-env
+.PHONY: help install clean test mypy format check-format run all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
-
-install:  ## Install the package in development mode
-	pip install -e .
-
-install-dev:  ## Install the package with development dependencies
-	pip install -e ".[dev]"
 
 clean:  ## Clean up build artifacts
 	rm -rf build/
