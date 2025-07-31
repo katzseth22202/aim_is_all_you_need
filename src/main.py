@@ -10,10 +10,11 @@ from tabulate import tabulate
 from src.astro_constants import LEO_ALTITUDE, LUNAR_MONTH, MOON_A
 from src.compute_utils import (
     BalloonScenario,
+    earth_velocity_200km_periapsis,
     find_best_lunar_return,
     launch_capacity_time,
     orbit_from_rp_ra,
-    payload_mass_ratio,
+    solar_fusion_velocity,
 )
 
 
@@ -47,6 +48,12 @@ def main() -> None:
     )
     print(
         f"launch cycle capacity of solar periapsis scenario = {launch_capacity_time(2, 1/4*u.year)}"
+    )
+    print(
+        f"Velocity of rocket at Earth distance after periapsis at 200km/s = {earth_velocity_200km_periapsis()}"
+    )
+    print(
+        f"Velocity of impact in reference frame of rocket for triggering nuclear impact fusion = {solar_fusion_velocity()} "
     )
 
 

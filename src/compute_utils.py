@@ -18,6 +18,8 @@ from src.astro_constants import (
     LOW_SATURN_ALTITUDE,
     MOON_A,
     PARKER_PERIAPSIS,
+    PERIAPSIS_SOLAR_BURN,
+    PERIAPSIS_SOLAR_V,
     PHOEBE_A,
     REQUIRED_DV_LUNAR_TRANFSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANFSFER_RETROGRADE,
@@ -840,3 +842,80 @@ def find_best_lunar_return(
     if not max_burn:
         raise ValueError("can't find max burn")
     return max_burn
+
+
+def earth_velocity_200km_periapsis(
+    periapsis_v: u.Quantity = PERIAPSIS_SOLAR_V,
+    periapsis_solar_burn: u.Quantity = PERIAPSIS_SOLAR_BURN,
+) -> u.Quantity:
+    """Calculate the velocity at Earth distance after a burn at periapsis.
+
+    This function calculates the velocity of an object at Earth's orbital distance
+    after it has accelerated at periapsis. The initial orbit has:
+    - Periapsis velocity: 200 km/s (default PERIAPSIS_SOLAR_V)
+    - Apoapsis: Earth's distance from the Sun (1 AU)
+    - Burn at periapsis: additional velocity increase (default PERIAPSIS_SOLAR_BURN)
+
+    Args:
+        periapsis_v: Initial velocity at periapsis (astropy Quantity, default PERIAPSIS_SOLAR_V).
+        periapsis_solar_burn: Additional velocity from burn at periapsis (astropy Quantity, default PERIAPSIS_SOLAR_BURN).
+
+    Returns:
+        The velocity at Earth distance after the burn (astropy Quantity, km/s).
+
+    Note:
+        Uses the vis-viva equation to calculate velocity at Earth distance based on
+        the new periapsis velocity after the burn.
+    """
+    # Create the initial orbit with given periapsis velocity and Earth apoapsis
+    initial_orbit: Orbit = orbit_from_periapsis_speed_and_apoapsis_radius(
+        periapsis_speed=periapsis_v, apoapsis_radius=EARTH_A, attractor_body=Sun
+    )
+
+    # Get the periapsis radius from the orbit
+    periapsis_radius: u.Quantity = initial_orbit.r_p
+
+    # Calculate the new velocity at periapsis after the burn
+    new_periapsis_velocity: u.Quantity = periapsis_v + periapsis_solar_burn
+
+    # Calculate the velocity at Earth distance using the new periapsis velocity
+    earth_velocity: u.Quantity = velocity_at_distance(
+        radius_periapsis=periapsis_radius,
+        velocity_periapsis=new_periapsis_velocity,
+        distance=EARTH_A,
+        attractor_body=Sun,
+    )
+
+    return earth_velocity
+
+
+def solar_fusion_velocity() -> u.Quantity:
+    """Calculate the velocity of an orbit with periapsis at 2 solar radii and apoapsis at Earth's distance from the Sun, in reference frame of
+    the prograde rocket (both prograde and retrograde trajectories are the same velocity as described in the paper)
+
+    This function creates an elliptical orbit around the Sun with:
+    - Periapsis: 2 solar radii from the Sun's center
+    - Apoapsis: Earth's orbital distance from the Sun (1 AU)
+
+    Returns:
+        The velocity at impact in reference frame of prograde rocket (astropy Quantity, km/s).
+
+    Note:
+        The orbit is aligned with the y-axis (periapsis on +y) and has no z-component
+        of motion (orbit in the XY-plane).
+    """
+    # Calculate periapsis radius: 2 solar radii
+    periapsis_radius: u.Quantity = 2 * Sun.R
+
+    # Use Earth's distance from the Sun as apoapsis
+    apoapsis_radius: u.Quantity = EARTH_A
+
+    # Create the orbit using existing function
+    orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=periapsis_radius,
+        attractor_body=Sun,
+    )
+
+    # the velocity of impact in reference frame of the rocket.
+    return 2 * periapsis_velocity(orbit)

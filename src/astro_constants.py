@@ -33,3 +33,9 @@ TARGET_LAUNCH_CAPACITY_MULTIPLE = (
     1e6  # default of how much we want to multiply initial launch capacity by
 )
 LUNAR_MONTH = 27.3 * u.day  # average time of lunar orbit
+PERIAPSIS_SOLAR_V = (
+    200 * u.km / u.s
+)  # we propose this velocity in the paper's section on using the Sun's Oberth  (a bit faster/closer than Parker Space Probe but similar)
+PERIAPSIS_SOLAR_BURN = (
+    50 * u.km / u.s
+)  # we propose this speed increase in the paper's section on using the Sun's Oberth
