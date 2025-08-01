@@ -889,8 +889,8 @@ def earth_velocity_200km_periapsis(
     return earth_velocity
 
 
-def solar_impact_velocity() -> u.Quantity:
-    """Calculate the impact velocity in reference frame of the prograde rocket.
+def solar_fusion_velocity() -> u.Quantity:
+    """Calculate the impact velocity in reference frame of the prograde rocket at 2 solar radii
 
     This function creates an elliptical orbit around the Sun with:
     - Periapsis: 2 solar radii from the Sun's center
