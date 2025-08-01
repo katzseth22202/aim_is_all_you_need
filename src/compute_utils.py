@@ -664,8 +664,8 @@ rocket to minimal low Earth orbit"""
         scenario_table.loc[len(scenario_table)] = [
             lunar_balloon_speed.combined_mass_ratio,
             (
-                            REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
-            REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
+                REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
+                REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
             ),
             0 * u.km / u.s,
             lunar_balloon_speed.incoming_v,
@@ -899,7 +899,7 @@ def solar_impact_velocity() -> u.Quantity:
     Returns:
         The velocity at impact in reference frame of prograde rocket (astropy Quantity, km/s).
 
-    Note:       
+    Note:
         The factor of 2 accounts for the relative velocity between prograde and retrograde trajectories.
     """
     # Calculate periapsis radius: 2 solar radii

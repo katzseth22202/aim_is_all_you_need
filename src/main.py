@@ -14,7 +14,7 @@ from src.compute_utils import (
     find_best_lunar_return,
     launch_capacity_time,
     orbit_from_rp_ra,
-    solar_impact_velocity,
+    solar_fusion_velocity,
 )
 
 
@@ -53,7 +53,7 @@ def main() -> None:
         f"Velocity of rocket at Earth distance after periapsis at 200km/s = {earth_velocity_200km_periapsis()}"
     )
     print(
-        f"Velocity of impact in reference frame of rocket for triggering nuclear impact fusion = {solar_impact_velocity()} "
+        f"Velocity of impact in reference frame of rocket for triggering nuclear impact fusion = {solar_fusion_velocity()} "
     )
 
 
