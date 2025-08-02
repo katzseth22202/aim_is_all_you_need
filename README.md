@@ -128,6 +128,27 @@ make test
 
 This code implements calculations from the research paper "Aim Is All You Need" (located in the `paper/` subdirectory), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
 
+## Citation
+
+If you use this software or the included research paper in your work, please cite it as follows:
+
+**Software Citation:**
+```bibtex
+@software{katz_aim_is_all_you_need_2024,
+  author = {Katz, Seth},
+  title = {aim_is_all_you_need},
+  url = {https://github.com/katzseth22202/aim_is_all_you_need},
+  doi = {10.5281/zenodo.16718456},
+  version = {0.1.0-alpha},
+  date = {2024-12-19}
+}
+```
+
+**Paper Citation:**
+Please cite the research paper "Aim Is All You Need" located in the `paper/` subdirectory when referencing the theoretical framework or methodology.
+
+The repository includes a `CITATION.cff` file that provides machine-readable citation information for automated citation systems.
+
 ## License
 
 This repository uses a dual licensing structure:
