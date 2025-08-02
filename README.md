@@ -134,13 +134,14 @@ If you use this software or the included research paper in your work, please cit
 
 **Software Citation:**
 ```bibtex
-@software{katz_aim_is_all_you_need_2024,
-  author = {Katz, Seth},
-  title = {aim_is_all_you_need},
-  url = {https://github.com/katzseth22202/aim_is_all_you_need},
-  doi = {10.5281/zenodo.16718456},
-  version = {0.1.0-alpha},
-  date = {2024-12-19}
+@software{Katz_aim_is_all_you_need_2025,
+author = {Katz, Seth},
+doi = {10.5281/zenodo.16718456},
+month = aug,
+title = {{aim\_is\_all\_you\_need}},
+url = {https://github.com/katzseth22202/aim_is_all_you_need},
+version = {0.1.0-alpha},
+year = {2025}
 }
 ```
 
