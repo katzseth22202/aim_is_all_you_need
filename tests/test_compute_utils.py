@@ -192,16 +192,16 @@ def test_burn_for_v_infinity_moon() -> None:
     """Test burn_for_v_infinity with Moon as the body."""
     from poliastro.bodies import Moon
 
-    # Test case: achieve 2 km/s v_infinity from Moon at 100 km altitude
+    # Test case: achieve 2 km/s v_infinity from Moon at 1 km altitude
     v_infinity = 2 * u.km / u.s
     altitude = 1 * u.km
     burn = burn_for_v_infinity(v_infinity, body=Moon, altitude=altitude)
 
     # Expected: sqrt(v_escape^2 + v_infinity^2) - v_initial
-    # v_escape at 1 km altitude above Moon ≈ 2.38 km/s
-    # v_total = sqrt(2.38^2 + 2^2) = sqrt(5.66 + 4) = sqrt(9.66) ≈ 3.11 km/s
-    # burn = 3.11 - 0 = 3.11 km/s
-    expected_burn = 3.11 * u.km / u.s
+    # v_escape at 1 km altitude above Moon ≈ 2.37 km/s
+    # v_total = sqrt(2.37^2 + 2^2) = sqrt(5.62 + 4) = sqrt(9.62) ≈ 3.10 km/s
+    # burn = 3.10 - 0 = 3.10 km/s
+    expected_burn = 3.10 * u.km / u.s
     assert is_nearly_equal(burn, expected_burn, percent=0.01)
 
 
