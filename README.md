@@ -136,11 +136,10 @@ If you use this software or the included research paper in your work, please cit
 ```bibtex
 @software{Katz_aim_is_all_you_need_2025,
 author = {Katz, Seth},
-doi = {10.5281/zenodo.16718456},
+doi = {10.5281/zenodo.16718455},
 month = aug,
 title = {{aim\_is\_all\_you\_need}},
 url = {https://github.com/katzseth22202/aim_is_all_you_need},
-version = {0.1.1-alpha},
 year = {2025}
 }
 ```
