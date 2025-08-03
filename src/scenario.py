@@ -31,17 +31,22 @@ from src.astro_constants import (
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
 )
 
-# Import functions from compute_utils
+# Import orbital mechanics functions from orbit_utils
 from src.orbit_utils import (
     apoapsis_velocity,
     escape_velocity,
     orbit_from_rp_ra,
-    payload_mass_ratio,
     periapsis_velocity,
-    retrograde_jovian_hohmann_transfer,
-    rocket_equation,
     speed_around_attractor,
     velocity_at_distance,
+)
+
+# Import propulsion functions from propulsion
+from src.propulsion import (
+    burn_for_v_infinity,
+    payload_mass_ratio,
+    retrograde_jovian_hohmann_transfer,
+    rocket_equation,
 )
 
 
@@ -383,52 +388,6 @@ def earth_velocity_200km_periapsis(
     )
 
     return earth_velocity
-
-
-def burn_for_v_infinity(
-    v_infinity: u.Quantity,
-    body: Body = Earth,
-    altitude: u.Quantity = LEO_ALTITUDE,
-    initial_velocity: u.Quantity = 0 * u.km / u.s,
-) -> u.Quantity:
-    """Calculate the burn required to achieve a specific v_infinity.
-
-    This function computes the delta-v needed to achieve a desired v_infinity
-    (hyperbolic excess velocity) when starting from a given altitude above a celestial body.
-    The burn is applied at the specified altitude to achieve the target v_infinity.
-
-    Args:
-        v_infinity: The desired hyperbolic excess velocity (astropy Quantity).
-        body: The celestial body to escape from (poliastro Body, default Earth).
-        altitude: Altitude above the body's surface where the burn occurs (astropy Quantity, default LEO_ALTITUDE).
-        initial_velocity: Initial velocity at the burn altitude, defaults to 0 km/s (astropy Quantity).
-
-    Returns:
-        The required burn (delta-v) to achieve the v_infinity (astropy Quantity).
-
-    Raises:
-        ValueError: If v_infinity is less than or equal to zero.
-    """
-    if v_infinity <= 0 * u.km / u.s:
-        raise ValueError("v_infinity must be positive.")
-
-    # Distance from the center of the body at burn altitude
-    burn_radius: u.Quantity = body.R + altitude
-
-    # Escape velocity at the burn altitude
-    escape_velocity_at_altitude: u.Quantity = escape_velocity(body, altitude)
-
-    # For a hyperbolic orbit, the total velocity at the burn point is:
-    # v_total^2 = v_escape^2 + v_infinity^2
-    # This is derived from the vis-viva equation for hyperbolic orbits
-
-    total_velocity_squared: u.Quantity = escape_velocity_at_altitude**2 + v_infinity**2
-    total_velocity: u.Quantity = np.sqrt(total_velocity_squared)
-
-    # The burn required is the difference between total velocity and initial velocity
-    required_burn: u.Quantity = total_velocity - initial_velocity
-
-    return required_burn.to(u.km / u.s)
 
 
 def solar_fusion_velocity() -> u.Quantity:
