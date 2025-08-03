@@ -33,23 +33,6 @@ from poliastro.bodies import Body, Earth, Moon, Saturn, Sun
 from poliastro.maneuver import Maneuver
 from poliastro.twobody import Orbit
 
-from src.astro_constants import (
-    EARTH_A,
-    EFFECTIVE_DV_LUNAR,
-    JUPITER_A,
-    LEO_ALTITUDE,
-    LOW_SATURN_ALTITUDE,
-    MOON_A,
-    PARKER_PERIAPSIS,
-    PERIAPSIS_SOLAR_BURN,
-    PERIAPSIS_SOLAR_V,
-    PHOEBE_A,
-    REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
-    REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
-    RETROGRADE_FRACTION,
-    TARGET_LAUNCH_CAPACITY_MULTIPLE,
-)
-
 
 def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
     """Compute the orbital speed at a given altitude above a body's surface.
