@@ -15,6 +15,7 @@ from src.scenario import (
     BalloonScenario,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
+    find_parker_orbit_period,
     launch_capacity_time,
     solar_fusion_velocity,
 )
@@ -59,6 +60,9 @@ def main() -> None:
     )
     print(
         f"Velocity of impact in reference frame of rocket for triggering nuclear impact fusion = {solar_fusion_velocity()} "
+    )
+    print(
+        f"orbital period of transfer orbit to Parker periapsis = {find_parker_orbit_period()}"
     )
 
 

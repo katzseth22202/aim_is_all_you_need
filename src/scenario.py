@@ -56,6 +56,7 @@ from src.astro_constants import (
 from src.orbit_utils import (
     apoapsis_velocity,
     escape_velocity,
+    get_period,
     orbit_from_rp_ra,
     periapsis_velocity,
     speed_around_attractor,
@@ -440,3 +441,28 @@ def solar_fusion_velocity() -> u.Quantity:
     # The velocity of impact in reference frame of the rocket.
     # Factor of 2 accounts for relative velocity between prograde and retrograde trajectories.
     return 2 * periapsis_velocity(orbit)
+
+
+def find_parker_orbit_period() -> u.Quantity:
+    """Calculate the orbital period of a transfer orbit between Earth and Parker Space Probe.
+
+    This function calculates the orbital period of an elliptical transfer orbit around the Sun
+    with periapsis near the Parker Space Probe's closest approach distance and apoapsis at
+    Earth's orbital distance. This represents the time required for a spacecraft to complete
+    one full orbit between these two points.
+
+    The orbit is defined by:
+    - Periapsis: Near Parker Space Probe's closest approach to the Sun (PARKER_PERIAPSIS)
+    - Apoapsis: Earth's orbital distance from the Sun (EARTH_A)
+    - Central body: Sun
+
+    Returns:
+        The orbital period of the transfer orbit (astropy Quantity, years).
+
+    Note:
+        Uses the standard orbital period formula T = 2π * sqrt(a³/μ) where 'a' is the
+        semi-major axis and 'μ' is the Sun's gravitational parameter.
+    """
+    semimajor_axis: u.Quantity = (EARTH_A + PARKER_PERIAPSIS) / 2
+    period: u.Quantity = get_period(Sun, semimajor_axis)
+    return period.to(u.year)
