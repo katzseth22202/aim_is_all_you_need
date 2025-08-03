@@ -625,7 +625,9 @@ rocket to minimal low Earth orbit"""
         # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
         prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_velocity
         # calculate burn needed to achieve this v_infinity from Earth
-        prograde_dv_parker_burn = burn_for_v_infinity(prograde_v_infinity_earth_to_parker)
+        prograde_dv_parker_burn = burn_for_v_infinity(
+            prograde_v_infinity_earth_to_parker
+        )
         retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
         desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
         BalloonScenario(
@@ -635,7 +637,9 @@ rocket to minimal low Earth orbit"""
         # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
         retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_velocity
         # calculate burn needed to achieve this v_infinity from Earth
-        retrograde_dv_parker_burn = burn_for_v_infinity(retrograde_v_infinity_earth_to_parker)
+        retrograde_dv_parker_burn = burn_for_v_infinity(
+            retrograde_v_infinity_earth_to_parker
+        )
         BalloonScenario(
             v_rf=retrograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
         ).append(scenario_table)
