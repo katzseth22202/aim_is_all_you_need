@@ -28,23 +28,6 @@ from src.astro_constants import (
 )
 
 
-def hohmann_transfer(
-    r_i: u.Quantity, r_f: u.Quantity, attractor: Body = Sun
-) -> Maneuver:
-    """Compute the Hohmann transfer maneuver between two circular orbits.
-
-    Args:
-        r_i: Initial orbit radius (astropy Quantity).
-        r_f: Final orbit radius (astropy Quantity).
-        attractor: The central body (poliastro Body, default Sun).
-
-    Returns:
-        A Maneuver object representing the Hohmann transfer.
-    """
-    initial_orbit: Orbit = Orbit.circular(attractor, r_i)
-    return Maneuver.hohmann(initial_orbit, r_f)
-
-
 def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
     """Compute the orbital speed at a given altitude above a body's surface.
 
