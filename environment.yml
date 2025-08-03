@@ -3,15 +3,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
-  - poliastro
-  - jupyter
-  - mypy
-  - pytest
   - black
   - isort
-  - pandas
+  - jupyter
+  - mypy
   - nbdime
+  - pandas
+  - poliastro
+  - pytest
+  - python=3.10
   - tabulate
   - types-tabulate
 prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env

@@ -623,15 +623,17 @@ rocket to minimal low Earth orbit"""
         parker_apoapsis_velocity = apoapsis_velocity(orbit=parker_orbit)
         earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
         prograde_dv_earth_to_parker = earth_speed - parker_apoapsis_velocity
+        prograde_dv_parker_burn = burn_for_v_infinity(prograde_dv_earth_to_parker)
         retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
         desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
         BalloonScenario(
-            v_rf=prograde_dv_earth_to_parker, v_b=retrograde_jovian_speed, desc=desc
+            v_rf=prograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
         ).append(scenario_table)
         desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun"""
         retrograde_dv_earth_to_parker = earth_speed + parker_apoapsis_velocity
+        retrograde_dv_parker_burn = burn_for_v_infinity(retrograde_dv_earth_to_parker)
         BalloonScenario(
-            v_rf=retrograde_dv_earth_to_parker, v_b=retrograde_jovian_speed, desc=desc
+            v_rf=retrograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
         ).append(scenario_table)
         desc = """Balloons approach Earth from Jupiter and push a rocket into an elliptical orbit"""
         BalloonScenario(
@@ -887,6 +889,52 @@ def earth_velocity_200km_periapsis(
     )
 
     return earth_velocity
+
+
+def burn_for_v_infinity(
+    v_infinity: u.Quantity,
+    body: Body = Earth,
+    altitude: u.Quantity = LEO_ALTITUDE,
+    initial_velocity: u.Quantity = 0 * u.km / u.s,
+) -> u.Quantity:
+    """Calculate the burn required to achieve a specific v_infinity.
+
+    This function computes the delta-v needed to achieve a desired v_infinity
+    (hyperbolic excess velocity) when starting from a given altitude above a celestial body.
+    The burn is applied at the specified altitude to achieve the target v_infinity.
+
+    Args:
+        v_infinity: The desired hyperbolic excess velocity (astropy Quantity).
+        body: The celestial body to escape from (poliastro Body, default Earth).
+        altitude: Altitude above the body's surface where the burn occurs (astropy Quantity, default LEO_ALTITUDE).
+        initial_velocity: Initial velocity at the burn altitude, defaults to 0 km/s (astropy Quantity).
+
+    Returns:
+        The required burn (delta-v) to achieve the v_infinity (astropy Quantity).
+
+    Raises:
+        ValueError: If v_infinity is less than or equal to zero.
+    """
+    if v_infinity <= 0 * u.km / u.s:
+        raise ValueError("v_infinity must be positive.")
+
+    # Distance from the center of the body at burn altitude
+    burn_radius: u.Quantity = body.R + altitude
+
+    # Escape velocity at the burn altitude
+    escape_velocity_at_altitude: u.Quantity = escape_velocity(body, altitude)
+
+    # For a hyperbolic orbit, the total velocity at the burn point is:
+    # v_total^2 = v_escape^2 + v_infinity^2
+    # This is derived from the vis-viva equation for hyperbolic orbits
+
+    total_velocity_squared: u.Quantity = escape_velocity_at_altitude**2 + v_infinity**2
+    total_velocity: u.Quantity = np.sqrt(total_velocity_squared)
+
+    # The burn required is the difference between total velocity and initial velocity
+    required_burn: u.Quantity = total_velocity - initial_velocity
+
+    return required_burn.to(u.km / u.s)
 
 
 def solar_fusion_velocity() -> u.Quantity:
