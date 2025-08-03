@@ -140,7 +140,7 @@ doi = {10.5281/zenodo.16718456},
 month = aug,
 title = {{aim\_is\_all\_you\_need}},
 url = {https://github.com/katzseth22202/aim_is_all_you_need},
-version = {0.1.0-alpha},
+version = {0.1.1-alpha},
 year = {2025}
 }
 ```
