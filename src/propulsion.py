@@ -1,7 +1,22 @@
 """Propulsion-related functions and calculations.
 
-This module contains functions related to rocket propulsion, including
-the Tsiolkovsky rocket equation, payload mass ratios, and propulsion maneuvers.
+This module provides rocket propulsion calculations and maneuver planning
+for the balloon propulsion system. It builds on orbital mechanics from
+orbit_utils.py to provide higher-level propulsion analysis.
+
+Key Functions:
+    - rocket_equation: Tsiolkovsky rocket equation for propellant mass
+    - payload_mass_ratio: Calculate payload/balloon mass ratios
+    - hohmann_transfer: Plan Hohmann transfer maneuvers
+    - burn_for_v_infinity: Calculate burns for hyperbolic trajectories
+    - retrograde_jovian_hohmann_transfer: Specialized Jupiter-Earth transfer
+
+Dependencies:
+    - orbit_utils: Orbital mechanics calculations
+    - astro_constants: Physical constants and parameters
+
+This module is designed to be imported by scenario.py for scenario analysis
+and by main.py for high-level propulsion calculations.
 """
 
 from typing import List, Tuple

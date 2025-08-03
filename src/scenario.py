@@ -1,7 +1,28 @@
 """Balloon propulsion scenarios and data structures.
 
-This module contains the BalloonScenario class and related functions for managing
-balloon propulsion scenarios and their calculations.
+This module provides scenario analysis and data structures for balloon propulsion
+missions. It combines orbital mechanics and propulsion calculations to analyze
+various mission scenarios and their feasibility.
+
+Key Components:
+    - BalloonScenario: Data structure for propulsion scenarios
+    - BurnInfo: Data structure for burn analysis results
+    - paper_scenarios(): Generate predefined mission scenarios
+    - find_best_lunar_return(): Optimize lunar return trajectories
+    - launch_capacity_time(): Calculate mission timing requirements
+
+Key Functions:
+    - earth_velocity_200km_periapsis: Solar periapsis velocity calculations
+    - solar_fusion_velocity: Nuclear fusion impact velocity analysis
+    - orbit_from_periapsis_speed_and_apoapsis_radius: Orbit construction
+
+Dependencies:
+    - orbit_utils: Orbital mechanics calculations
+    - propulsion: Propulsion analysis functions
+    - astro_constants: Physical constants and mission parameters
+
+This module serves as the highest-level analysis layer, combining all
+lower-level calculations to provide comprehensive mission analysis.
 """
 
 from dataclasses import dataclass

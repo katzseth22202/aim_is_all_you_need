@@ -1,3 +1,26 @@
+"""Orbital mechanics utilities and calculations.
+
+This module provides fundamental orbital mechanics functions for calculating
+orbital parameters, velocities, and trajectories. It serves as the foundation
+for orbital calculations used throughout the balloon propulsion system.
+
+Key Functions:
+    - body_speed: Calculate orbital speed at given altitude
+    - escape_velocity: Calculate escape velocity from celestial bodies
+    - orbit_from_rp_ra: Create orbits from periapsis/apoapsis radii
+    - periapsis_velocity/apoapsis_velocity: Extract velocity at orbit extremes
+    - velocity_at_distance: Calculate velocity at any point in orbit
+    - get_orbital_velocity_at_radius: General velocity calculation for any radius
+
+Dependencies:
+    - astro_constants: Physical constants and orbital parameters
+    - poliastro: Core orbital mechanics library
+    - astropy: Units and astronomical calculations
+
+This module is designed to be imported by propulsion.py and scenario.py
+for higher-level orbital maneuver calculations.
+"""
+
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
