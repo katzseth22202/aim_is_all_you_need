@@ -26,7 +26,10 @@ def main() -> None:
         periapsis_radius=Earth.R + LEO_ALTITUDE,
         attractor_body=Earth,
     )
-    print(f"best lunar return {find_best_lunar_return()}")
+
+    # Calculate best lunar return once and reuse the result
+    best_lunar_return = find_best_lunar_return()
+    print(f"best lunar return {best_lunar_return}")
 
     # Get the scenarios DataFrame
     scenarios_df = BalloonScenario.paper_scenarios()
@@ -44,7 +47,7 @@ def main() -> None:
         )
     )
     print("=" * 80)
-    lunar_mass_ratio = find_best_lunar_return().combined_mass_ratio
+    lunar_mass_ratio = best_lunar_return.combined_mass_ratio
     print(
         f"lunar launch cycle capacity time = {launch_capacity_time(lunar_mass_ratio, LUNAR_MONTH)}"
     )
