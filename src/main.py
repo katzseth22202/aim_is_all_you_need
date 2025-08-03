@@ -8,12 +8,14 @@ from poliastro.bodies import Earth
 from tabulate import tabulate
 
 from src.astro_constants import LEO_ALTITUDE, LUNAR_MONTH, MOON_A
-from src.compute_utils import (
+from src.orbit_utils import (
+    orbit_from_rp_ra,
+)
+from src.scenario import (
     BalloonScenario,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     launch_capacity_time,
-    orbit_from_rp_ra,
     solar_fusion_velocity,
 )
 
