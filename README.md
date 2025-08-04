@@ -128,6 +128,24 @@ make test
 
 This code implements calculations from the research paper "Aim Is All You Need" (located in the `paper/` subdirectory), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
 
+### Raw LaTeX Assets
+
+The raw LaTeX source files for the included research paper can be found in the separate repository:
+
+**Repository:** [Balloon-Pulse-Propulsion](https://github.com/katzseth22202/Balloon-Pulse-Propulsion)
+
+**Citation:**
+```bibtex
+@misc{Katz_Balloon-Pulse-Propulsion_2025,
+author = {Katz, Seth},
+doi = {https://doi.org/10.5281/zenodo.16740748},
+month = aug,
+title = {{Balloon-Pulse-Propulsion}},
+url = {https://github.com/katzseth22202/Balloon-Pulse-Propulsion},
+year = {2025}
+}
+```
+
 ## Citation
 
 If you use this software or the included research paper in your work, please cite it as follows:
