@@ -163,6 +163,20 @@ year = {2025}
 ```
 
 **Paper Citation:**
+```bibtex
+@misc{katz_2025_16741183,
+  author       = {Katz, Seth},
+  title        = {Aim Is All You Need - A Speculative White Paper on
+                   Externally Pulsed Propulsion
+                  },
+  month        = aug,
+  year         = 2025,
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.16741183},
+  url          = {https://doi.org/10.5281/zenodo.16741183},
+}
+```
+
 Please cite the research paper "Aim Is All You Need" located in the `paper/` subdirectory when referencing the theoretical framework or methodology.
 
 The repository includes a `CITATION.cff` file that provides machine-readable citation information for automated citation systems.
