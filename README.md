@@ -1,10 +1,10 @@
 # Balloon Pulse Propulsion Calculations
 
-This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" (located in the `paper/` subdirectory). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
+This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)) (also available in the `paper/` subdirectory). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
 
 ## Overview
 
-The calculations in this repository support the theoretical framework presented in the "Aim Is All You Need" paper, which explores the use of balloon-based propulsion systems for:
+The calculations in this repository support the theoretical framework presented in the "Aim Is All You Need" paper ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)), which explores the use of balloon-based propulsion systems for:
 
 - **Lunar Transfer Missions**: Optimizing trajectories from Earth to the Moon using balloon propulsion
 - **Interplanetary Travel**: Analyzing balloon propulsion for missions to Jupiter, Saturn, and other bodies
@@ -123,10 +123,6 @@ make test
 4. Add tests for new functionality
 5. Ensure all tests pass: `make all`
 6. Submit a pull request
-
-## Related Work
-
-This code implements calculations from the research paper "Aim Is All You Need" (located in the `paper/` subdirectory), which presents a novel approach to space propulsion using balloon-based systems. The paper provides the theoretical framework, while this repository provides the computational tools to analyze and optimize these propulsion systems.
 
 ### Raw LaTeX Assets
 
