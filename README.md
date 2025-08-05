@@ -177,10 +177,6 @@ year = {2025}
 }
 ```
 
-Please cite the research paper "Aim Is All You Need" located in the `paper/` subdirectory when referencing the theoretical framework or methodology.
-
-The repository includes a `CITATION.cff` file that provides machine-readable citation information for automated citation systems.
-
 ## License
 
 This repository uses a dual licensing structure:
