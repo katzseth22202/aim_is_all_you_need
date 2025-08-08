@@ -1,20 +1,30 @@
-# Balloon Pulse Propulsion Calculations
+# PuffSat Pulse Propulsion Calculations
 
-This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)) (also available in the `paper/` subdirectory). The code provides computational tools for analyzing balloon-based propulsion systems for various space missions.
+This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)) (also available in the `paper/` subdirectory). The code provides computational tools for analyzing PuffSat-based propulsion systems for various space missions.
+
+## What are PuffSats?
+
+**PuffSats** are CubeSats that generate gas explosively or via sublimation on demand. Unlike traditional balloons, PuffSats are compact satellite platforms that can produce propulsion through controlled gas generation, making them ideal for orbital maneuvers and space propulsion applications. The name "PuffSat" reflects their ability to "puff" or release gas in controlled bursts for propulsion purposes.
+
+### Key Characteristics:
+- **Compact Design**: Based on CubeSat standards for standardized deployment
+- **On-Demand Propulsion**: Gas generation triggered when needed for maneuvers
+- **Versatile Applications**: Suitable for lunar transfers, interplanetary missions, and orbital adjustments
+- **Mass Efficiency**: Optimized payload-to-propulsion mass ratios for cost-effective missions
 
 ## Overview
 
-The calculations in this repository support the theoretical framework presented in the "Aim Is All You Need" paper ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)), which explores the use of balloon-based propulsion systems for:
+The calculations in this repository support the theoretical framework presented in the "Aim Is All You Need" paper ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)), which explores the use of PuffSat-based propulsion systems for:
 
-- **Lunar Transfer Missions**: Optimizing trajectories from Earth to the Moon using balloon propulsion
-- **Interplanetary Travel**: Analyzing balloon propulsion for missions to Jupiter, Saturn, and other bodies
+- **Lunar Transfer Missions**: Optimizing trajectories from Earth to the Moon using PuffSat propulsion
+- **Interplanetary Travel**: Analyzing PuffSat propulsion for missions to Jupiter, Saturn, and other bodies
 - **Escape Velocity Calculations**: Computing optimal burn strategies for achieving escape velocities
 - **Mass Ratio Optimization**: Finding the best payload-to-propulsion mass ratios for various scenarios
 
 ## Key Features
 
 - **Orbital Mechanics**: Comprehensive calculations for Hohmann transfers, escape velocities, and orbital maneuvers
-- **Balloon Propulsion Analysis**: Tools for analyzing balloon-based propulsion scenarios
+- **PuffSat Propulsion Analysis**: Tools for analyzing PuffSat-based propulsion scenarios
 - **Mass Ratio Optimization**: Functions to find optimal payload-to-propulsion mass ratios
 - **Multi-body Systems**: Support for calculations involving Earth, Moon, Jupiter, Saturn, and other celestial bodies
 - **Type Safety**: Full mypy type checking with strict settings and comprehensive type annotations
@@ -26,11 +36,20 @@ aim_is_all_you_need/
 ├── src/                    # Source code
 │   ├── __init__.py
 │   ├── astro_constants.py  # Astronomical constants and parameters
-│   ├── compute_utils.py    # Core orbital mechanics calculations
+│   ├── orbit_utils.py      # Core orbital mechanics calculations
+│   ├── propulsion.py       # Propulsion analysis functions
+│   ├── scenario.py         # PuffSat scenario analysis
 │   └── main.py            # Main application entry point
 ├── tests/                  # Test files
 │   ├── __init__.py
-│   └── test_compute_utils.py # Tests for orbital mechanics functions
+│   ├── test_helpers.py     # Shared test utilities
+│   ├── test_orbit_utils.py # Tests for orbital mechanics functions
+│   ├── test_propulsion.py  # Tests for propulsion functions
+│   └── test_scenario.py    # Tests for scenario analysis
+├── paper/                  # Research paper
+│   ├── Aim_Is_All_You_Need.pdf
+│   ├── README.md
+│   └── LICENSE
 ├── pyproject.toml         # Project configuration and dependencies
 ├── requirements.txt       # Development dependencies
 ├── Makefile              # Convenient commands for development
@@ -40,26 +59,37 @@ aim_is_all_you_need/
 
 ## Core Calculations
 
-### Orbital Mechanics Functions
+### Orbital Mechanics Functions (`orbit_utils.py`)
+
+- `body_speed()`: Calculate orbital speed at given altitude
+- `escape_velocity()`: Calculate escape velocities from celestial bodies
+- `orbit_from_rp_ra()`: Create orbits from periapsis/apoapsis radii
+- `velocity_at_distance()`: Calculate velocity at any point in orbit
+- `get_orbital_velocity_at_radius()`: General velocity calculation for any radius
+
+### Propulsion Analysis (`propulsion.py`)
 
 - `hohmann_transfer()`: Compute Hohmann transfer maneuvers between circular orbits
-- `escape_velocity()`: Calculate escape velocities from celestial bodies
-- `payload_mass_ratio()`: Determine optimal payload-to-balloon mass ratios
-- `find_best_lunar_return()`: Optimize lunar return trajectories with maximum mass ratios
+- `payload_mass_ratio()`: Determine optimal payload-to-PuffSat mass ratios
+- `burn_for_v_infinity()`: Calculate burns for hyperbolic trajectories
+- `retrograde_jovian_hohmann_transfer()`: Specialized Jupiter-Earth transfer
 
-### Balloon Propulsion Scenarios
+### PuffSat Propulsion Scenarios (`scenario.py`)
 
-The `BalloonScenario` class provides predefined scenarios from the paper:
-- Eccentric balloons for lunar transfer missions
-- Retrograde balloon deceleration for Earth reentry
+The `PuffSatScenario` class provides predefined scenarios from the paper:
+- Eccentric PuffSats for lunar transfer missions
+- Retrograde PuffSat deceleration for Earth reentry
 - Jupiter-to-Earth retrograde Hohmann transfers
 - Saturn and Phoebe orbital maneuvers
+- Solar periapsis maneuvers for high-velocity missions
 
 ### Advanced Features
 
-- **Retrograde Calculations**: Support for retrograde orbital maneuvers
-- **Multi-body Optimization**: Calculations involving multiple celestial bodies
-- **Launch Capacity Analysis**: Time calculations for achieving target launch capacities
+- **Retrograde Calculations**: Support for retrograde orbital maneuvers using PuffSat propulsion
+- **Multi-body Optimization**: Calculations involving multiple celestial bodies (Earth, Moon, Jupiter, Saturn, Sun)
+- **Launch Capacity Analysis**: Time calculations for achieving target launch capacities through PuffSat systems
+- **Nuclear Fusion Scenarios**: Analysis of high-velocity impact scenarios for fusion research
+- **Parker Space Probe Trajectories**: Calculations for solar periapsis missions
 
 ## Quick Start
 
@@ -68,7 +98,7 @@ The `BalloonScenario` class provides predefined scenarios from the paper:
 ```bash
 # Create and activate the conda environment
 conda env create -f environment.yml
-conda activate balloon_math_env
+conda activate puffsat_math_env
 ```
 
 The conda environment includes all necessary dependencies including development tools.
@@ -92,28 +122,46 @@ make run
 ```
 
 This will execute the main calculations and output the results to standard output, including:
-- Balloon propulsion scenario analysis
+- PuffSat propulsion scenario analysis
 - Optimal lunar return trajectories
 - Mass ratio calculations for various missions
 - Orbital mechanics computations
 
 ## Dependencies
 
-The project uses several key libraries for orbital mechanics calculations:
+The project uses several key libraries for orbital mechanics and scientific computing:
 
 - **poliastro**: For orbital mechanics and celestial body definitions
 - **astropy**: For astronomical units and constants
-- **numpy**: For numerical computations
+- **numpy**: For numerical computations and array operations
 - **pandas**: For data analysis and scenario tables
+- **tabulate**: For formatted output display
+- **mypy**: For static type checking
+- **pytest**: For testing framework
 
 ## Testing
 
-The repository includes comprehensive tests for all orbital mechanics functions:
+The repository includes comprehensive tests for all functions:
 
 ```bash
 # Run all tests
 make test
+
+# Run type checking
+make mypy
+
+# Run code formatting checks
+make check-format
+
+# Run complete quality check (format, type check, tests)
+make all
 ```
+
+The test suite includes:
+- **Unit tests** for all orbital mechanics functions
+- **Integration tests** for propulsion calculations
+- **Scenario tests** for PuffSat mission analysis
+- **Helper utilities** for floating-point comparisons
 
 ## Contributing
 

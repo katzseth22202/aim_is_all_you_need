@@ -37,7 +37,7 @@ def test_hohmann_transfer() -> None:
 
 
 def test_payload_mass_ratio() -> None:
-    """Test payload_mass_ratio function using the balloon mass test."""
+    """Test payload_mass_ratio function using the PuffSat mass test."""
 
     # This is just formula for velocity after elastic collisions from Wikipedia
     def rocket_new_velocity(
@@ -49,7 +49,7 @@ def test_payload_mass_ratio() -> None:
         v2 = term1 + term2
         return v2.to(u.km / u.s)
 
-    def balloon_mass_test(
+    def puffsat_mass_test(
         v_rf: u.Quantity,
         v_b: u.Quantity,
         v_ri: u.Quantity = 0 * u.km / u.s,
@@ -71,7 +71,7 @@ def test_payload_mass_ratio() -> None:
     v_rf = 8 * u.km / u.s
     v_ri = 2 * u.km / u.s
     assert is_nearly_equal(
-        balloon_mass_test(v_rf=v_rf, v_b=v_b, v_ri=v_ri),
+        puffsat_mass_test(v_rf=v_rf, v_b=v_b, v_ri=v_ri),
         payload_mass_ratio(v_rf=v_rf, v_ri=v_ri, v_b=v_b),
     )
 

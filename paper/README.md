@@ -1,6 +1,6 @@
 # Research Paper: "Aim Is All You Need"
 
-This directory contains the research paper "Aim Is All You Need" which presents the theoretical framework for balloon pulse propulsion systems.
+This directory contains the research paper "Aim Is All You Need" which presents the theoretical framework for PuffSat pulse propulsion systems.
 
 ## Copyright Notice
 

@@ -2,7 +2,7 @@
 
 This module provides fundamental orbital mechanics functions for calculating
 orbital parameters, velocities, and trajectories. It serves as the foundation
-for orbital calculations used throughout the balloon propulsion system.
+for orbital calculations used throughout the PuffSat propulsion system.
 
 Key Functions:
     - body_speed: Calculate orbital speed at given altitude

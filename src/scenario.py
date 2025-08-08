@@ -1,11 +1,11 @@
-"""Balloon propulsion scenarios and data structures.
+"""PuffSat propulsion scenarios and data structures.
 
-This module provides scenario analysis and data structures for balloon propulsion
+This module provides scenario analysis and data structures for PuffSat propulsion
 missions. It combines orbital mechanics and propulsion calculations to analyze
 various mission scenarios and their feasibility.
 
 Key Components:
-    - BalloonScenario: Data structure for propulsion scenarios
+    - PuffSatScenario: Data structure for propulsion scenarios
     - BurnInfo: Data structure for burn analysis results
     - paper_scenarios(): Generate predefined mission scenarios
     - find_best_lunar_return(): Optimize lunar return trajectories
@@ -73,7 +73,7 @@ from src.propulsion import (
 
 
 @dataclass(frozen=True)
-class BalloonScenario:
+class PuffSatScenario:
     v_rf: u.Quantity
     v_b: u.Quantity
     desc: str
@@ -81,13 +81,13 @@ class BalloonScenario:
 
     @staticmethod
     def scenario_table() -> pd.DataFrame:
-        """Create an empty DataFrame for storing balloon scenario results.
+        """Create an empty DataFrame for storing PuffSat scenario results.
 
         Returns:
-            A pandas DataFrame with columns for payload/balloon mass ratio, velocities, and description.
+            A pandas DataFrame with columns for payload/PuffSat mass ratio, velocities, and description.
         """
         df = pd.DataFrame(
-            columns=["payload_balloon_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
+            columns=["payload_puffsat_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
         )
         return df
 
@@ -116,18 +116,18 @@ class BalloonScenario:
             orbit=lunar_transfer_orbit
         )
         leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
-        desc = """Eccentric balloons with apogee at lunar distance pushes
+        desc = """Eccentric PuffSats with apogee at lunar distance pushes
 rocket to minimal low Earth orbit"""
-        scenario_table = BalloonScenario.scenario_table()
-        BalloonScenario(
+        scenario_table = PuffSatScenario.scenario_table()
+        PuffSatScenario(
             v_rf=leo_speed, v_b=lunar_transfer_periapsis_velocity, desc=desc
         ).append(scenario_table)
-        desc = """Decelerate intercity rocket for powered reentry with retrograde balloons in low orbit"""
-        BalloonScenario(v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(
+        desc = """Decelerate intercity rocket for powered reentry with retrograde PuffSats in low orbit"""
+        PuffSatScenario(v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(
             scenario_table
         )
-        desc = """Decelerate intercity rocket for powered reentry with retrograde balloons from lunar orbit"""
-        BalloonScenario(
+        desc = """Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit"""
+        PuffSatScenario(
             v_rf=0, v_b=-lunar_transfer_periapsis_velocity, desc=desc, v_ri=leo_speed
         ).append(scenario_table)
         parker_orbit = orbit_from_rp_ra(
@@ -142,29 +142,29 @@ rocket to minimal low Earth orbit"""
             prograde_v_infinity_earth_to_parker
         )
         retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
-        desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
-        BalloonScenario(
+        desc = """PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
+        PuffSatScenario(
             v_rf=prograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
         ).append(scenario_table)
-        desc = """Balloons approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun"""
+        desc = """PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun"""
         # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
         retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_velocity
         # calculate burn needed to achieve this v_infinity from Earth
         retrograde_dv_parker_burn = burn_for_v_infinity(
             retrograde_v_infinity_earth_to_parker
         )
-        BalloonScenario(
+        PuffSatScenario(
             v_rf=retrograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
         ).append(scenario_table)
-        desc = """Balloons approach Earth from Jupiter and push a rocket into an elliptical orbit"""
-        BalloonScenario(
+        desc = """PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit"""
+        PuffSatScenario(
             v_rf=lunar_transfer_periapsis_velocity,
             v_b=retrograde_jovian_speed,
             desc=desc,
         ).append(scenario_table)
         desc = """Decelerate trans-lunar payloads to land on the moon"""
         lunar_esc = escape_velocity(body=Moon)
-        BalloonScenario(
+        PuffSatScenario(
             v_rf=0 * u.km / u.s, v_b=-lunar_esc, desc=desc, v_ri=lunar_esc
         ).append(scenario_table)
         min_saturn_altitude = Saturn.R + LOW_SATURN_ALTITUDE
@@ -177,21 +177,21 @@ rocket to minimal low Earth orbit"""
             attractor_body=Saturn,
         )
         phoebe_low_periapsis_velocity = periapsis_velocity(orbit=phoebe_low_orbit)
-        desc = """Balloons approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn"""
-        BalloonScenario(
+        desc = """PuffSats approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn"""
+        PuffSatScenario(
             v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
         ).append(scenario_table)
-        lunar_balloon_speed: BurnInfo = find_best_lunar_return()
+        lunar_puffsat_speed: BurnInfo = find_best_lunar_return()
         lunar_required_dv_prograde: u.Quantity = REQUIRED_DV_LUNAR_TRANSFER_PROGRADE
-        desc = f"""After LEO Earth burn =  {lunar_balloon_speed.burn}, the balloon comes towards the moon at optimal speed."""
+        desc = f"""After LEO Earth burn =  {lunar_puffsat_speed.burn}, the PuffSat comes towards the moon at optimal speed."""
         scenario_table.loc[len(scenario_table)] = [
-            lunar_balloon_speed.combined_mass_ratio,
+            lunar_puffsat_speed.combined_mass_ratio,
             (
                 REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
                 REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
             ),
             0 * u.km / u.s,
-            lunar_balloon_speed.incoming_v,
+            lunar_puffsat_speed.incoming_v,
             desc,
         ]
 
@@ -292,8 +292,8 @@ def find_best_lunar_return(
     Args:
         effective_exhaust_speed: The effective exhaust velocity for the rocket
             (astropy Quantity, default EFFECTIVE_DV_LUNAR).
-        prograde_dv_required: The required delta-v for pushing moon's off balloon to a prograde lunar transfer orbit with Earth leo periapsis
-        retrograde_dv_required: The required delta-v for pushing moon's off balloon to a retrograde lunar transfer orbit with Earth leo periapsis
+        prograde_dv_required: The required delta-v for pushing moon's off PuffSat to a prograde lunar transfer orbit with Earth leo periapsis
+        retrograde_dv_required: The required delta-v for pushing moon's off PuffSat to a retrograde lunar transfer orbit with Earth leo periapsis
 
 
     Returns:

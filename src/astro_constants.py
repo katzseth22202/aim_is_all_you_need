@@ -41,5 +41,5 @@ PERIAPSIS_SOLAR_BURN = (
 )  # we propose this speed increase in the paper's section on using the Sun's Oberth
 
 STD_FUDGE_FACTOR: float = (
-    0.8  # the fudge factor described in the paper for how elastic balloon collisions are
+    0.8  # the fudge factor described in the paper for how elastic PuffSat collisions are
 )

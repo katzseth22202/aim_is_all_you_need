@@ -1,12 +1,12 @@
 """Propulsion-related functions and calculations.
 
 This module provides rocket propulsion calculations and maneuver planning
-for the balloon propulsion system. It builds on orbital mechanics from
+for the PuffSat propulsion system. It builds on orbital mechanics from
 orbit_utils.py to provide higher-level propulsion analysis.
 
 Key Functions:
     - rocket_equation: Tsiolkovsky rocket equation for propellant mass
-    - payload_mass_ratio: Calculate payload/balloon mass ratios
+    - payload_mass_ratio: Calculate payload/PuffSat mass ratios
     - hohmann_transfer: Plan Hohmann transfer maneuvers
     - burn_for_v_infinity: Calculate burns for hyperbolic trajectories
     - retrograde_jovian_hohmann_transfer: Specialized Jupiter-Earth transfer
@@ -63,15 +63,15 @@ def payload_mass_ratio(
     v_ri: u.Quantity = 0 * u.km / u.s,
     fudge_factor: float = STD_FUDGE_FACTOR,
 ) -> float:
-    """Compute the ratio of payload mass to balloon propulsion mass.
+    """Compute the ratio of payload mass to PuffSat propulsion mass.
     Args:
         v_rf: Final velocity of the rocket (astropy Quantity, km/s).
-        v_b: Velocity of the balloon  (astropy Quantity, km/s).
+        v_b: Velocity of the PuffSat  (astropy Quantity, km/s).
         v_ri: Initial velocity of the rocket (astropy Quantity, km/s, default 0 km/s).
         fudge_factor: Fudge factor for the mass calculation (default 0.8).
 
     Returns:
-        The payload mass to balloon propulsion mass ratio.
+        The payload mass to PuffSat propulsion mass ratio.
     """
 
     denom: float = np.log((v_b - v_ri) / (v_b - v_rf)).item()

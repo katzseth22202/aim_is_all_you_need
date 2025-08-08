@@ -12,7 +12,7 @@ from src.orbit_utils import (
     orbit_from_rp_ra,
 )
 from src.scenario import (
-    BalloonScenario,
+    PuffSatScenario,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
@@ -33,10 +33,10 @@ def main() -> None:
     print(f"best lunar return {best_lunar_return}")
 
     # Get the scenarios DataFrame
-    scenarios_df = BalloonScenario.paper_scenarios()
+    scenarios_df = PuffSatScenario.paper_scenarios()
 
     # Display the table using tabulate with better formatting
-    print("\nBalloon Propulsion Scenarios:")
+    print("\nPuffSat Propulsion Scenarios:")
     print("=" * 80)
     print(
         tabulate(
