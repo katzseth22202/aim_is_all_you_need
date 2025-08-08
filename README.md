@@ -4,13 +4,7 @@ This repository contains Python implementations of the orbital mechanics calcula
 
 ## What are PuffSats?
 
-**PuffSats** are CubeSats that generate gas explosively or via sublimation on demand. Unlike traditional balloons, PuffSats are compact satellite platforms that can produce propulsion through controlled gas generation, making them ideal for orbital maneuvers and space propulsion applications. The name "PuffSat" reflects their ability to "puff" or release gas in controlled bursts for propulsion purposes.
-
-### Key Characteristics:
-- **Compact Design**: Based on CubeSat standards for standardized deployment
-- **On-Demand Propulsion**: Gas generation triggered when needed for maneuvers
-- **Versatile Applications**: Suitable for lunar transfers, interplanetary missions, and orbital adjustments
-- **Mass Efficiency**: Optimized payload-to-propulsion mass ratios for cost-effective missions
+**PuffSats** are CubeSats that generate gas explosively or via sublimation on demand. , PuffSats are compact satellite platforms that can be inflated ballooons or generate gas explosively or via rapid sublimation just prior to impact with a momentum pusher plate to push a second rockdet.
 
 ## Overview
 
