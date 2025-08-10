@@ -4,7 +4,7 @@ This repository contains Python implementations of the orbital mechanics calcula
 
 ## What are PuffSats?
 
-**PuffSats** are CubeSats that generate gas explosively or via sublimation on demand. , PuffSats are compact satellite platforms that can be inflated ballooons or generate gas explosively or via rapid sublimation just prior to impact with a momentum pusher plate to push a second rockdet.
+**PuffSats**  PuffSats are compact satellite platforms that generate gas explosively or via rapid satomizations just prior to impact with a momentum pusher plate to push a second rockdet.
 
 ## Overview
 
