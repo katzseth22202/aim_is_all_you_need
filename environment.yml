@@ -14,4 +14,3 @@ dependencies:
   - python=3.10
   - tabulate
   - types-tabulate
-prefix: /Users/sethkatz/anaconda3/envs/puffsat_math_env

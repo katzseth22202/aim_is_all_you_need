@@ -32,6 +32,6 @@ run:  ## Run the main script
 	python -m src.main
 
 export-env:  ## Export the current conda environment to environment.yml
-	conda env export --no-builds --from-history > environment.yml
+	conda env export --no-builds --from-history | grep -v "prefix:" > environment.yml
 
 all: format mypy test run export-env  ## Format code, run mypy, tests, main script, and export environment 
