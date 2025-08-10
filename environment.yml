@@ -1,4 +1,4 @@
-name: balloon_math_env
+name: puffsat_math_env
 channels:
   - conda-forge
   - defaults
@@ -14,4 +14,4 @@ dependencies:
   - python=3.10
   - tabulate
   - types-tabulate
-prefix: /Users/sethkatz/anaconda3/envs/balloon_math_env
+prefix: /Users/sethkatz/anaconda3/envs/puffsat_math_env

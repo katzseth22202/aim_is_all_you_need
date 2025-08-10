@@ -184,6 +184,8 @@ year = {2025}
 }
 ```
 
+*Note: While the repository name still references the original balloon concept, the research has evolved to focus on PuffSat propulsion systems as described in the current paper.*
+
 ## Citation
 
 If you use this software or the included research paper in your work, please cite it as follows:

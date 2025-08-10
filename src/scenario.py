@@ -116,7 +116,7 @@ class PuffSatScenario:
             orbit=lunar_transfer_orbit
         )
         leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
-        desc = """Eccentric PuffSats with apogee at lunar distance pushes
+        desc = """Eccentric PuffSats with apogee at lunar distance push
 rocket to minimal low Earth orbit"""
         scenario_table = PuffSatScenario.scenario_table()
         PuffSatScenario(
@@ -292,8 +292,8 @@ def find_best_lunar_return(
     Args:
         effective_exhaust_speed: The effective exhaust velocity for the rocket
             (astropy Quantity, default EFFECTIVE_DV_LUNAR).
-        prograde_dv_required: The required delta-v for pushing moon's off PuffSat to a prograde lunar transfer orbit with Earth leo periapsis
-        retrograde_dv_required: The required delta-v for pushing moon's off PuffSat to a retrograde lunar transfer orbit with Earth leo periapsis
+        prograde_dv_required: The required delta-v for pushing payloads off PuffSat to a prograde lunar transfer orbit with Earth leo periapsis
+        retrograde_dv_required: The required delta-v for pushing payloads off PuffSat to a retrograde lunar transfer orbit with Earth leo periapsis
 
 
     Returns:
