@@ -468,6 +468,92 @@ def solar_impact_dv(
     return speed_around_attractor(a=heliocentric_distance, attractor=attractor)
 
 
+def hohmann_v_infinity(
+    target_semimajor_axis: u.Quantity,
+    departure_semimajor_axis: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Heliocentric hyperbolic-excess velocity at departure for a Hohmann transfer.
+
+    Computes the magnitude of the velocity difference between the departure
+    planet's circular heliocentric velocity and the transfer ellipse's velocity at
+    the departure point, for a Hohmann transfer between two circular, coplanar
+    heliocentric orbits. For an outward transfer (target farther than departure)
+    the departure planet sits at the transfer ellipse's perihelion; for an inward
+    transfer it sits at the aphelion.
+
+    Args:
+        target_semimajor_axis: Heliocentric semi-major axis of the destination
+            planet (astropy Quantity, length units).
+        departure_semimajor_axis: Heliocentric semi-major axis of the departure
+            planet (astropy Quantity, default EARTH_A).
+
+    Returns:
+        The hyperbolic-excess velocity v_infinity at departure (astropy Quantity,
+        km/s).
+    """
+    v_departure = speed_around_attractor(a=departure_semimajor_axis, attractor=Sun)
+    if target_semimajor_axis > departure_semimajor_axis:
+        # Outward transfer: departure planet is at the transfer ellipse's perihelion.
+        transfer = orbit_from_rp_ra(
+            apoapsis_radius=target_semimajor_axis,
+            periapsis_radius=departure_semimajor_axis,
+            attractor_body=Sun,
+        )
+        v_transfer = periapsis_velocity(transfer)
+    else:
+        # Inward transfer: departure planet is at the transfer ellipse's aphelion.
+        transfer = orbit_from_rp_ra(
+            apoapsis_radius=departure_semimajor_axis,
+            periapsis_radius=target_semimajor_axis,
+            attractor_body=Sun,
+        )
+        v_transfer = apoapsis_velocity(transfer)
+    return abs(v_transfer - v_departure).to(u.km / u.s)
+
+
+def lunar_return_transfer_dv(
+    target_semimajor_axis: u.Quantity,
+    perigee_altitude: u.Quantity = LEO_ALTITUDE,
+) -> u.Quantity:
+    """Extra delta-v to redirect a lunar-return payload onto an interplanetary Hohmann transfer.
+
+    A payload launched from the Moon toward Earth arrives at perigee already moving
+    at the perigee speed of an Earth->Moon transfer ellipse (apogee at lunar
+    distance, periapsis at ``perigee_altitude``) -- i.e. it is already at "lunar
+    escape" energy with respect to the Earth-Moon system. Firing its rocket at that
+    perigee, the *additional* delta-v needed to reach the hyperbolic-excess velocity
+    of a heliocentric Hohmann transfer to a planet at ``target_semimajor_axis`` is
+
+        dv = sqrt(v_esc**2 + v_inf**2) - v_perigee_lunar_return
+
+    where ``v_esc`` is Earth's escape velocity at the perigee altitude and ``v_inf``
+    is the heliocentric Hohmann excess velocity at Earth. This backs the paper's
+    claim that only ~300-600 m/s beyond lunar escape reaches Venus or Mars.
+
+    Args:
+        target_semimajor_axis: Heliocentric semi-major axis of the destination
+            planet (astropy Quantity, length units), e.g. VENUS_A or MARS_A.
+        perigee_altitude: Altitude of the Earth perigee burn (astropy Quantity,
+            default LEO_ALTITUDE = 200 km).
+
+    Returns:
+        The required delta-v beyond the lunar-return perigee speed (astropy
+        Quantity, km/s).
+    """
+    perigee_radius = Earth.R + perigee_altitude
+    # Speed a lunar-return payload already carries at perigee (apogee at the Moon).
+    lunar_return_orbit = orbit_from_rp_ra(
+        apoapsis_radius=MOON_A,
+        periapsis_radius=perigee_radius,
+        attractor_body=Earth,
+    )
+    v_perigee = periapsis_velocity(lunar_return_orbit)
+    v_esc = escape_velocity(Earth, perigee_altitude)
+    v_inf = hohmann_v_infinity(target_semimajor_axis)
+    v_total = np.sqrt(v_esc**2 + v_inf**2)
+    return (v_total - v_perigee).to(u.km / u.s)
+
+
 def find_parker_orbit_period() -> u.Quantity:
     """Calculate the orbital period of a transfer orbit between Earth and Parker Space Probe.
 

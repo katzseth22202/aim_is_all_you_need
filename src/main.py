@@ -12,8 +12,10 @@ from src.astro_constants import (
     EARTH_A,
     LEO_ALTITUDE,
     LUNAR_MONTH,
+    MARS_A,
     MOON_A,
     SATURN_A,
+    VENUS_A,
 )
 from src.orbit_utils import orbit_from_rp_ra
 from src.scenario import (
@@ -22,6 +24,7 @@ from src.scenario import (
     find_best_lunar_return,
     find_parker_orbit_period,
     launch_capacity_time,
+    lunar_return_transfer_dv,
     solar_fusion_velocity,
     solar_impact_dv,
 )
@@ -78,6 +81,14 @@ def main() -> None:
     )
     print(
         f"solar-impact delta-v from Ceres (cancel orbital velocity) = {solar_impact_dv(CERES_A)}"
+    )
+    print(
+        "lunar-return delta-v beyond lunar escape to Venus transfer (200 km perigee) = "
+        f"{lunar_return_transfer_dv(VENUS_A).to(u.m / u.s)}"
+    )
+    print(
+        "lunar-return delta-v beyond lunar escape to Mars transfer (200 km perigee) = "
+        f"{lunar_return_transfer_dv(MARS_A).to(u.m / u.s)}"
     )
 
 

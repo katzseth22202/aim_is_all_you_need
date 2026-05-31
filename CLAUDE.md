@@ -6,6 +6,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Python scientific computing project implementing orbital mechanics calculations for PuffSat-based propulsion systems. The research paper it supports (`paper/Aim_Is_All_You_Need.pdf`) analyzes externally pulsed propulsion for missions including lunar transfer, interplanetary travel, and solar periapsis maneuvers.
 
+## Reading the Paper PDF
+
+The paper is only shipped as `paper/Aim_Is_All_You_Need.pdf` (46 pages) — there is **no
+checked-in plain-text copy**. To get text, use **`pypdf`** (the only PDF library that is
+installed):
+
+```bash
+conda activate puffsat_math_env          # pypdf lives in this env
+python - <<'PY'
+from pypdf import PdfReader
+r = PdfReader("paper/Aim_Is_All_You_Need.pdf")
+parts = []
+for i, page in enumerate(r.pages, 1):
+    parts.append(f"===== PAGE {i} =====")
+    parts.append(page.extract_text())
+open("/tmp/paper.txt", "w").write("\n".join(parts))
+PY
+grep -n "300 m/s to 600 m/s" /tmp/paper.txt   # find a claim by its wording
+```
+
+What's actually available (verified, so don't waste time rediscovering):
+- `pypdf` (v6.12.2) is the **only** PDF lib installed — `pdfminer`, `PyMuPDF`/`fitz`, and
+  `PyPDF2` are **not** importable.
+- **No PDF CLI tools** are on PATH or in the conda env: `pdftotext`, `pdfinfo`, `mutool`,
+  and `gs` are all absent. Don't reach for `pdftotext`.
+- The built-in **Read tool can open the PDF directly** via its `pages=` parameter — handy
+  for a quick look (read in chunks; it's 46 pages).
+
+**Important caveat on line numbers:** citation references like "paper.txt L691" in
+`todos/citation_audit_findings.md` were taken from one specific older `/tmp/paper.txt`
+extract, and the **exact line numbers are NOT reproducible** — a fresh `pypdf` extract
+shifts them (e.g. the "300 m/s to 600 m/s" claim is at L691 in the audit's file but L675
+in a fresh extract). So **locate claims by `grep`-ing the quoted wording, not by trusting
+the LNNN**, and treat the audit's line numbers as approximate pointers only.
+
 ## Commands
 
 ```bash
