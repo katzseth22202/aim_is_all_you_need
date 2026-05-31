@@ -11,6 +11,8 @@ URANUS_A = 19.1914 * u.AU  # Uranus
 NEPTUNE_A = 30.0611 * u.AU  # Neptune
 PLUTO_A = 39.482 * u.AU  # Pluto (dwarf planet)
 
+# Ceres (dwarf planet semi-major axis) {source: https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=ceres}
+CERES_A = 2.7656 * u.AU
 MOON_A = 384400 * u.km  # Moon (semi-major axis of orbit around Earth, in km)
 LEO_ALTITUDE = 200 * u.km  # Low Earth Orbit altitude, in km
 

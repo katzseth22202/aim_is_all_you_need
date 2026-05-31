@@ -7,7 +7,14 @@ from astropy import units as u
 from boinor.bodies import Earth
 from tabulate import tabulate
 
-from src.astro_constants import LEO_ALTITUDE, LUNAR_MONTH, MOON_A
+from src.astro_constants import (
+    CERES_A,
+    EARTH_A,
+    LEO_ALTITUDE,
+    LUNAR_MONTH,
+    MOON_A,
+    SATURN_A,
+)
 from src.orbit_utils import orbit_from_rp_ra
 from src.scenario import (
     PuffSatScenario,
@@ -16,6 +23,7 @@ from src.scenario import (
     find_parker_orbit_period,
     launch_capacity_time,
     solar_fusion_velocity,
+    solar_impact_dv,
 )
 
 
@@ -61,6 +69,15 @@ def main() -> None:
     )
     print(
         f"orbital period of transfer orbit to Parker periapsis = {find_parker_orbit_period()}"
+    )
+    print(
+        f"solar-impact delta-v from Earth (cancel orbital velocity) = {solar_impact_dv(EARTH_A)}"
+    )
+    print(
+        f"solar-impact delta-v from Saturn (cancel orbital velocity) = {solar_impact_dv(SATURN_A)}"
+    )
+    print(
+        f"solar-impact delta-v from Ceres (cancel orbital velocity) = {solar_impact_dv(CERES_A)}"
     )
 
 

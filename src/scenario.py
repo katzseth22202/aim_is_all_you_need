@@ -443,6 +443,31 @@ def solar_fusion_velocity() -> u.Quantity:
     return 2 * periapsis_velocity(orbit)
 
 
+def solar_impact_dv(
+    heliocentric_distance: u.Quantity, attractor: Body = Sun
+) -> u.Quantity:
+    """Compute the delta-v needed to drop a circular heliocentric orbit into the Sun.
+
+    To fall into the Sun from a circular orbit, a spacecraft must cancel
+    essentially all of its tangential (orbital) velocity; it then free-falls
+    radially inward and impacts the Sun. The required delta-v therefore equals
+    the circular orbital velocity at that heliocentric distance. This is the
+    standard back-of-envelope "solar-impact delta-v is approximately the orbital
+    velocity" estimate used in the paper (e.g. ~30 km/s from Earth, ~10 km/s
+    from Saturn, ~18 km/s from Ceres).
+
+    Args:
+        heliocentric_distance: Distance from the attractor's center (astropy
+            Quantity, length units), e.g. a body's orbital semi-major axis.
+        attractor: The central body (boinor Body, default Sun).
+
+    Returns:
+        The solar-impact delta-v (astropy Quantity, km/s), equal to the circular
+        orbital velocity at the given distance.
+    """
+    return speed_around_attractor(a=heliocentric_distance, attractor=attractor)
+
+
 def find_parker_orbit_period() -> u.Quantity:
     """Calculate the orbital period of a transfer orbit between Earth and Parker Space Probe.
 
