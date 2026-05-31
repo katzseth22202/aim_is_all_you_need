@@ -211,3 +211,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Claude scratch/todo directory — contents not tracked, directory preserved via .gitkeep
+todos
+todos/*
+!todos/.gitkeep
+
+# Claude Code local settings/state
+.claude/
