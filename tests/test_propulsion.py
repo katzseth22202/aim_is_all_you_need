@@ -2,8 +2,8 @@
 
 import pytest
 from astropy import units as u
-from poliastro.bodies import Earth, Moon, Sun
-from poliastro.maneuver import Maneuver
+from boinor.bodies import Earth, Moon, Sun
+from boinor.maneuver import Maneuver
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
 from src.propulsion import (

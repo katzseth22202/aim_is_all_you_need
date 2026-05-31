@@ -32,8 +32,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
-from poliastro.bodies import Body, Earth, Moon, Saturn, Sun
-from poliastro.twobody import Orbit
+from boinor.bodies import Body, Earth, Moon, Saturn, Sun
+from boinor.twobody import Orbit
 
 from src.astro_constants import (
     EARTH_A,
@@ -204,7 +204,7 @@ def orbit_from_periapsis_speed_and_apoapsis_radius(
     attractor_body: Body = Sun,
 ) -> Orbit:
     """
-    Generate a poliastro Orbit aligned with the y-axis (periapsis on +y, no z-component),
+    Generate a boinor Orbit aligned with the y-axis (periapsis on +y, no z-component),
     given the scalar speed at periapsis and the radius at apoapsis.
 
     Parameters
@@ -213,13 +213,13 @@ def orbit_from_periapsis_speed_and_apoapsis_radius(
         The scalar speed at periapsis (with velocity units).
     apoapsis_radius : astropy.units.Quantity
         The radius of the apoapsis (with length units).
-    attractor_body : poliastro.bodies.Body, optional
+    attractor_body : boinor.bodies.Body, optional
         The central celestial body (default: Sun).
 
     Returns
     -------
-    poliastro.twobody.Orbit
-        The generated poliastro Orbit object.
+    boinor.twobody.Orbit
+        The generated boinor Orbit object.
 
     Raises
     ------

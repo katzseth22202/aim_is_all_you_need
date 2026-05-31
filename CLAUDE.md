@@ -34,7 +34,7 @@ The source modules form a strict dependency hierarchy — each layer imports onl
 ```
 astro_constants.py   ← physical constants and mission parameters (no src imports)
       ↓
-orbit_utils.py       ← orbital mechanics primitives (poliastro/astropy wrappers)
+orbit_utils.py       ← orbital mechanics primitives (boinor/astropy wrappers)
       ↓
 propulsion.py        ← rocket equation, Hohmann transfers, mass ratio calculations
       ↓
@@ -45,7 +45,7 @@ main.py              ← entry point, prints scenario tables and analysis
 
 **Key types used throughout:**
 - `astropy.units.Quantity` — all physical values carry units; never use bare floats for physics
-- `poliastro.twobody.Orbit` — represents orbital state; constructed via `orbit_from_rp_ra()` or `Orbit.circular()`
+- `boinor.twobody.Orbit` — represents orbital state; constructed via `orbit_from_rp_ra()` or `Orbit.circular()`
 - `numpy.typing.NDArray` — typed arrays for vectorized calculations
 
 **`PuffSatScenario`** (frozen dataclass in `scenario.py`) holds `v_rf` (final velocity), `v_b` (PuffSat collision velocity), `v_ri` (initial velocity), and `desc`. The `paper_scenarios()` static method runs all scenarios from the paper and returns a pandas DataFrame.
@@ -56,7 +56,7 @@ main.py              ← entry point, prints scenario tables and analysis
 
 mypy is configured in strict mode (`pyproject.toml`). Key settings:
 - `disallow_untyped_defs = true` — all functions in `src/` must have type annotations
-- `ignore_missing_imports = true` — stubs are missing for poliastro/astropy but that's accepted
+- `ignore_missing_imports = true` — stubs are missing for boinor/astropy but that's accepted
 - Tests (`tests.*`) are exempt from annotation requirements
 
 All new functions in `src/` must have full type annotations and Google-style docstrings (see `cursor-rules.toml`).

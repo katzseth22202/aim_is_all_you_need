@@ -3,14 +3,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - astropy
   - black
+  - boinor
   - isort
   - jupyter
   - mypy
   - nbdime
   - pandas
-  - poliastro
   - pytest
-  - python=3.10
+  - python=3.13
   - tabulate
   - types-tabulate

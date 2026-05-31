@@ -4,7 +4,7 @@ from typing import List
 
 import pandas as pd
 from astropy import units as u
-from poliastro.bodies import Earth
+from boinor.bodies import Earth
 from tabulate import tabulate
 
 from src.astro_constants import LEO_ALTITUDE, LUNAR_MONTH, MOON_A

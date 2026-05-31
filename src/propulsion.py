@@ -24,9 +24,9 @@ from typing import List, Tuple
 import astropy.units as u
 import numpy as np
 import numpy.typing as npt
-from poliastro.bodies import Body, Earth, Sun
-from poliastro.maneuver import Maneuver
-from poliastro.twobody import Orbit
+from boinor.bodies import Body, Earth, Sun
+from boinor.maneuver import Maneuver
+from boinor.twobody import Orbit
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
 from src.orbit_utils import as_scalar, escape_velocity, speed_around_attractor
@@ -105,7 +105,7 @@ def hohmann_transfer(
     Args:
         r_i: Initial orbit radius (astropy Quantity).
         r_f: Final orbit radius (astropy Quantity).
-        attractor: The central body (poliastro Body, default Sun).
+        attractor: The central body (boinor Body, default Sun).
 
     Returns:
         A Maneuver object representing the Hohmann transfer.
@@ -128,7 +128,7 @@ def burn_for_v_infinity(
 
     Args:
         v_infinity: The desired hyperbolic excess velocity (astropy Quantity).
-        body: The celestial body to escape from (poliastro Body, default Earth).
+        body: The celestial body to escape from (boinor Body, default Earth).
         altitude: Altitude above the body's surface where the burn occurs (astropy Quantity, default LEO_ALTITUDE).
         initial_velocity: Initial velocity at the burn altitude, defaults to 0 km/s (astropy Quantity).
 

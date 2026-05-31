@@ -125,7 +125,7 @@ This will execute the main calculations and output the results to standard outpu
 
 The project uses several key libraries for orbital mechanics and scientific computing:
 
-- **poliastro**: For orbital mechanics and celestial body definitions
+- **boinor**: For orbital mechanics and celestial body definitions (maintained fork of the abandoned poliastro)
 - **astropy**: For astronomical units and constants
 - **numpy**: For numerical computations and array operations
 - **pandas**: For data analysis and scenario tables

@@ -14,7 +14,7 @@ Key Functions:
 
 Dependencies:
     - astro_constants: Physical constants and orbital parameters
-    - poliastro: Core orbital mechanics library
+    - boinor: Core orbital mechanics library
     - astropy: Units and astronomical calculations
 
 This module is designed to be imported by propulsion.py and scenario.py
@@ -29,16 +29,16 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
-from poliastro.bodies import Body, Earth, Moon, Saturn, Sun
-from poliastro.maneuver import Maneuver
-from poliastro.twobody import Orbit
+from boinor.bodies import Body, Earth, Moon, Saturn, Sun
+from boinor.maneuver import Maneuver
+from boinor.twobody import Orbit
 
 
 def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
     """Compute the orbital speed at a given altitude above a body's surface.
 
     Args:
-        body: A poliastro Body instance
+        body: A boinor Body instance
         altitude: Altitude above the body's surface (astropy Quantity)
 
     Returns:
@@ -56,7 +56,7 @@ def speed_around_attractor(a: u.Quantity, attractor: Body = Sun) -> u.Quantity:
 
     Args:
         a: Altitude above the attractor's surface (astropy Quantity).
-        attractor: The central body (poliastro Body, default Sun).
+        attractor: The central body (boinor Body, default Sun).
 
     Returns:
         The orbital speed at the given altitude (astropy Quantity, km/s).
@@ -71,7 +71,7 @@ def escape_velocity(body: Body, altitude: u.Quantity = 0 * u.km) -> u.Quantity:
     """Compute the escape velocity from a body's surface or at a given altitude.
 
     Args:
-        body: A poliastro Body instance.
+        body: A boinor Body instance.
         altitude: Altitude above the body's surface (astropy Quantity, default 0 km).
 
     Returns:
@@ -87,7 +87,7 @@ def get_period(body: Body, a: u.Quantity) -> u.Quantity:
     """Compute the orbital period for a given semi-major axis around a body.
 
     Args:
-        body: A poliastro Body instance.
+        body: A boinor Body instance.
         a: Semi-major axis (astropy Quantity).
 
     Returns:
@@ -101,7 +101,7 @@ def get_semimajor_axis(body: Body, T: u.Quantity) -> u.Quantity:
     """Compute the semi-major axis for a given orbital period around a body.
 
     Args:
-        body: A poliastro Body instance.
+        body: A boinor Body instance.
         T: Orbital period (astropy Quantity).
 
     Returns:
@@ -117,7 +117,7 @@ def distance_to_center(altitude: u.Quantity, body: Body) -> u.Quantity:
 
     Args:
         altitude: Altitude above the body's surface (astropy Quantity).
-        body: The celestial body (poliastro Body).
+        body: The celestial body (boinor Body).
 
     Returns:
         The distance from the center of the body (astropy Quantity, km).
@@ -131,7 +131,7 @@ def orbit_from_rp_ra(
     attractor_body: Body = Sun,
 ) -> Orbit:
     """
-    Generates a poliastro Orbit object aligned with the y-axis (periapsis on +y)
+    Generates a boinor Orbit object aligned with the y-axis (periapsis on +y)
     and no z-component of motion (orbit in the XY-plane).
 
     Parameters
@@ -142,13 +142,13 @@ def orbit_from_rp_ra(
     periapsis_radius : astropy.units.Quantity
         The radius of the periapsis (closest point to the attractor).
         Must be an astropy Quantity with units of length (e.g., 6678 * u.km).
-    attractor_body : poliastro.bodies.Body
+    attractor_body : boinor.bodies.Body
         The central celestial body (e.g., Earth, Sun, Mars).
 
     Returns
     -------
-    poliastro.twobody.Orbit
-        The generated poliastro Orbit object.
+    boinor.twobody.Orbit
+        The generated boinor Orbit object.
 
     Raises
     ------
@@ -194,10 +194,10 @@ def orbit_from_rp_ra(
 
 
 def periapsis_velocity(orbit: Orbit) -> u.Quantity:
-    """Return the velocity vector at periapsis for a given poliastro Orbit.
+    """Return the velocity vector at periapsis for a given boinor Orbit.
 
     Args:
-        orbit: A poliastro Orbit object.
+        orbit: A boinor Orbit object.
 
     Returns:
         The velocity vector at periapsis (astropy Quantity, km/s).
@@ -217,10 +217,10 @@ def periapsis_velocity(orbit: Orbit) -> u.Quantity:
 
 
 def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
-    """Return the velocity vector at apoapsis for a given poliastro Orbit.
+    """Return the velocity vector at apoapsis for a given boinor Orbit.
 
     Args:
-        orbit: A poliastro Orbit object.
+        orbit: A boinor Orbit object.
 
     Returns:
         The velocity vector at apoapsis (astropy Quantity, km/s).
@@ -256,7 +256,7 @@ def velocity_at_distance(
         The scalar velocity at periapsis (with velocity units).
     distance : astropy.units.Quantity
         The distance from the center of the attractor at which to compute the velocity (with length units).
-    attractor_body : poliastro.bodies.Body
+    attractor_body : boinor.bodies.Body
         The central celestial body (e.g., Earth, Sun).
 
     Returns
@@ -316,7 +316,7 @@ def find_periapsis_radius_from_apoapsis_and_velocity(
         The radius of the apoapsis (farthest point from the attractor), with length units.
     periapsis_velocity : astropy.units.Quantity
         The scalar velocity at periapsis, with velocity units.
-    attractor_body : poliastro.bodies.Body, optional
+    attractor_body : boinor.bodies.Body, optional
         The central celestial body (default: Sun).
 
     Returns
@@ -372,8 +372,8 @@ def get_orbital_velocity_at_radius(orbit: Orbit, radius: u.Quantity) -> u.Quanti
 
     Parameters
     ----------
-    orbit : poliastro.twobody.orbit.Orbit
-        The poliastro Orbit object, containing the orbital elements and attractor body.
+    orbit : boinor.twobody.orbit.Orbit
+        The boinor Orbit object, containing the orbital elements and attractor body.
     radius : astropy.units.Quantity
         The radial distance from the attractor body at which to calculate the velocity.
         Must be a scalar astropy Quantity with units of length.
@@ -450,7 +450,7 @@ def retrograde_orbit(orbit: Orbit) -> Orbit:
     """Return a new Orbit with the same shape as the input but with retrograde velocity.
 
     Args:
-        orbit: A poliastro Orbit object.
+        orbit: A boinor Orbit object.
 
     Returns:
         A new Orbit object with the same position but velocity reversed (retrograde).

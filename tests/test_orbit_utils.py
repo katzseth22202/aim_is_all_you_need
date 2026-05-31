@@ -4,8 +4,8 @@ from typing import Tuple
 
 import pytest
 from astropy import units as u
-from poliastro.bodies import Earth, Sun
-from poliastro.maneuver import Maneuver
+from boinor.bodies import Earth, Sun
+from boinor.maneuver import Maneuver
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE
 from src.orbit_utils import (
