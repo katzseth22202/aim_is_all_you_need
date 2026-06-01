@@ -10,8 +10,8 @@ Key Functions:
     - orbit_from_rp_ra: Create orbits from periapsis/apoapsis radii
     - orbit_from_periapsis_speed_and_apoapsis_radius: Create orbits from a
       periapsis speed and apoapsis radius
-    - periapsis_velocity/apoapsis_velocity: Extract velocity at orbit extremes
-    - velocity_at_distance: Calculate velocity at any point in orbit
+    - periapsis_speed/apoapsis_speed: Extract speed at orbit extremes
+    - speed_at_distance: Calculate speed at any point in orbit
 
 Dependencies:
     - astro_constants: Physical constants and orbital parameters
@@ -220,14 +220,14 @@ def orbit_from_rp_ra(
     return orbit
 
 
-def periapsis_velocity(orbit: Orbit) -> u.Quantity:
-    """Return the velocity vector at periapsis for a given boinor Orbit.
+def periapsis_speed(orbit: Orbit) -> u.Quantity:
+    """Return the scalar speed at periapsis for a given boinor Orbit.
 
     Args:
         orbit: A boinor Orbit object.
 
     Returns:
-        The velocity vector at periapsis (astropy Quantity, km/s).
+        The scalar speed at periapsis (astropy Quantity, km/s).
     """
     # Create a new orbit at true anomaly = 0 deg (periapsis)
     orbit_at_periapsis = Orbit.from_classical(
@@ -243,14 +243,14 @@ def periapsis_velocity(orbit: Orbit) -> u.Quantity:
     return as_scalar(v_vec)
 
 
-def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
-    """Return the velocity vector at apoapsis for a given boinor Orbit.
+def apoapsis_speed(orbit: Orbit) -> u.Quantity:
+    """Return the scalar speed at apoapsis for a given boinor Orbit.
 
     Args:
         orbit: A boinor Orbit object.
 
     Returns:
-        The velocity vector at apoapsis (astropy Quantity, km/s).
+        The scalar speed at apoapsis (astropy Quantity, km/s).
     """
     # Create a new orbit at true anomaly = 180 deg (apoapsis)
     orbit_at_apoapsis = Orbit.from_classical(
@@ -266,39 +266,39 @@ def apoapsis_velocity(orbit: Orbit) -> u.Quantity:
     return as_scalar(v_vec)
 
 
-def velocity_at_distance(
+def speed_at_distance(
     radius_periapsis: u.Quantity,
-    velocity_periapsis: u.Quantity,
+    periapsis_speed: u.Quantity,
     distance: u.Quantity,
     attractor_body: Body = Sun,
 ) -> u.Quantity:
     """
-    Compute the scalar orbital velocity at a given distance from the central body, given the periapsis radius and velocity.
+    Compute the scalar orbital speed at a given distance from the central body, given the periapsis radius and speed.
 
     Parameters
     ----------
     radius_periapsis : astropy.units.Quantity
         The radius at periapsis (with length units).
-    velocity_periapsis : astropy.units.Quantity
-        The scalar velocity at periapsis (with velocity units).
+    periapsis_speed : astropy.units.Quantity
+        The scalar speed at periapsis (with velocity units).
     distance : astropy.units.Quantity
-        The distance from the center of the attractor at which to compute the velocity (with length units).
+        The distance from the center of the attractor at which to compute the speed (with length units).
     attractor_body : boinor.bodies.Body
         The central celestial body (e.g., Earth, Sun).
 
     Returns
     -------
     astropy.units.Quantity
-        The scalar orbital velocity at the given distance (with velocity units).
+        The scalar orbital speed at the given distance (with velocity units).
 
     Raises
     ------
     ValueError
-        If the computed velocity is not real (e.g., for unphysical parameters).
+        If the computed speed is not real (e.g., for unphysical parameters).
     """
     mu = attractor_body.k
     r_p = radius_periapsis
-    v_p = velocity_periapsis
+    v_p = periapsis_speed
     # Compute semi-major axis from vis-viva at periapsis
     # v_p^2 = mu * (2/r_p - 1/a)  => 1/a = 2/r_p - v_p^2/mu
     one_over_a = 2 / r_p - v_p**2 / mu
@@ -309,10 +309,10 @@ def velocity_at_distance(
         v2 = 2 * mu / distance
     else:
         a = 1 / one_over_a
-        # Now compute velocity at the given distance
+        # Now compute speed at the given distance
         v2 = mu * (2 / distance - 1 / a)
     if v2 < 0 * v2.unit:
-        raise ValueError("No real velocity at this distance for the given orbit.")
+        raise ValueError("No real speed at this distance for the given orbit.")
     return np.sqrt(v2).to(u.km / u.s)
 
 
@@ -326,13 +326,13 @@ def as_scalar(vec: npt.ArrayLike) -> u.Quantity:
         return norm * u.dimensionless_unscaled
 
 
-def find_periapsis_radius_from_apoapsis_and_velocity(
+def find_periapsis_radius_from_apoapsis_and_speed(
     apoapsis_radius: u.Quantity,
-    periapsis_velocity: u.Quantity,
+    periapsis_speed: u.Quantity,
     attractor_body: Body = Sun,
 ) -> u.Quantity:
     """
-    Compute the periapsis radius of an orbit given the apoapsis radius, the scalar velocity at periapsis, and the central attractor.
+    Compute the periapsis radius of an orbit given the apoapsis radius, the scalar speed at periapsis, and the central attractor.
 
     The function solves the vis-viva equation for the periapsis radius, assuming an elliptical orbit
     aligned with the y-axis and no z-component (orbit in the XY-plane).
@@ -341,8 +341,8 @@ def find_periapsis_radius_from_apoapsis_and_velocity(
     ----------
     apoapsis_radius : astropy.units.Quantity
         The radius of the apoapsis (farthest point from the attractor), with length units.
-    periapsis_velocity : astropy.units.Quantity
-        The scalar velocity at periapsis, with velocity units.
+    periapsis_speed : astropy.units.Quantity
+        The scalar speed at periapsis, with velocity units.
     attractor_body : boinor.bodies.Body, optional
         The central celestial body (default: Sun).
 
@@ -357,8 +357,8 @@ def find_periapsis_radius_from_apoapsis_and_velocity(
         If the input parameters do not yield a real, positive periapsis radius.
     """
     # The quadratic equation is: A * rp^2 + B * rp + C = 0
-    A = periapsis_velocity**2
-    B = periapsis_velocity**2 * apoapsis_radius
+    A = periapsis_speed**2
+    B = periapsis_speed**2 * apoapsis_radius
     C = -2 * attractor_body.k * apoapsis_radius
 
     # Calculate the discriminant
@@ -390,7 +390,7 @@ def orbit_from_periapsis_speed_and_apoapsis_radius(
     The orbit is aligned with the y-axis (periapsis on +y) and lies in the
     XY-plane, matching :func:`orbit_from_rp_ra`. The periapsis radius is solved
     from the periapsis speed and apoapsis radius via
-    :func:`find_periapsis_radius_from_apoapsis_and_velocity`, then the orbit is
+    :func:`find_periapsis_radius_from_apoapsis_and_speed`, then the orbit is
     built with :func:`orbit_from_rp_ra` -- so the vis-viva quadratic lives in
     exactly one place.
 
@@ -408,9 +408,9 @@ def orbit_from_periapsis_speed_and_apoapsis_radius(
         ValueError: If no physically valid periapsis radius exists for the given
             parameters, or if it is not less than the apoapsis radius.
     """
-    periapsis_radius = find_periapsis_radius_from_apoapsis_and_velocity(
+    periapsis_radius = find_periapsis_radius_from_apoapsis_and_speed(
         apoapsis_radius=apoapsis_radius,
-        periapsis_velocity=periapsis_speed,
+        periapsis_speed=periapsis_speed,
         attractor_body=attractor_body,
     )
     return orbit_from_rp_ra(

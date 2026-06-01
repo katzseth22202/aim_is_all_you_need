@@ -13,13 +13,13 @@ from src.orbit_utils import (
     body_speed,
     distance_to_center,
     escape_velocity,
-    find_periapsis_radius_from_apoapsis_and_velocity,
+    find_periapsis_radius_from_apoapsis_and_speed,
     get_period,
     get_semimajor_axis,
     orbit_from_periapsis_speed_and_apoapsis_radius,
     speed_around_attractor,
+    speed_at_distance,
     speed_with_escape_energy,
-    velocity_at_distance,
 )
 from tests.test_helpers import is_nearly_equal
 
@@ -81,9 +81,9 @@ def test_distance_to_center() -> None:
     assert is_nearly_equal(d, Earth.R + LEO_ALTITUDE)
 
 
-def test_find_periapsis_radius_from_apoapsis_and_velocity() -> None:
-    v_p = find_periapsis_radius_from_apoapsis_and_velocity(
-        apoapsis_radius=EARTH_A, periapsis_velocity=TEST_VP
+def test_find_periapsis_radius_from_apoapsis_and_speed() -> None:
+    v_p = find_periapsis_radius_from_apoapsis_and_speed(
+        apoapsis_radius=EARTH_A, periapsis_speed=TEST_VP
     )
     assert is_nearly_equal(v_p, EXPECTED_TEST_RP)
 
@@ -101,20 +101,20 @@ def test_orbit_from_periapsis_speed_and_apoapsis_radius() -> None:
     # the quadratic now lives in one place, so the two cannot drift apart.
     assert is_nearly_equal(
         orbit.r_p,
-        find_periapsis_radius_from_apoapsis_and_velocity(
-            apoapsis_radius=EARTH_A, periapsis_velocity=TEST_VP
+        find_periapsis_radius_from_apoapsis_and_speed(
+            apoapsis_radius=EARTH_A, periapsis_speed=TEST_VP
         ),
     )
 
 
-def test_velocity_at_distance() -> None:
-    speed_at_earth = velocity_at_distance(
-        radius_periapsis=EXPECTED_TEST_RP, velocity_periapsis=TEST_VP, distance=EARTH_A
+def test_speed_at_distance() -> None:
+    speed_at_earth = speed_at_distance(
+        radius_periapsis=EXPECTED_TEST_RP, periapsis_speed=TEST_VP, distance=EARTH_A
     )
     after_burn = TEST_VP + 50 * u.km / u.s
-    speed_at_earth = velocity_at_distance(
+    speed_at_earth = speed_at_distance(
         radius_periapsis=EXPECTED_TEST_RP,
-        velocity_periapsis=after_burn,
+        periapsis_speed=after_burn,
         distance=EARTH_A,
     )
     assert is_nearly_equal(speed_at_earth, 150.24114202 * u.km / u.s)

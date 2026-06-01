@@ -55,15 +55,15 @@ from src.astro_constants import (
 
 # Import orbital mechanics functions from orbit_utils
 from src.orbit_utils import (
-    apoapsis_velocity,
+    apoapsis_speed,
     escape_velocity,
     get_period,
     orbit_from_periapsis_speed_and_apoapsis_radius,
     orbit_from_rp_ra,
-    periapsis_velocity,
+    periapsis_speed,
     speed_around_attractor,
+    speed_at_distance,
     speed_with_escape_energy,
-    velocity_at_distance,
 )
 
 # Import propulsion functions from propulsion
@@ -132,19 +132,19 @@ def paper_scenarios() -> List[PuffSatScenario]:
         periapsis_radius=low_earth_periapsis,
         attractor_body=Earth,
     )
-    lunar_transfer_periapsis_velocity = periapsis_velocity(orbit=lunar_transfer_orbit)
+    lunar_transfer_periapsis_speed = periapsis_speed(orbit=lunar_transfer_orbit)
     leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
 
     parker_orbit = orbit_from_rp_ra(
         apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
     )
-    parker_apoapsis_velocity = apoapsis_velocity(orbit=parker_orbit)
+    parker_apoapsis_speed = apoapsis_speed(orbit=parker_orbit)
     earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
     # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
-    prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_velocity
+    prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_speed
     prograde_dv_parker_burn = burn_for_v_infinity(prograde_v_infinity_earth_to_parker)
     # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
-    retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_velocity
+    retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_speed
     retrograde_dv_parker_burn = burn_for_v_infinity(
         retrograde_v_infinity_earth_to_parker
     )
@@ -159,12 +159,12 @@ def paper_scenarios() -> List[PuffSatScenario]:
         periapsis_radius=min_saturn_altitude,
         attractor_body=Saturn,
     )
-    phoebe_low_periapsis_velocity = periapsis_velocity(orbit=phoebe_low_orbit)
+    phoebe_low_periapsis_speed = periapsis_speed(orbit=phoebe_low_orbit)
 
     return [
         PuffSatScenario(
             v_rf=leo_speed,
-            v_b=lunar_transfer_periapsis_velocity,
+            v_b=lunar_transfer_periapsis_speed,
             desc="""Eccentric PuffSats with apogee at lunar distance push
 rocket to minimal low Earth orbit""",
         ),
@@ -176,7 +176,7 @@ rocket to minimal low Earth orbit""",
         ),
         PuffSatScenario(
             v_rf=0 * u.km / u.s,
-            v_b=-lunar_transfer_periapsis_velocity,
+            v_b=-lunar_transfer_periapsis_speed,
             v_ri=leo_speed,
             desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit""",
         ),
@@ -191,7 +191,7 @@ rocket to minimal low Earth orbit""",
             desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun""",
         ),
         PuffSatScenario(
-            v_rf=lunar_transfer_periapsis_velocity,
+            v_rf=lunar_transfer_periapsis_speed,
             v_b=retrograde_jovian_speed,
             desc="""PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit""",
         ),
@@ -203,7 +203,7 @@ rocket to minimal low Earth orbit""",
         ),
         PuffSatScenario(
             v_rf=min_saturn_speed,
-            v_b=phoebe_low_periapsis_velocity,
+            v_b=phoebe_low_periapsis_speed,
             desc="""PuffSats approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn""",
         ),
     ]
@@ -290,13 +290,13 @@ def find_best_lunar_return(
     orbit: Orbit = orbit_from_rp_ra(
         apoapsis_radius=MOON_A, periapsis_radius=periapsis_radius, attractor_body=Earth
     )
-    periapsis_v: u.Quantity = periapsis_velocity(orbit)
+    periapsis_v: u.Quantity = periapsis_speed(orbit)
     max_burn: Optional[BurnInfo] = None
     for burn in candidate_burns:
         after_burn: u.Quantity = periapsis_v + burn
-        incoming_v_before_moon_gravity = velocity_at_distance(
+        incoming_v_before_moon_gravity = speed_at_distance(
             radius_periapsis=periapsis_radius,
-            velocity_periapsis=after_burn,
+            periapsis_speed=after_burn,
             distance=MOON_A,
             attractor_body=Earth,
         )
@@ -375,12 +375,12 @@ def earth_velocity_200km_periapsis(
     periapsis_radius: u.Quantity = initial_orbit.r_p
 
     # Calculate the new velocity at periapsis after the burn
-    new_periapsis_velocity: u.Quantity = periapsis_v + periapsis_solar_burn
+    new_periapsis_speed: u.Quantity = periapsis_v + periapsis_solar_burn
 
     # Calculate the velocity at Earth distance using the new periapsis velocity
-    earth_velocity: u.Quantity = velocity_at_distance(
+    earth_velocity: u.Quantity = speed_at_distance(
         radius_periapsis=periapsis_radius,
-        velocity_periapsis=new_periapsis_velocity,
+        periapsis_speed=new_periapsis_speed,
         distance=EARTH_A,
         attractor_body=Sun,
     )
@@ -416,7 +416,7 @@ def solar_fusion_velocity() -> u.Quantity:
 
     # The velocity of impact in reference frame of the rocket.
     # Factor of 2 accounts for relative velocity between prograde and retrograde trajectories.
-    return 2 * periapsis_velocity(orbit)
+    return 2 * periapsis_speed(orbit)
 
 
 def solar_impact_dv(
@@ -475,7 +475,7 @@ def hohmann_v_infinity(
             periapsis_radius=departure_semimajor_axis,
             attractor_body=Sun,
         )
-        v_transfer = periapsis_velocity(transfer)
+        v_transfer = periapsis_speed(transfer)
     else:
         # Inward transfer: departure planet is at the transfer ellipse's aphelion.
         transfer = orbit_from_rp_ra(
@@ -483,7 +483,7 @@ def hohmann_v_infinity(
             periapsis_radius=target_semimajor_axis,
             attractor_body=Sun,
         )
-        v_transfer = apoapsis_velocity(transfer)
+        v_transfer = apoapsis_speed(transfer)
     return abs(v_transfer - v_departure).to(u.km / u.s)
 
 
@@ -523,7 +523,7 @@ def lunar_return_transfer_dv(
         periapsis_radius=perigee_radius,
         attractor_body=Earth,
     )
-    v_perigee = periapsis_velocity(lunar_return_orbit)
+    v_perigee = periapsis_speed(lunar_return_orbit)
     v_inf = hohmann_v_infinity(target_semimajor_axis)
     # The extra delta-v is exactly burn_for_v_infinity's job: reach the
     # hyperbolic-excess velocity v_inf from this perigee, given the speed the
