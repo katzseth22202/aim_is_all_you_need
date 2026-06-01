@@ -2,9 +2,10 @@
 
 from typing import Tuple
 
+import numpy as np
 import pytest
 from astropy import units as u
-from boinor.bodies import Earth, Sun
+from boinor.bodies import Earth, Moon, Sun
 from boinor.maneuver import Maneuver
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE
@@ -16,6 +17,7 @@ from src.orbit_utils import (
     get_period,
     get_semimajor_axis,
     speed_around_attractor,
+    speed_with_escape_energy,
     velocity_at_distance,
 )
 from tests.test_helpers import is_nearly_equal
@@ -45,6 +47,22 @@ def test_escape_velocity_earth_200km() -> None:
     # The expected escape velocity at 200 km altitude is about 11.0 km/s
     expected = 11.0 * u.km / u.s
     assert is_nearly_equal(v_esc, expected)
+
+
+def test_speed_with_escape_energy_matches_quadrature() -> None:
+    # The primitive must equal the explicit sqrt(v_inf**2 + v_esc**2) it replaced.
+    v_infinity = 10 * u.km / u.s
+    altitude = 200 * u.km
+    v_esc = escape_velocity(Earth, altitude)
+    expected = np.sqrt(v_infinity**2 + v_esc**2)
+    result = speed_with_escape_energy(v_infinity, Earth, altitude)
+    assert is_nearly_equal(result, expected)
+
+
+def test_speed_with_escape_energy_zero_excess_is_escape_velocity() -> None:
+    # With no hyperbolic excess, the local speed is exactly escape velocity.
+    result = speed_with_escape_energy(0 * u.km / u.s, Moon)
+    assert is_nearly_equal(result, escape_velocity(Moon))
 
 
 def test_period() -> None:

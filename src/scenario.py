@@ -60,6 +60,7 @@ from src.orbit_utils import (
     orbit_from_rp_ra,
     periapsis_velocity,
     speed_around_attractor,
+    speed_with_escape_energy,
     velocity_at_distance,
 )
 
@@ -324,8 +325,8 @@ def find_best_lunar_return(
             distance=MOON_A,
             attractor_body=Earth,
         )
-        incoming_v: u.Quantity = np.sqrt(
-            incoming_v_before_moon_gravity**2 + escape_velocity(Moon) ** 2
+        incoming_v: u.Quantity = speed_with_escape_energy(
+            incoming_v_before_moon_gravity, Moon
         )
         if incoming_v <= retrograde_dv_required:
             continue
@@ -548,10 +549,13 @@ def lunar_return_transfer_dv(
         attractor_body=Earth,
     )
     v_perigee = periapsis_velocity(lunar_return_orbit)
-    v_esc = escape_velocity(Earth, perigee_altitude)
     v_inf = hohmann_v_infinity(target_semimajor_axis)
-    v_total = np.sqrt(v_esc**2 + v_inf**2)
-    return (v_total - v_perigee).to(u.km / u.s)
+    # The extra delta-v is exactly burn_for_v_infinity's job: reach the
+    # hyperbolic-excess velocity v_inf from this perigee, given the speed the
+    # lunar-return payload already carries there (v_perigee).
+    return burn_for_v_infinity(
+        v_inf, body=Earth, altitude=perigee_altitude, initial_velocity=v_perigee
+    ).to(u.km / u.s)
 
 
 def find_parker_orbit_period() -> u.Quantity:

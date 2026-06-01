@@ -29,7 +29,7 @@ from boinor.maneuver import Maneuver
 from boinor.twobody import Orbit
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
-from src.orbit_utils import as_scalar, escape_velocity, speed_around_attractor
+from src.orbit_utils import as_scalar, speed_around_attractor, speed_with_escape_energy
 
 
 def get_burn(impulse: Tuple[npt.ArrayLike, npt.ArrayLike]) -> u.Quantity:
@@ -141,18 +141,9 @@ def burn_for_v_infinity(
     if v_infinity <= 0 * u.km / u.s:
         raise ValueError("v_infinity must be positive.")
 
-    # Distance from the center of the body at burn altitude
-    burn_radius: u.Quantity = body.R + altitude
-
-    # Escape velocity at the burn altitude
-    escape_velocity_at_altitude: u.Quantity = escape_velocity(body, altitude)
-
-    # For a hyperbolic orbit, the total velocity at the burn point is:
-    # v_total^2 = v_escape^2 + v_infinity^2
-    # This is derived from the vis-viva equation for hyperbolic orbits
-
-    total_velocity_squared: u.Quantity = escape_velocity_at_altitude**2 + v_infinity**2
-    total_velocity: u.Quantity = np.sqrt(total_velocity_squared)
+    # For a hyperbolic orbit the total velocity at the burn point is
+    # sqrt(v_escape**2 + v_infinity**2) (vis-viva for a hyperbola).
+    total_velocity: u.Quantity = speed_with_escape_energy(v_infinity, body, altitude)
 
     # The burn required is the difference between total velocity and initial velocity
     required_burn: u.Quantity = total_velocity - initial_velocity
@@ -174,6 +165,6 @@ def retrograde_jovian_hohmann_transfer() -> u.Quantity:
     earth_speed = speed_around_attractor(EARTH_A)
     # since we are retrograde, we add twice the Earth's speed
     retrograde_speed = prograde_hohmann_speed + 2 * earth_speed
-    # add the poential energy of the Earth's orbit, which equals the kinetic energy of Earth's escape velocity
-    earth_escape_velocity = escape_velocity(Earth)
-    return np.sqrt(retrograde_speed**2 + earth_escape_velocity**2)
+    # add the potential energy of the Earth's orbit, which equals the kinetic
+    # energy of Earth's escape velocity (escape energy adds in quadrature).
+    return speed_with_escape_energy(retrograde_speed, Earth)

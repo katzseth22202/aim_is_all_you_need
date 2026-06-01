@@ -83,6 +83,32 @@ def escape_velocity(body: Body, altitude: u.Quantity = 0 * u.km) -> u.Quantity:
     return v_esc.to(u.km / u.s)
 
 
+def speed_with_escape_energy(
+    v_infinity: u.Quantity, body: Body, altitude: u.Quantity = 0 * u.km
+) -> u.Quantity:
+    """Local two-body speed v(r) = sqrt(v_infinity**2 + v_esc(r)**2).
+
+    Vis-viva for a hyperbolic orbit: the speed at radius ``r`` (the body's
+    surface plus ``altitude``) given the hyperbolic-excess speed ``v_infinity``
+    far from the body. The escape energy at ``r`` and the excess kinetic energy
+    add in quadrature.
+
+    The caller is responsible for supplying a physically appropriate
+    ``v_infinity``; it may itself be an approximation (e.g. a heliocentric or
+    geocentric speed treated as body-relative excess).
+
+    Args:
+        v_infinity: Hyperbolic-excess speed far from the body (astropy Quantity).
+        body: A boinor Body instance.
+        altitude: Altitude above the body's surface (astropy Quantity, default 0 km).
+
+    Returns:
+        The local speed at the given altitude (astropy Quantity, km/s).
+    """
+    v_esc: u.Quantity = escape_velocity(body, altitude)
+    return np.sqrt(v_infinity**2 + v_esc**2).to(u.km / u.s)
+
+
 def get_period(body: Body, a: u.Quantity) -> u.Quantity:
     """Compute the orbital period for a given semi-major axis around a body.
 
