@@ -1,10 +1,17 @@
 """Tests for scenario-related functions in scenario.py."""
 
+import numpy as np
+import pytest
 from astropy import units as u
 
 from src.astro_constants import CERES_A, EARTH_A, MARS_A, SATURN_A, VENUS_A
+from src.propulsion import payload_mass_ratio
 from src.scenario import (
+    SCENARIO_COLUMNS,
+    PuffSatScenario,
     lunar_return_transfer_dv,
+    paper_scenarios,
+    scenarios_to_dataframe,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
 )
@@ -45,3 +52,67 @@ def test_lunar_return_transfer_dv() -> None:
     # Within 1% of the values computed from the repo's primitives.
     assert is_nearly_equal(venus_dv, 372.36 * u.m / u.s, percent=0.01)
     assert is_nearly_equal(mars_dv, 480.06 * u.m / u.s, percent=0.01)
+
+
+def test_puffsat_scenario_knows_its_mass_ratio() -> None:
+    # A scenario computes its own mass ratio from its three velocities, binding
+    # to the payload_mass_ratio primitive rather than living in a DataFrame cell.
+    scenario = PuffSatScenario(
+        v_rf=8 * u.km / u.s,
+        v_b=11 * u.km / u.s,
+        v_ri=2 * u.km / u.s,
+        desc="hand case",
+    )
+    expected = payload_mass_ratio(
+        v_rf=8 * u.km / u.s, v_b=11 * u.km / u.s, v_ri=2 * u.km / u.s
+    )
+    assert float(scenario.mass_ratio) == pytest.approx(float(expected))
+
+
+def test_puffsat_scenario_v_ri_defaults_to_zero_kms() -> None:
+    # The initial velocity defaults to a units-carrying 0 km/s, not a bare 0.
+    scenario = PuffSatScenario(v_rf=8 * u.km / u.s, v_b=11 * u.km / u.s, desc="default")
+    assert scenario.v_ri == 0 * u.km / u.s
+    assert scenario.v_ri.unit.is_equivalent(u.km / u.s)
+
+
+def test_paper_scenarios_is_uniform_catalog() -> None:
+    # The catalog is a uniform list of single-collision scenarios -- the
+    # lunar-return optimum (a blended result) is no longer shoehorned in.
+    catalog = paper_scenarios()
+    assert len(catalog) == 8
+    assert all(isinstance(s, PuffSatScenario) for s in catalog)
+    # Every scenario yields a finite, real mass ratio (no tuple-valued v_rf row).
+    for scenario in catalog:
+        assert np.isfinite(float(scenario.mass_ratio))
+
+
+def test_paper_scenarios_mass_ratios_regression() -> None:
+    # Pin the paper's headline mass ratios so no future refactor can silently
+    # shift them. Values captured from the repo's primitives.
+    expected = [
+        1.28130083,
+        2.30831207,
+        2.97219375,
+        3.82951318,
+        1.84518438,
+        9.33111762,
+        2.30831207,
+        1.29699573,
+    ]
+    actual = [float(s.mass_ratio) for s in paper_scenarios()]
+    assert actual == pytest.approx(expected, rel=1e-6)
+
+
+def test_scenarios_to_dataframe_projects_catalog() -> None:
+    # The table is a pure projection: right schema, one row per scenario, and
+    # each row's ratio equals the scenario's own mass_ratio.
+    catalog = paper_scenarios()
+    df = scenarios_to_dataframe(catalog)
+    assert list(df.columns) == SCENARIO_COLUMNS
+    assert len(df) == len(catalog)
+    for i, scenario in enumerate(catalog):
+        assert float(df.iloc[i]["payload_puffsat_mass_ratio"]) == pytest.approx(
+            float(scenario.mass_ratio)
+        )
+        assert df.iloc[i]["desc"] == scenario.desc

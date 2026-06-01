@@ -26,7 +26,7 @@ lower-level calculations to provide comprehensive mission analysis.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -78,128 +78,160 @@ from src.propulsion import (
 
 @dataclass(frozen=True)
 class PuffSatScenario:
+    """A single externally-pulsed (PuffSat) propulsion event, modelled as one
+    elastic collision.
+
+    A scenario is fully defined by three velocities; its payload-to-PuffSat mass
+    ratio follows from them via :func:`payload_mass_ratio`. This is a single
+    elastic-collision scenario only: blended optimization results such as the
+    lunar-return optimum (see :func:`find_best_lunar_return`) are not scenarios.
+
+    Attributes:
+        v_rf: Final velocity of the payload after the collision (astropy Quantity).
+        v_b: Collision velocity of the PuffSat (astropy Quantity).
+        desc: Human-readable description of the scenario.
+        v_ri: Initial velocity of the payload before the collision (astropy
+            Quantity, default 0 km/s).
+    """
+
     v_rf: u.Quantity
     v_b: u.Quantity
     desc: str
-    v_ri: u.Quantity = 0
+    v_ri: u.Quantity = 0 * u.km / u.s
 
-    @staticmethod
-    def scenario_table() -> pd.DataFrame:
-        """Create an empty DataFrame for storing PuffSat scenario results.
-
-        Returns:
-            A pandas DataFrame with columns for payload/PuffSat mass ratio, velocities, and description.
-        """
-        df = pd.DataFrame(
-            columns=["payload_puffsat_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
-        )
-        return df
-
-    def append(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Append this scenario's results to the provided DataFrame.
-
-        Args:
-            df: The DataFrame to append to.
+    @property
+    def mass_ratio(self) -> float:
+        """Payload-to-PuffSat-propulsion mass ratio for this scenario.
 
         Returns:
-            The DataFrame with this scenario's results added as a new row.
+            The mass ratio, computed from this scenario's collision, final, and
+            initial velocities via :func:`payload_mass_ratio`.
         """
-        mass_ratio = payload_mass_ratio(v_rf=self.v_rf, v_b=self.v_b, v_ri=self.v_ri)
-        df.loc[len(df)] = [mass_ratio, self.v_rf, self.v_ri, self.v_b, self.desc]
-        return df
+        return payload_mass_ratio(v_rf=self.v_rf, v_b=self.v_b, v_ri=self.v_ri)
 
-    @staticmethod
-    def paper_scenarios() -> pd.DataFrame:
-        low_earth_periapsis = Earth.R + LEO_ALTITUDE
-        lunar_transfer_orbit = orbit_from_rp_ra(
-            apoapsis_radius=MOON_A,
-            periapsis_radius=low_earth_periapsis,
-            attractor_body=Earth,
-        )
-        lunar_transfer_periapsis_velocity = periapsis_velocity(
-            orbit=lunar_transfer_orbit
-        )
-        leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
-        desc = """Eccentric PuffSats with apogee at lunar distance push
-rocket to minimal low Earth orbit"""
-        scenario_table = PuffSatScenario.scenario_table()
+
+# Columns of the scenario table -- the DataFrame projection of a scenario
+# catalog. This is the single home for the table schema.
+SCENARIO_COLUMNS = ["payload_puffsat_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
+
+
+def paper_scenarios() -> List[PuffSatScenario]:
+    """Build the catalog of PuffSat scenarios analyzed in the paper.
+
+    The lunar-return optimum is intentionally excluded: it is not a single
+    elastic-collision scenario (its mass ratio is a blended optimization result
+    from :func:`find_best_lunar_return`), so it is presented separately rather
+    than as a row here.
+
+    Returns:
+        The ordered list of :class:`PuffSatScenario` from the paper.
+    """
+    low_earth_periapsis = Earth.R + LEO_ALTITUDE
+    lunar_transfer_orbit = orbit_from_rp_ra(
+        apoapsis_radius=MOON_A,
+        periapsis_radius=low_earth_periapsis,
+        attractor_body=Earth,
+    )
+    lunar_transfer_periapsis_velocity = periapsis_velocity(orbit=lunar_transfer_orbit)
+    leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
+
+    parker_orbit = orbit_from_rp_ra(
+        apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
+    )
+    parker_apoapsis_velocity = apoapsis_velocity(orbit=parker_orbit)
+    earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
+    # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
+    prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_velocity
+    prograde_dv_parker_burn = burn_for_v_infinity(prograde_v_infinity_earth_to_parker)
+    # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
+    retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_velocity
+    retrograde_dv_parker_burn = burn_for_v_infinity(
+        retrograde_v_infinity_earth_to_parker
+    )
+    retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
+
+    lunar_esc = escape_velocity(body=Moon)
+
+    min_saturn_altitude = Saturn.R + LOW_SATURN_ALTITUDE
+    min_saturn_speed = speed_around_attractor(a=min_saturn_altitude, attractor=Saturn)
+    phoebe_low_orbit = orbit_from_rp_ra(
+        apoapsis_radius=PHOEBE_A,
+        periapsis_radius=min_saturn_altitude,
+        attractor_body=Saturn,
+    )
+    phoebe_low_periapsis_velocity = periapsis_velocity(orbit=phoebe_low_orbit)
+
+    return [
         PuffSatScenario(
-            v_rf=leo_speed, v_b=lunar_transfer_periapsis_velocity, desc=desc
-        ).append(scenario_table)
-        desc = """Decelerate intercity rocket for powered reentry with retrograde PuffSats in low orbit"""
-        PuffSatScenario(v_rf=0, v_b=-leo_speed, desc=desc, v_ri=leo_speed).append(
-            scenario_table
-        )
-        desc = """Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit"""
+            v_rf=leo_speed,
+            v_b=lunar_transfer_periapsis_velocity,
+            desc="""Eccentric PuffSats with apogee at lunar distance push
+rocket to minimal low Earth orbit""",
+        ),
         PuffSatScenario(
-            v_rf=0, v_b=-lunar_transfer_periapsis_velocity, desc=desc, v_ri=leo_speed
-        ).append(scenario_table)
-        parker_orbit = orbit_from_rp_ra(
-            apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
-        )
-        parker_apoapsis_velocity = apoapsis_velocity(orbit=parker_orbit)
-        earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
-        # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
-        prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_velocity
-        # calculate burn needed to achieve this v_infinity from Earth
-        prograde_dv_parker_burn = burn_for_v_infinity(
-            prograde_v_infinity_earth_to_parker
-        )
-        retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
-        desc = """PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe"""
+            v_rf=0 * u.km / u.s,
+            v_b=-leo_speed,
+            v_ri=leo_speed,
+            desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats in low orbit""",
+        ),
         PuffSatScenario(
-            v_rf=prograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
-        ).append(scenario_table)
-        desc = """PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun"""
-        # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
-        retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_velocity
-        # calculate burn needed to achieve this v_infinity from Earth
-        retrograde_dv_parker_burn = burn_for_v_infinity(
-            retrograde_v_infinity_earth_to_parker
-        )
+            v_rf=0 * u.km / u.s,
+            v_b=-lunar_transfer_periapsis_velocity,
+            v_ri=leo_speed,
+            desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit""",
+        ),
         PuffSatScenario(
-            v_rf=retrograde_dv_parker_burn, v_b=retrograde_jovian_speed, desc=desc
-        ).append(scenario_table)
-        desc = """PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit"""
+            v_rf=prograde_dv_parker_burn,
+            v_b=retrograde_jovian_speed,
+            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe""",
+        ),
+        PuffSatScenario(
+            v_rf=retrograde_dv_parker_burn,
+            v_b=retrograde_jovian_speed,
+            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun""",
+        ),
         PuffSatScenario(
             v_rf=lunar_transfer_periapsis_velocity,
             v_b=retrograde_jovian_speed,
-            desc=desc,
-        ).append(scenario_table)
-        desc = """Decelerate trans-lunar payloads to land on the moon"""
-        lunar_esc = escape_velocity(body=Moon)
+            desc="""PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit""",
+        ),
         PuffSatScenario(
-            v_rf=0 * u.km / u.s, v_b=-lunar_esc, desc=desc, v_ri=lunar_esc
-        ).append(scenario_table)
-        min_saturn_altitude = Saturn.R + LOW_SATURN_ALTITUDE
-        min_saturn_speed = speed_around_attractor(
-            a=min_saturn_altitude, attractor=Saturn
-        )
-        phoebe_low_orbit = orbit_from_rp_ra(
-            apoapsis_radius=PHOEBE_A,
-            periapsis_radius=min_saturn_altitude,
-            attractor_body=Saturn,
-        )
-        phoebe_low_periapsis_velocity = periapsis_velocity(orbit=phoebe_low_orbit)
-        desc = """PuffSats approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn"""
+            v_rf=0 * u.km / u.s,
+            v_b=-lunar_esc,
+            v_ri=lunar_esc,
+            desc="""Decelerate trans-lunar payloads to land on the moon""",
+        ),
         PuffSatScenario(
-            v_rf=min_saturn_speed, v_b=phoebe_low_periapsis_velocity, desc=desc
-        ).append(scenario_table)
-        lunar_puffsat_speed: BurnInfo = find_best_lunar_return()
-        lunar_required_dv_prograde: u.Quantity = REQUIRED_DV_LUNAR_TRANSFER_PROGRADE
-        desc = f"""After LEO Earth burn =  {lunar_puffsat_speed.burn}, the PuffSat comes towards the moon at optimal speed."""
-        scenario_table.loc[len(scenario_table)] = [
-            lunar_puffsat_speed.combined_mass_ratio,
-            (
-                REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
-                REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
-            ),
-            0 * u.km / u.s,
-            lunar_puffsat_speed.incoming_v,
-            desc,
-        ]
+            v_rf=min_saturn_speed,
+            v_b=phoebe_low_periapsis_velocity,
+            desc="""PuffSats approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn""",
+        ),
+    ]
 
-        return scenario_table
+
+def scenarios_to_dataframe(scenarios: List[PuffSatScenario]) -> pd.DataFrame:
+    """Project a scenario catalog into a display DataFrame.
+
+    A pure, one-way projection: it reads each scenario's mass ratio and lays the
+    fields out under :data:`SCENARIO_COLUMNS`. This is the only function in this
+    path that touches pandas.
+
+    Args:
+        scenarios: The scenario catalog (e.g. from :func:`paper_scenarios`).
+
+    Returns:
+        A DataFrame with :data:`SCENARIO_COLUMNS`, one row per scenario.
+    """
+    df = pd.DataFrame(columns=SCENARIO_COLUMNS)
+    for scenario in scenarios:
+        df.loc[len(df)] = [
+            scenario.mass_ratio,
+            scenario.v_rf,
+            scenario.v_ri,
+            scenario.v_b,
+            scenario.desc,
+        ]
+    return df
 
 
 def orbit_from_periapsis_speed_and_apoapsis_radius(

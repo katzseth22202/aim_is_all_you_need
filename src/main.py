@@ -14,17 +14,20 @@ from src.astro_constants import (
     LUNAR_MONTH,
     MARS_A,
     MOON_A,
+    REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
+    REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     SATURN_A,
     VENUS_A,
 )
 from src.orbit_utils import orbit_from_rp_ra
 from src.scenario import (
-    PuffSatScenario,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
     launch_capacity_time,
     lunar_return_transfer_dv,
+    paper_scenarios,
+    scenarios_to_dataframe,
     solar_fusion_velocity,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
@@ -42,8 +45,8 @@ def main() -> None:
     best_lunar_return = find_best_lunar_return()
     print(f"best lunar return {best_lunar_return}")
 
-    # Get the scenarios DataFrame
-    scenarios_df = PuffSatScenario.paper_scenarios()
+    # Project the scenario catalog into a display DataFrame at the edge.
+    scenarios_df = scenarios_to_dataframe(paper_scenarios())
 
     # Display the table using tabulate with better formatting
     print("\nPuffSat Propulsion Scenarios:")
@@ -58,6 +61,16 @@ def main() -> None:
         )
     )
     print("=" * 80)
+    # The lunar-return optimum is not a single-collision scenario, so it is
+    # presented on its own rather than as a row in the table above.
+    print(
+        f"lunar-return optimum: after LEO Earth burn = {best_lunar_return.burn}, "
+        "the PuffSat comes towards the moon at optimal speed "
+        f"(incoming v = {best_lunar_return.incoming_v}); "
+        f"payload/PuffSat mass ratio = {best_lunar_return.combined_mass_ratio} "
+        f"for required transfer dv = ({REQUIRED_DV_LUNAR_TRANSFER_PROGRADE}, "
+        f"{REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE})"
+    )
     lunar_mass_ratio = best_lunar_return.combined_mass_ratio
     print(
         f"lunar launch cycle capacity time = {launch_capacity_time(lunar_mass_ratio, LUNAR_MONTH)}"
