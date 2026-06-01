@@ -273,9 +273,12 @@ def find_best_lunar_return(
 
 
     Returns:
-        Optional[BurnInfo]: The optimal burn information containing the burn magnitude,
-            combined mass ratio, and incoming velocity. Returns None if no valid
-            solution is found.
+        BurnInfo: The optimal burn -- its burn magnitude, combined mass ratio,
+            and incoming speed at the Moon.
+
+    Raises:
+        ValueError: If no candidate burn is feasible (none yields an incoming
+            speed above retrograde_dv_required with a prograde mass ratio >= 1).
 
     Note:
         The function evaluates burns from 0.01 to 6 km/s in 100 steps, calculating

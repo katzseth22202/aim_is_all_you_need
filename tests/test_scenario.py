@@ -9,6 +9,7 @@ from src.propulsion import payload_mass_ratio
 from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    find_best_lunar_return,
     lunar_return_transfer_dv,
     paper_scenarios,
     scenarios_to_dataframe,
@@ -102,6 +103,31 @@ def test_paper_scenarios_mass_ratios_regression() -> None:
     ]
     actual = [float(s.mass_ratio) for s in paper_scenarios()]
     assert actual == pytest.approx(expected, rel=1e-6)
+
+
+def test_find_best_lunar_return_reproduces_paper_lunar_cycle() -> None:
+    # Paper (Appendix D context, p.13-14): a ~1.9 km/s perigee burn reaches the
+    # Moon at ~7.2 km/s, and the lunar cycle launches "about 1.455 times the
+    # starting mass" per loop. Pin the optimum so this headline figure can't drift.
+    best = find_best_lunar_return()
+    # Headline claim: ~1.455x per loop.
+    assert is_nearly_equal(
+        best.combined_mass_ratio, 1.455 * u.dimensionless_unscaled, percent=0.01
+    )
+    # Exact values from the repo's primitives.
+    assert is_nearly_equal(best.burn, 1.946162 * u.km / u.s, percent=0.001)
+    assert is_nearly_equal(
+        best.combined_mass_ratio, 1.455765 * u.dimensionless_unscaled, percent=0.001
+    )
+    assert is_nearly_equal(best.incoming_v, 7.207867 * u.km / u.s, percent=0.001)
+
+
+def test_find_best_lunar_return_raises_when_no_feasible_burn() -> None:
+    # The documented error mode: if no candidate burn yields an incoming speed
+    # above the (here, impossibly high) retrograde requirement, every burn is
+    # filtered out and the function raises rather than returning None.
+    with pytest.raises(ValueError, match="No valid burn"):
+        find_best_lunar_return(retrograde_dv_required=1000 * u.km / u.s)
 
 
 def test_scenarios_to_dataframe_projects_catalog() -> None:
