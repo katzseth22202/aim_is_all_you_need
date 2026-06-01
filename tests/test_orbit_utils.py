@@ -16,6 +16,7 @@ from src.orbit_utils import (
     find_periapsis_radius_from_apoapsis_and_velocity,
     get_period,
     get_semimajor_axis,
+    orbit_from_periapsis_speed_and_apoapsis_radius,
     speed_around_attractor,
     speed_with_escape_energy,
     velocity_at_distance,
@@ -85,6 +86,25 @@ def test_find_periapsis_radius_from_apoapsis_and_velocity() -> None:
         apoapsis_radius=EARTH_A, periapsis_velocity=TEST_VP
     )
     assert is_nearly_equal(v_p, EXPECTED_TEST_RP)
+
+
+def test_orbit_from_periapsis_speed_and_apoapsis_radius() -> None:
+    # The shipped constructor solves r_p through the single periapsis-radius
+    # primitive and builds the orbit; pin its periapsis/apoapsis directly
+    # (previously this path was only exercised transitively).
+    orbit = orbit_from_periapsis_speed_and_apoapsis_radius(
+        periapsis_speed=TEST_VP, apoapsis_radius=EARTH_A, attractor_body=Sun
+    )
+    assert is_nearly_equal(orbit.r_p, EXPECTED_TEST_RP)
+    assert is_nearly_equal(orbit.r_a, EARTH_A)
+    # The constructor's periapsis radius is exactly the primitive's output --
+    # the quadratic now lives in one place, so the two cannot drift apart.
+    assert is_nearly_equal(
+        orbit.r_p,
+        find_periapsis_radius_from_apoapsis_and_velocity(
+            apoapsis_radius=EARTH_A, periapsis_velocity=TEST_VP
+        ),
+    )
 
 
 def test_velocity_at_distance() -> None:

@@ -14,7 +14,6 @@ Key Components:
 Key Functions:
     - earth_velocity_200km_periapsis: Solar periapsis velocity calculations
     - solar_fusion_velocity: Nuclear fusion impact velocity analysis
-    - orbit_from_periapsis_speed_and_apoapsis_radius: Orbit construction
 
 Dependencies:
     - orbit_utils: Orbital mechanics calculations
@@ -59,6 +58,7 @@ from src.orbit_utils import (
     apoapsis_velocity,
     escape_velocity,
     get_period,
+    orbit_from_periapsis_speed_and_apoapsis_radius,
     orbit_from_rp_ra,
     periapsis_velocity,
     speed_around_attractor,
@@ -232,66 +232,6 @@ def scenarios_to_dataframe(scenarios: List[PuffSatScenario]) -> pd.DataFrame:
             scenario.desc,
         ]
     return df
-
-
-def orbit_from_periapsis_speed_and_apoapsis_radius(
-    periapsis_speed: u.Quantity,
-    apoapsis_radius: u.Quantity,
-    attractor_body: Body = Sun,
-) -> Orbit:
-    """
-    Generate a boinor Orbit aligned with the y-axis (periapsis on +y, no z-component),
-    given the scalar speed at periapsis and the radius at apoapsis.
-
-    Parameters
-    ----------
-    periapsis_speed : astropy.units.Quantity
-        The scalar speed at periapsis (with velocity units).
-    apoapsis_radius : astropy.units.Quantity
-        The radius of the apoapsis (with length units).
-    attractor_body : boinor.bodies.Body, optional
-        The central celestial body (default: Sun).
-
-    Returns
-    -------
-    boinor.twobody.Orbit
-        The generated boinor Orbit object.
-
-    Raises
-    ------
-    ValueError
-        If the computed periapsis radius is not physically valid (e.g., negative or zero).
-    """
-    # At periapsis, r = r_p, v = periapsis_speed
-    # At apoapsis, r = r_a
-    # Use vis-viva equation to solve for r_p:
-    # v_p^2 = mu * (2/r_p - 1/a)
-    # a = (r_p + r_a)/2
-    mu = attractor_body.k
-    r_a = apoapsis_radius
-    v_p = periapsis_speed
-
-    # Solve quadratic for r_p: v_p^2 = mu * (2/r_p - 2/(r_p + r_a))
-    # Rearranged: v_p^2 = mu * (2(r_a) / (r_p * (r_p + r_a)))
-    # Let x = r_p
-    # v_p^2 * x^2 + v_p^2 * r_a * x - 2 * mu * r_a = 0
-    # Quadratic: ax^2 + bx + c = 0
-    a = v_p**2
-    b = v_p**2 * r_a
-    c = -2 * mu * r_a
-    # Solve for x = r_p
-    discriminant = b**2 - 4 * a * c
-    if discriminant < 0:
-        raise ValueError("No real solution for periapsis radius with given parameters.")
-    r_p = (-b + np.sqrt(discriminant)) / (2 * a)
-    if r_p <= 0 * u.km:
-        r_p = (-b - np.sqrt(discriminant)) / (2 * a)
-    if r_p <= 0 * u.km:
-        raise ValueError("Computed periapsis radius is not physically valid.")
-    # Now use orbit_from_rp_ra to construct the orbit
-    return orbit_from_rp_ra(
-        apoapsis_radius=r_a, periapsis_radius=r_p, attractor_body=attractor_body
-    )
 
 
 @dataclass(frozen=True)

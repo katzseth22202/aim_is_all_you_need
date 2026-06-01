@@ -8,9 +8,10 @@ Key Functions:
     - body_speed: Calculate orbital speed at given altitude
     - escape_velocity: Calculate escape velocity from celestial bodies
     - orbit_from_rp_ra: Create orbits from periapsis/apoapsis radii
+    - orbit_from_periapsis_speed_and_apoapsis_radius: Create orbits from a
+      periapsis speed and apoapsis radius
     - periapsis_velocity/apoapsis_velocity: Extract velocity at orbit extremes
     - velocity_at_distance: Calculate velocity at any point in orbit
-    - get_orbital_velocity_at_radius: General velocity calculation for any radius
 
 Dependencies:
     - astro_constants: Physical constants and orbital parameters
@@ -369,120 +370,51 @@ def find_periapsis_radius_from_apoapsis_and_velocity(
             "Invalid parameters: No real solution for periapsis radius. Check input values."
         )
 
-    # Calculate the two possible solutions for periapsis radius
-    rp1 = (-B + np.sqrt(discriminant)) / (2 * A)
-    rp2 = (-B - np.sqrt(discriminant)) / (2 * A)
-    rp1 = rp1.to(u.km)
-    rp2 = rp2.to(u.km)
-
-    # In orbital mechanics, radius must be positive.
-    # We take the positive root. If both are positive, the problem context implies a physically
-    # meaningful solution. In this case, the larger velocity at periapsis implies a smaller
-    # periapsis radius, so we take the positive root.
-    if rp1 > 0 and rp2 > 0:
-        # Both roots are positive. Choose the one that makes physical sense.
-        # Since Vp is given as the periapsis velocity, it implies rp < ra.
-        # The equation derived earlier directly yields the correct physical radius.
-        return rp1 if rp1 < apoapsis_radius else rp2
-    elif rp1 > 0:
-        return rp1
-    elif rp2 > 0:
-        return rp2
-    else:
+    # With A = v_p**2 > 0, B = v_p**2 * r_a > 0 and C = -2*mu*r_a < 0, the
+    # discriminant exceeds B**2, so the '+' root is strictly positive and the
+    # '-' root is strictly negative. The physical periapsis radius is the '+'
+    # root.
+    periapsis_radius = ((-B + np.sqrt(discriminant)) / (2 * A)).to(u.km)
+    if periapsis_radius <= 0 * u.km:
         raise ValueError("No positive solution for periapsis radius found.")
+    return periapsis_radius
 
 
-def get_orbital_velocity_at_radius(orbit: Orbit, radius: u.Quantity) -> u.Quantity:
-    """
-    Calculates the scalar orbital velocity at a given radial distance from the attractor body.
+def orbit_from_periapsis_speed_and_apoapsis_radius(
+    periapsis_speed: u.Quantity,
+    apoapsis_radius: u.Quantity,
+    attractor_body: Body = Sun,
+) -> Orbit:
+    """Generate a boinor Orbit from the periapsis speed and apoapsis radius.
 
-    Parameters
-    ----------
-    orbit : boinor.twobody.orbit.Orbit
-        The boinor Orbit object, containing the orbital elements and attractor body.
-    radius : astropy.units.Quantity
-        The radial distance from the attractor body at which to calculate the velocity.
-        Must be a scalar astropy Quantity with units of length.
-
-    Returns
-    -------
-    astropy.units.Quantity
-        The scalar orbital velocity at the given radius, with units of velocity.
-
-    Raises
-    ------
-    ValueError
-        If the provided radius is outside the valid range for the given orbit
-        (e.g., negative for elliptical/parabolic/hyperbolic orbits, or
-        greater than apoapsis for elliptical orbits if not handled correctly
-        for specific velocity calculations).
-    """
-    if not isinstance(radius, u.Quantity) or not radius.unit.is_equivalent(u.km):
-        raise TypeError("Radius must be an astropy Quantity with units of length.")
-    if radius.size != 1:
-        raise ValueError("Radius must be a scalar quantity.")
-
-    # Gravitational parameter of the attractor body
-    mu = orbit.attractor.k
-
-    # Semimajor axis
-    a = orbit.a
-
-    # Specific energy (epsilon) for the orbit
-    # epsilon = -mu / (2 * a)
-
-    # Velocity formula for any conic section (vis-viva equation):
-    # v = sqrt(mu * (2/r - 1/a))
-    # For parabolic orbit, a approaches infinity, so 1/a approaches 0.
-    # For hyperbolic orbit, a is negative, so 1/a is also negative.
-
-    # Check for valid radius range depending on orbit type
-    if orbit.ecc < 1:  # Elliptical orbit
-        if radius < orbit.r_p or radius > orbit.r_a:
-            # For an elliptical orbit, the radius must be between periapsis and apoapsis.
-            # However, the Vis-Viva equation itself doesn't strictly break outside this range;
-            # it would just give an imaginary velocity, indicating an invalid physical point.
-            # We can allow the calculation as long as 2/r - 1/a > 0.
-            pass  # The formula will handle it by returning a NaN if the sqrt is of a negative number
-    elif orbit.ecc == 1:  # Parabolic orbit
-        if radius < 0 * u.km:  # Radius must be non-negative
-            raise ValueError("Radius cannot be negative for a parabolic orbit.")
-        # For parabolic orbit, 1/a term becomes 0, Vis-Viva simplifies to sqrt(2*mu/r)
-        # However, the general formula still works as a approaches infinity.
-        pass
-    else:  # Hyperbolic orbit (ecc > 1)
-        if radius < 0 * u.km:  # Radius must be non-negative
-            raise ValueError("Radius cannot be negative for a hyperbolic orbit.")
-        # For hyperbolic orbits, 'a' is negative, but the Vis-Viva equation accounts for this.
-        pass
-
-    # Vis-viva equation
-    # Make sure units are consistent before calculation
-    velocity_squared = mu * (2 / radius - 1 / a)
-
-    # Ensure the term inside the square root is non-negative
-    if velocity_squared.value < 0:
-        raise ValueError(
-            f"The provided radius ({radius}) is not physically reachable for this orbit. "
-            "Velocity would be imaginary. Ensure radius is within the orbit's bounds."
-        )
-
-    velocity = np.sqrt(velocity_squared)
-
-    return velocity
-
-
-def retrograde_orbit(orbit: Orbit) -> Orbit:
-    """Return a new Orbit with the same shape as the input but with retrograde velocity.
+    The orbit is aligned with the y-axis (periapsis on +y) and lies in the
+    XY-plane, matching :func:`orbit_from_rp_ra`. The periapsis radius is solved
+    from the periapsis speed and apoapsis radius via
+    :func:`find_periapsis_radius_from_apoapsis_and_velocity`, then the orbit is
+    built with :func:`orbit_from_rp_ra` -- so the vis-viva quadratic lives in
+    exactly one place.
 
     Args:
-        orbit: A boinor Orbit object.
+        periapsis_speed: The scalar speed at periapsis (astropy Quantity,
+            velocity units).
+        apoapsis_radius: The radius of the apoapsis (astropy Quantity, length
+            units).
+        attractor_body: The central celestial body (boinor Body, default Sun).
 
     Returns:
-        A new Orbit object with the same position but velocity reversed (retrograde).
+        The generated boinor Orbit object.
+
+    Raises:
+        ValueError: If no physically valid periapsis radius exists for the given
+            parameters, or if it is not less than the apoapsis radius.
     """
-    r_vec, v_vec = orbit.rv()
-    retrograde_v_vec = -v_vec
-    return Orbit.from_vectors(
-        orbit.attractor, r_vec, retrograde_v_vec, epoch=orbit.epoch
+    periapsis_radius = find_periapsis_radius_from_apoapsis_and_velocity(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_velocity=periapsis_speed,
+        attractor_body=attractor_body,
+    )
+    return orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=periapsis_radius,
+        attractor_body=attractor_body,
     )
