@@ -27,9 +27,10 @@ REQUIRED_DV_LUNAR_TRANSFER_PROGRADE = (
 REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE = (
     3.7 * u.km / u.s
 )  # How much to get off the moon and into a retrograde LEO transfer (varies depending on moon location)
-RETROGRADE_FRACTION = (
-    1 / 4
-)  # Mass fraction to send into retrograde orbit for collision in propulsion pulse chambers
+# Retrograde collision mass fraction, from the paper's Appendix D (Eq 12): the
+# value that maximizes pulse-chamber momentum transfer 2*v_p*(sqrt(m) - m) is
+# m = 1/4. The prograde fraction is the complementary 3/4 (m_rp + m_pp = 1).
+RETROGRADE_FRACTION = 1 / 4
 
 TARGET_LAUNCH_CAPACITY_MULTIPLE = (
     1e6  # default of how much we want to multiply initial launch capacity by
