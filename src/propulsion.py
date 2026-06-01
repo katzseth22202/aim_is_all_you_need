@@ -24,6 +24,7 @@ from typing import List, Tuple
 import astropy.units as u
 import numpy as np
 import numpy.typing as npt
+from astropy.constants import g0
 from boinor.bodies import Body, Earth, Sun
 from boinor.maneuver import Maneuver
 from boinor.twobody import Orbit
@@ -76,6 +77,21 @@ def payload_mass_ratio(
 
     denom: float = np.log((v_b - v_ri) / (v_b - v_rf)).item()
     return 2 * fudge_factor / denom
+
+
+def exhaust_velocity_from_isp(specific_impulse: u.Quantity) -> u.Quantity:
+    """Convert a specific impulse to effective exhaust velocity.
+
+    The effective exhaust velocity is ``v_e = Isp * g0``, where ``g0`` is
+    standard gravity. This is the ``exhaust_v`` expected by ``rocket_equation``.
+
+    Args:
+        specific_impulse: Engine specific impulse (astropy Quantity, seconds).
+
+    Returns:
+        The effective exhaust velocity (astropy Quantity, km/s).
+    """
+    return (specific_impulse * g0).to(u.km / u.s)
 
 
 def rocket_equation(delta_v: u.Quantity, exhaust_v: u.Quantity) -> u.Quantity:

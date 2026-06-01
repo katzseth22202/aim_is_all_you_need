@@ -41,6 +41,7 @@ from src.astro_constants import (
     JUPITER_A,
     LEO_ALTITUDE,
     LOW_SATURN_ALTITUDE,
+    METHALOX_SEA_LEVEL_ISP,
     MOON_A,
     PARKER_PERIAPSIS,
     PERIAPSIS_SOLAR_BURN,
@@ -49,6 +50,7 @@ from src.astro_constants import (
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
+    SUBORBITAL_DV_TO_200KM,
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
 )
 
@@ -67,6 +69,7 @@ from src.orbit_utils import (
 # Import propulsion functions from propulsion
 from src.propulsion import (
     burn_for_v_infinity,
+    exhaust_velocity_from_isp,
     payload_mass_ratio,
     retrograde_jovian_hohmann_transfer,
     rocket_equation,
@@ -556,6 +559,37 @@ def lunar_return_transfer_dv(
     return burn_for_v_infinity(
         v_inf, body=Earth, altitude=perigee_altitude, initial_velocity=v_perigee
     ).to(u.km / u.s)
+
+
+def suborbital_200km_propellant_fraction(
+    delta_v: u.Quantity = SUBORBITAL_DV_TO_200KM,
+    specific_impulse: u.Quantity = METHALOX_SEA_LEVEL_ISP,
+) -> u.Quantity:
+    """Propellant mass fraction for a suborbital rocket that merely reaches 200 km.
+
+    Backs the paper's Section 2.1 claim that a suborbital rocket which merely
+    reaches ~200 km altitude -- and relies on PuffSat momentum pulses to reach
+    orbit, rather than reaching orbit on its own -- can have a propellant mass
+    fraction under 60 percent. Applies the Tsiolkovsky rocket equation
+    (``rocket_equation``) to the ~2.5 km/s suborbital delta-v budget
+    (``SUBORBITAL_DV_TO_200KM``) with a methalox sea-level exhaust velocity
+    derived from ``METHALOX_SEA_LEVEL_ISP``.
+
+    The defaults give ~0.56 (56 percent), comfortably under the paper's 60
+    percent figure. Using the conservative sea-level Isp makes this an upper
+    bound: a higher (vacuum) Isp would lower the fraction further.
+
+    Args:
+        delta_v: Suborbital delta-v budget to reach 200 km altitude (astropy
+            Quantity, default SUBORBITAL_DV_TO_200KM = 2.5 km/s).
+        specific_impulse: Engine specific impulse (astropy Quantity, default
+            METHALOX_SEA_LEVEL_ISP = 310 s).
+
+    Returns:
+        The propellant mass fraction (dimensionless astropy Quantity).
+    """
+    exhaust_v = exhaust_velocity_from_isp(specific_impulse)
+    return rocket_equation(delta_v=delta_v, exhaust_v=exhaust_v)
 
 
 def find_parker_orbit_period() -> u.Quantity:

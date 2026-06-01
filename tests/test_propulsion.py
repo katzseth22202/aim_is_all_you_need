@@ -8,6 +8,7 @@ from boinor.maneuver import Maneuver
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
 from src.propulsion import (
     burn_for_v_infinity,
+    exhaust_velocity_from_isp,
     get_burn,
     get_hohmann_burns,
     hohmann_transfer,
@@ -83,6 +84,13 @@ def test_rocket_equation() -> None:
         u.Quantity(0.88670699, u.dimensionless_unscaled),
         rocket_equation(9.8 * u.km / u.s, 4.5 * u.km / u.s),
     )
+
+
+def test_exhaust_velocity_from_isp() -> None:
+    """Test exhaust_velocity_from_isp function (v_e = Isp * g0)."""
+    # Methalox sea-level Isp of 310 s -> 310 * 9.80665 = 3040.06 m/s.
+    ve = exhaust_velocity_from_isp(310 * u.s)
+    assert is_nearly_equal(ve, 3.04006 * u.km / u.s, percent=0.001)
 
 
 def test_retrograde_jovian_hohmann_transfer() -> None:

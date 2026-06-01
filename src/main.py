@@ -27,6 +27,7 @@ from src.scenario import (
     lunar_return_transfer_dv,
     solar_fusion_velocity,
     solar_impact_dv,
+    suborbital_200km_propellant_fraction,
 )
 
 
@@ -89,6 +90,11 @@ def main() -> None:
     print(
         "lunar-return delta-v beyond lunar escape to Mars transfer (200 km perigee) = "
         f"{lunar_return_transfer_dv(MARS_A).to(u.m / u.s)}"
+    )
+    suborbital_frac = float(suborbital_200km_propellant_fraction())
+    print(
+        "suborbital 200 km propellant mass fraction (methalox Isp=310 s, dv=2.5 km/s) = "
+        f"{suborbital_frac:.1%} ({'under' if suborbital_frac < 0.6 else 'NOT under'} 60%)"
     )
 
 

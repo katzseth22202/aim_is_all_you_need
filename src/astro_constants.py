@@ -45,3 +45,24 @@ PERIAPSIS_SOLAR_BURN = (
 STD_FUDGE_FACTOR: float = (
     0.8  # the fudge factor described in the paper for how elastic PuffSat collisions are
 )
+
+# --- Suborbital "200 km" rocket delta-v budget (paper Section 2.1) ---
+# The paper claims a reusable suborbital rocket that merely reaches ~200 km
+# altitude (it does NOT reach orbit on its own; PuffSat pulses do the rest) can
+# have a propellant mass fraction under 60 percent. We back that with a ~2.5 km/s
+# delta-v budget split into an ideal coast term plus gravity-drag losses:
+#   - ideal impulsive speed to ballistically coast to 200 km is
+#     sqrt(2 * g0 * h) = sqrt(2 * 9.80665 m/s^2 * 200 km) = 1981 m/s ~= 2.0 km/s
+#   - gravity-drag losses during a finite high-thrust ascent ~= 0.5 km/s
+# giving a total of 2.5 km/s (= 2500 m/s) to reach 200 km altitude.
+SUBORBITAL_IDEAL_DV_TO_200KM = 2.0 * u.km / u.s  # ideal sqrt(2*g0*h) coast to 200 km
+SUBORBITAL_GRAVITY_DRAG = 0.5 * u.km / u.s  # gravity-drag losses during ascent
+SUBORBITAL_DV_TO_200KM = (
+    SUBORBITAL_IDEAL_DV_TO_200KM + SUBORBITAL_GRAVITY_DRAG
+)  # total delta-v to reach 200 km altitude (2.5 km/s)
+
+# Methalox (LOX/CH4) engine sea-level specific impulse. Conservative versus real
+# engines (e.g. Raptor ~327 s sea level / ~350 s vacuum); using the lower
+# sea-level value makes the resulting propellant-fraction estimate an upper bound,
+# which strengthens the paper's "under 60 percent" claim.
+METHALOX_SEA_LEVEL_ISP = 310 * u.s
