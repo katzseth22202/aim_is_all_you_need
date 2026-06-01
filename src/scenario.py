@@ -25,7 +25,7 @@ lower-level calculations to provide comprehensive mission analysis.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import numpy.typing as npt
@@ -294,7 +294,7 @@ def find_best_lunar_return(
         apoapsis_radius=MOON_A, periapsis_radius=periapsis_radius, attractor_body=Earth
     )
     periapsis_v: u.Quantity = periapsis_speed(orbit)
-    max_burn: Optional[BurnInfo] = None
+    feasible_burns: List[BurnInfo] = []
     for burn in candidate_burns:
         after_burn: u.Quantity = periapsis_v + burn
         incoming_v_before_moon_gravity = speed_at_distance(
@@ -333,17 +333,16 @@ def find_best_lunar_return(
             RETROGRADE_FRACTION * retrograde_combined_ratio
             + prograde_fraction * prograde_combined_ratio
         )
-        burn_info = BurnInfo(
-            burn=burn, combined_mass_ratio=combined_mass_ratio, incoming_v=incoming_v
+        feasible_burns.append(
+            BurnInfo(
+                burn=burn,
+                combined_mass_ratio=combined_mass_ratio,
+                incoming_v=incoming_v,
+            )
         )
-        if not max_burn:
-            max_burn = burn_info
-        else:
-            if burn_info.combined_mass_ratio > max_burn.combined_mass_ratio:
-                max_burn = burn_info
-    if not max_burn:
+    if not feasible_burns:
         raise ValueError("No valid burn found that maximizes combined mass ratio")
-    return max_burn
+    return max(feasible_burns, key=lambda info: info.combined_mass_ratio)
 
 
 def earth_velocity_200km_periapsis(
