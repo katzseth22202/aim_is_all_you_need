@@ -87,7 +87,7 @@ def main() -> None:
         f"{earth_reintercept_cycle_floor():.3f}"
     )
     print(
-        "launch capacity millionfold time (double each re-intercept cycle) = "
+        "Sorry I don't need ISRU launch capacity millionfold time (double each re-intercept cycle) = "
         f"{millionfold_scaling_time()}"
     )
     print(
