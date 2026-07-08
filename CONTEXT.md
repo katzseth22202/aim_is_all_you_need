@@ -43,7 +43,8 @@ _Avoid_: lunar scenario, lunar row.
 The "Sorry, I Don't Need ISRU" cycle sends a payload to a low solar periapsis, boosts it
 with PuffSat collisions, and returns it across `1 AU`. The vocabulary below is what the
 verification functions in `scenario.py` (`solar_dive_*`, `two_impulse_phasing_loop`,
-`earth_reintercept_cycle_floor`, `millionfold_scaling_time`) name.
+`single_impulse_resonant_dive`, `earth_reintercept_cycle_floor`, `millionfold_scaling_time`)
+name.
 
 **Earth re-intercept**:
 The requirement that the boosted return arrive *where Earth actually is*, not merely cross
@@ -66,6 +67,18 @@ colinear and retrograde, so it is free in total impulse (~24 km/s,
 `two_impulse_phasing_loop()`) and holds the doubling factor at two.
 _Avoid_: calling the phasing a "rocket burn" (every impulse is a PuffSat collision);
 re-aiming at periapsis (that is the rejected alternative, not the fix).
+
+**Single-impulse resonant dive**:
+The phasing folded into the *one* Earth boost, aimed outbound so the projectile coasts to
+a raised aphelion, falls back, dives, and re-crosses `1 AU` where Earth waits. The aphelion
+is the free knob that closes the geometry: exactly one value makes Earth's advance equal
+the swept longitude, so `single_impulse_resonant_dive()` *solves* for it (~1.9 AU) rather
+than hardcoding it, deriving the ~0.85 yr re-cross and the ~37 km/s boost — a ~24 km/s
+retrograde component (the direct dive's) plus a ~28 km/s outbound radial one. It needs only
+the Earth node, but the heavier boost drops the doubling factor below two.
+_Avoid_: reading "aphelion 1.9 AU and periapsis 4 solar radii" as two orbits — it is one
+ellipse the 1 AU launch point sits on; treating the boost as free (only the two-impulse
+loop is free).
 
 **Re-intercept cycle floor**:
 The shortest solar-dive cycle that actually re-intercepts Earth (~0.82 yr,

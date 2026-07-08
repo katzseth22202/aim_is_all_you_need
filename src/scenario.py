@@ -33,6 +33,7 @@ import pandas as pd
 from astropy import units as u
 from boinor.bodies import Body, Earth, Moon, Saturn, Sun
 from boinor.twobody import Orbit
+from scipy.optimize import brentq
 
 from src.astro_constants import (
     EARTH_A,
@@ -58,6 +59,7 @@ from src.astro_constants import (
 # Import orbital mechanics functions from orbit_utils
 from src.orbit_utils import (
     apoapsis_speed,
+    elliptic_time_of_flight,
     escape_velocity,
     get_period,
     hyperbolic_eccentricity,
@@ -864,6 +866,160 @@ def two_impulse_phasing_loop(
         deep_dive_aphelion_speed=deep_dive_aphelion_speed.to(u.km / u.s),
         total_boost=total_boost,
         dip_return_time=dip_return_time,
+    )
+
+
+@dataclass(frozen=True)
+class SingleImpulseResonantDive:
+    """Closure of the single-impulse resonant dive (paper Appendix sec:earth_reintercept).
+
+    One PuffSat boost at Earth aims the projectile outbound onto an ellipse whose
+    aphelion is tuned so that, after coasting out, falling back through 1 AU,
+    diving to the solar periapsis, and climbing back out on the boosted hyperbola,
+    it re-crosses 1 AU exactly where Earth has moved to. The aphelion is the free
+    knob that closes the geometry; everything else follows from it.
+
+    Attributes:
+        closing_aphelion: The aphelion that makes the return re-intercept Earth
+            (astropy Quantity, ~1.9 AU for the default dive).
+        reintercept_time: Time from the Earth boost to the 1 AU re-crossing
+            (astropy Quantity, ~0.85 yr).
+        earth_boost: Magnitude of the single Earth boost (astropy Quantity,
+            ~37 km/s), the vector sum of its retrograde and radial components.
+        retrograde_component: Tangential (retrograde) part of the boost -- the
+            same ~24 km/s a direct dive spends to drop to the solar periapsis
+            (astropy Quantity).
+        radial_component: Outbound radial part of the boost that buys the phasing
+            coast (astropy Quantity, ~28 km/s).
+        launch_true_anomaly: True anomaly of the 1 AU launch point on the closing
+            ellipse, just short of aphelion (astropy Quantity, ~169 deg).
+    """
+
+    closing_aphelion: u.Quantity
+    reintercept_time: u.Quantity
+    earth_boost: u.Quantity
+    retrograde_component: u.Quantity
+    radial_component: u.Quantity
+    launch_true_anomaly: u.Quantity
+
+
+def single_impulse_resonant_dive(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    launch_radius: u.Quantity = EARTH_A,
+) -> SingleImpulseResonantDive:
+    """Solve the aphelion that makes a single-impulse solar dive re-intercept Earth.
+
+    The direct dive re-crosses 1 AU ~136 deg from Earth (:func:`solar_dive_reintercept_gap`).
+    Folding the phasing into the single Earth boost aims the projectile *outbound*
+    first, onto an ellipse with periapsis at the solar dive and a raised aphelion.
+    The re-crossing longitude and its arrival time both grow with that aphelion, so
+    exactly one aphelion makes Earth's advance equal the longitude the projectile
+    sweeps -- the geometry closes. This roots that condition rather than hardcoding
+    it, mirroring :func:`earth_reintercept_cycle_floor`, and reproduces the
+    appendix's ~1.9 AU aphelion, ~0.85 yr re-cross, and ~37 km/s boost (a ~24 km/s
+    retrograde component plus a ~28 km/s outbound radial one).
+
+    The closure residual is monotonic in the aphelion over ``(launch_radius,
+    4 * launch_radius)``, so the root found is the first (shortest) resonance.
+
+    Args:
+        periapsis_radius: Solar-dive periapsis (astropy Quantity, default 4 solar
+            radii).
+        launch_radius: The boost point / re-crossing distance, i.e. Earth's orbit
+            (astropy Quantity, default EARTH_A).
+
+    Returns:
+        A :class:`SingleImpulseResonantDive` with the closing aphelion, the
+        re-intercept time, and the boost with its retrograde/radial decomposition.
+    """
+    # The boosted climb-out is fixed by the periapsis and its boost; it does not
+    # depend on the aphelion, so compute it once outside the root solve.
+    v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
+        periapsis_radius=periapsis_radius
+    )
+    climb_eccentricity: float = hyperbolic_eccentricity(
+        periapsis_radius, v_infinity, Sun
+    )
+    climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
+        periapsis_radius, climb_eccentricity, launch_radius
+    )
+    climb_time: u.Quantity = hyperbolic_time_of_flight(
+        periapsis_radius, v_infinity, climb_true_anomaly, Sun
+    )
+    earth_speed: u.Quantity = speed_around_attractor(a=launch_radius, attractor=Sun)
+
+    def closure_residual_deg(aphelion_au: float) -> float:
+        """Heliocentric gap (deg) between Earth and the 1 AU re-crossing for a trial aphelion."""
+        aphelion: u.Quantity = aphelion_au * u.AU
+        eccentricity: float = float(
+            ((aphelion - periapsis_radius) / (aphelion + periapsis_radius))
+            .decompose()
+            .value
+        )
+        semimajor_axis: u.Quantity = (aphelion + periapsis_radius) / 2
+        launch_nu: u.Quantity = true_anomaly_at_radius(
+            periapsis_radius, eccentricity, launch_radius
+        )
+        # Launched outbound at launch_nu, the projectile swings the long way through
+        # aphelion to periapsis: the complement of the periapsis -> launch_nu time.
+        ellipse_time: u.Quantity = get_period(
+            Sun, semimajor_axis
+        ) - elliptic_time_of_flight(periapsis_radius, eccentricity, launch_nu, Sun)
+        total_time: u.Quantity = (ellipse_time + climb_time).to(u.year)
+        swept: u.Quantity = (360 * u.deg - launch_nu) + climb_true_anomaly
+        earth_longitude: u.Quantity = (360 * u.deg) * (total_time / (1.0 * u.year))
+        return float((earth_longitude - swept).to(u.deg).value)
+
+    launch_au: float = launch_radius.to(u.AU).value
+    closing_aphelion: u.Quantity = (
+        brentq(closure_residual_deg, launch_au * 1.0001, launch_au * 4.0) * u.AU
+    )
+
+    # Re-build the closing geometry once to report the timing and boost.
+    eccentricity = float(
+        ((closing_aphelion - periapsis_radius) / (closing_aphelion + periapsis_radius))
+        .decompose()
+        .value
+    )
+    semimajor_axis = (closing_aphelion + periapsis_radius) / 2
+    launch_nu = true_anomaly_at_radius(periapsis_radius, eccentricity, launch_radius)
+    ellipse_time = get_period(Sun, semimajor_axis) - elliptic_time_of_flight(
+        periapsis_radius, eccentricity, launch_nu, Sun
+    )
+    reintercept_time: u.Quantity = (ellipse_time + climb_time).to(u.year)
+
+    closing_orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=closing_aphelion,
+        periapsis_radius=periapsis_radius,
+        attractor_body=Sun,
+    )
+    v_periapsis: u.Quantity = periapsis_speed(closing_orbit)
+    # Angular momentum h = v_p * r_p is conserved; the tangential speed at launch is
+    # h / r, and the radial speed closes the vis-viva speed by Pythagoras.
+    tangential_speed: u.Quantity = (v_periapsis * periapsis_radius / launch_radius).to(
+        u.km / u.s
+    )
+    launch_speed: u.Quantity = speed_at_distance(
+        radius_periapsis=periapsis_radius,
+        periapsis_speed=v_periapsis,
+        distance=launch_radius,
+        attractor_body=Sun,
+    )
+    radial_component: u.Quantity = np.sqrt(
+        launch_speed**2 - tangential_speed**2
+    ).to(u.km / u.s)
+    retrograde_component: u.Quantity = (earth_speed - tangential_speed).to(u.km / u.s)
+    earth_boost: u.Quantity = np.sqrt(
+        retrograde_component**2 + radial_component**2
+    ).to(u.km / u.s)
+
+    return SingleImpulseResonantDive(
+        closing_aphelion=closing_aphelion.to(u.AU),
+        reintercept_time=reintercept_time,
+        earth_boost=earth_boost,
+        retrograde_component=retrograde_component,
+        radial_component=radial_component,
+        launch_true_anomaly=launch_nu.to(u.deg),
     )
 
 

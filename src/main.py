@@ -30,6 +30,7 @@ from src.scenario import (
     millionfold_scaling_time,
     paper_scenarios,
     scenarios_to_dataframe,
+    single_impulse_resonant_dive,
     solar_dive_reintercept_gap,
     solar_fusion_velocity,
     solar_impact_dv,
@@ -89,6 +90,16 @@ def main() -> None:
     print(
         "Sorry I don't need ISRU launch capacity millionfold time (double each re-intercept cycle) = "
         f"{millionfold_scaling_time()}"
+    )
+    # The single-impulse resonant dive folds the phasing into one Earth boost: it
+    # solves the outbound aphelion that closes the return geometry, at the cost of
+    # a heavier boost. See paper Appendix sec:earth_reintercept.
+    dive = single_impulse_resonant_dive()
+    print(
+        "single-impulse resonant dive: aphelion "
+        f"{dive.closing_aphelion:.2f} closes the return in {dive.reintercept_time:.2f}, "
+        f"Earth boost = {dive.earth_boost:.0f} "
+        f"({dive.retrograde_component:.0f} retrograde + {dive.radial_component:.0f} radial)"
     )
     print(
         f"Velocity of rocket at Earth distance after periapsis at 200km/s = {earth_velocity_200km_periapsis()}"

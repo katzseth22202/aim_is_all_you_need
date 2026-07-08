@@ -34,17 +34,27 @@ carrying the stale 6-month figure. We had to decide how to represent the correct
    gravity-assist routes are slower.
 
 3. **Prove the appendix chain in code.** Each cited figure (309/233 km/s, 66 d, 295° whip,
-   136° gap, 5.4 km/s/°, 24 km/s two-impulse boost, 0.82 yr floor, 16 yr) has a
-   verification function in `scenario.py` and a test pinning it to the paper's value.
+   136° gap, 5.4 km/s/°, 24 km/s two-impulse boost, 0.82 yr floor, 16 yr, and the
+   single-impulse resonant dive's ~1.9 AU aphelion / ~0.85 yr re-cross / ~37 km/s boost)
+   has a verification function in `scenario.py` and a test pinning it to the paper's value.
+
+4. **Derive the single-impulse closure, do not hardcode the aphelion.** As with the 0.82 yr
+   floor, `single_impulse_resonant_dive()` *solves* for the outbound aphelion at which the
+   projectile's swept longitude equals Earth's advance, rather than asserting 1.9 AU. The
+   ~0.85 yr re-cross and the ~37 km/s boost (a ~24 km/s retrograde plus a ~28 km/s radial
+   component) fall out of that root, so a change to the periapsis depth flows through.
 
 ## Considered options
 
 - **Hardcode `SOLAR_DIVE_REINTERCEPT_CYCLE = 0.82 * u.year` — rejected.** Simple, but 0.82
   becomes a magic number disconnected from the whip-around it comes from; a future change to
   the periapsis depth would not flow through.
-- **Model the doubling-factor degradation too — deferred.** The single-impulse resonant dive
-  grows the boost 24 → ~41 km/s and drops the factor below two. Faithful, but it goes beyond
-  the paper's headline (the factor-2 floor); left out to keep the scope to the ~16 yr figure.
+- **Model the doubling-factor degradation too — partly deferred.** The single-impulse
+  resonant dive's boost is now derived (`single_impulse_resonant_dive()`, ~37 km/s at the
+  ~1.9 AU closing aphelion — not the ~41 km/s of the 2.7 AU orbit that never re-intercepts).
+  Converting that heavier boost into a specific sub-two doubling factor still goes beyond the
+  paper's headline (the factor-2 floor), so that number is left out to keep the scope to the
+  ~16 yr figure.
 - **Re-aim at periapsis instead of phasing — rejected (physics).** Turning the velocity near
   the 309 km/s periapsis costs ~5.4 km/s per degree; a tens-of-degrees correction runs to
   hundreds of km/s. Encoded as the `periapsis_reaim_cost_per_degree()` check, not a fix.
@@ -56,6 +66,8 @@ carrying the stale 6-month figure. We had to decide how to represent the correct
   gave under a decade, pinning the direction of the correction.
 - The whip-around needs an escaping-hyperbola true anomaly and time-of-flight, added as
   reusable primitives in `orbit_utils.py` (`hyperbolic_eccentricity`,
-  `true_anomaly_at_radius`, `hyperbolic_time_of_flight`).
-- The domain language (Earth re-intercept, whip-around, phasing loop, re-intercept cycle
-  floor) is recorded in `CONTEXT.md`.
+  `true_anomaly_at_radius`, `hyperbolic_time_of_flight`). The single-impulse closure adds the
+  elliptical companion `elliptic_time_of_flight` for the outbound coast, and introduces the
+  first `scipy.optimize.brentq` root-solve in `src/` to find the closing aphelion.
+- The domain language (Earth re-intercept, whip-around, phasing loop, single-impulse resonant
+  dive, re-intercept cycle floor) is recorded in `CONTEXT.md`.

@@ -12,6 +12,7 @@ from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE
 from src.orbit_utils import (
     body_speed,
     distance_to_center,
+    elliptic_time_of_flight,
     escape_velocity,
     find_periapsis_radius_from_apoapsis_and_speed,
     get_period,
@@ -169,3 +170,24 @@ def test_hyperbolic_time_of_flight_rejects_nonhyperbolic_orbit() -> None:
     # than dividing by v_infinity = 0.
     with pytest.raises(ValueError, match="hyperbolic"):
         hyperbolic_time_of_flight(1 * u.AU, 0 * u.km / u.s, 90 * u.deg, Sun)
+
+
+def test_elliptic_time_of_flight_apoapsis_is_half_period() -> None:
+    # The time from periapsis to apoapsis (nu = 180 deg) is exactly half the
+    # orbital period. Take an (r_p, e) = (1 AU, 0.5) ellipse, a = r_p/(1-e) = 2 AU.
+    tof = elliptic_time_of_flight(1 * u.AU, 0.5, 180 * u.deg, Sun)
+    half_period = get_period(Sun, 2 * u.AU) / 2
+    assert is_nearly_equal(tof, half_period, percent=1e-6)
+
+
+def test_elliptic_time_of_flight_periapsis_is_zero() -> None:
+    # At periapsis (nu = 0) no time has elapsed since periapsis.
+    tof = elliptic_time_of_flight(1 * u.AU, 0.5, 0 * u.deg, Sun)
+    assert is_nearly_equal(tof, 0 * u.day, percent=1e-9)
+
+
+def test_elliptic_time_of_flight_rejects_nonelliptical_orbit() -> None:
+    # A parabolic/hyperbolic orbit (e >= 1) has no bound period, so the elliptical
+    # time-of-flight is undefined and the function raises.
+    with pytest.raises(ValueError, match="elliptical"):
+        elliptic_time_of_flight(1 * u.AU, 1.0, 90 * u.deg, Sun)

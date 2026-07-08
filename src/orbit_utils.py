@@ -437,6 +437,53 @@ def true_anomaly_at_radius(
     return (np.degrees(np.arccos(cos_nu)) * u.deg).to(u.deg)
 
 
+def elliptic_time_of_flight(
+    periapsis_radius: u.Quantity,
+    eccentricity: float,
+    true_anomaly: u.Quantity,
+    attractor: Body = Sun,
+) -> u.Quantity:
+    """Time from periapsis to a given true anomaly on an elliptical orbit.
+
+    The elliptical companion of :func:`hyperbolic_time_of_flight`. The eccentric
+    anomaly ``E`` satisfies ``tan(E/2) = sqrt((1 - e)/(1 + e)) * tan(nu/2)``, the
+    mean anomaly is ``M = E - e*sin(E)``, and the time is ``M / n`` with mean
+    motion ``n = sqrt(mu / a**3)`` and semi-major axis ``a = r_p / (1 - e)``. For a
+    true anomaly in ``[0, 180] deg`` the result lies in ``[0, P/2]``; the time to
+    swing the long way round to periapsis (e.g. from an outbound launch point
+    through apoapsis) is the complement ``P - t``.
+
+    Args:
+        periapsis_radius: Periapsis distance from the attractor's center (astropy
+            Quantity, length units).
+        eccentricity: The (dimensionless) orbital eccentricity, ``0 <= e < 1``.
+        true_anomaly: True anomaly measured from periapsis (astropy Quantity,
+            angle units).
+        attractor: The central body (boinor Body, default Sun).
+
+    Returns:
+        The time of flight from periapsis to the given true anomaly (astropy
+        Quantity, days).
+
+    Raises:
+        ValueError: If the orbit is not elliptical (``e < 0`` or ``e >= 1``).
+    """
+    if not 0.0 <= eccentricity < 1.0:
+        raise ValueError(
+            "elliptic_time_of_flight requires an elliptical orbit (0 <= e < 1)."
+        )
+    nu: float = true_anomaly.to(u.rad).value
+    eccentric_anomaly: float = 2.0 * np.arctan2(
+        np.sqrt(1.0 - eccentricity) * np.sin(nu / 2.0),
+        np.sqrt(1.0 + eccentricity) * np.cos(nu / 2.0),
+    )
+    eccentric_anomaly = eccentric_anomaly % (2.0 * np.pi)
+    mean_anomaly: float = eccentric_anomaly - eccentricity * np.sin(eccentric_anomaly)
+    semimajor_axis: u.Quantity = periapsis_radius / (1.0 - eccentricity)
+    mean_motion: u.Quantity = np.sqrt(attractor.k / semimajor_axis**3)
+    return (mean_anomaly / mean_motion).to(u.day)
+
+
 def hyperbolic_time_of_flight(
     periapsis_radius: u.Quantity,
     v_infinity: u.Quantity,

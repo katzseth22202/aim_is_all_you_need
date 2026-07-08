@@ -19,6 +19,7 @@ from src.scenario import (
     paper_scenarios,
     periapsis_reaim_cost_per_degree,
     scenarios_to_dataframe,
+    single_impulse_resonant_dive,
     solar_dive_periapsis_speed,
     solar_dive_reintercept_gap,
     solar_dive_whip_around_angle,
@@ -203,6 +204,45 @@ def test_two_impulse_phasing_loop_is_free_in_total_impulse() -> None:
     leg_one = loop.earth_speed - loop.dip_aphelion_speed
     leg_two = loop.dip_aphelion_speed - loop.deep_dive_aphelion_speed
     assert is_nearly_equal(leg_one + leg_two, loop.total_boost, percent=1e-6)
+
+
+def test_single_impulse_resonant_dive_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: folding the phasing into one Earth boost
+    # aims the projectile outbound to a ~1.9 AU aphelion; it re-intercepts Earth
+    # after ~0.85 yr, and the boost grows to ~37 km/s (a ~24 km/s retrograde
+    # component plus a ~28 km/s outbound radial one).
+    dive = single_impulse_resonant_dive()
+    assert is_nearly_equal(dive.closing_aphelion, 1.9 * u.AU, percent=0.02)
+    assert is_nearly_equal(dive.reintercept_time, 0.85 * u.year, percent=0.02)
+    assert is_nearly_equal(dive.earth_boost, 37 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(dive.retrograde_component, 24 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(dive.radial_component, 28 * u.km / u.s, percent=0.03)
+
+
+def test_single_impulse_resonant_dive_boost_decomposition() -> None:
+    # The single Earth boost is the vector sum of a retrograde leg and an outbound
+    # radial leg, and the retrograde leg is the same ~24 km/s a direct dive (and
+    # the free two-impulse loop) spends to reach the solar periapsis. The radial
+    # leg -- what "buys" the phasing coast -- is the whole reason the boost grows.
+    dive = single_impulse_resonant_dive()
+    combined = np.sqrt(dive.retrograde_component**2 + dive.radial_component**2).to(
+        u.km / u.s
+    )
+    assert is_nearly_equal(dive.earth_boost, combined, percent=1e-9)
+    assert is_nearly_equal(
+        dive.retrograde_component, two_impulse_phasing_loop().total_boost, percent=0.01
+    )
+    assert dive.radial_component > 0 * u.km / u.s
+
+
+def test_single_impulse_resonant_dive_costs_more_than_free_phasing() -> None:
+    # Appendix sec:earth_reintercept: the single-impulse route needs only the Earth
+    # node but is not free -- its ~37 km/s boost exceeds the two-impulse loop's free
+    # ~24 km/s total, which is why its doubling factor falls below two. Its ~0.85 yr
+    # cycle is also longer than the ~0.82 yr two-impulse floor.
+    dive = single_impulse_resonant_dive()
+    assert dive.earth_boost > two_impulse_phasing_loop().total_boost
+    assert dive.reintercept_time > earth_reintercept_cycle_floor()
 
 
 def test_earth_reintercept_cycle_floor_matches_appendix() -> None:
