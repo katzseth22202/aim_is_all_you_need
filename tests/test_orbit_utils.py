@@ -16,10 +16,13 @@ from src.orbit_utils import (
     find_periapsis_radius_from_apoapsis_and_speed,
     get_period,
     get_semimajor_axis,
+    hyperbolic_eccentricity,
+    hyperbolic_time_of_flight,
     orbit_from_periapsis_speed_and_apoapsis_radius,
     speed_around_attractor,
     speed_at_distance,
     speed_with_escape_energy,
+    true_anomaly_at_radius,
 )
 from tests.test_helpers import is_nearly_equal
 
@@ -118,3 +121,51 @@ def test_speed_at_distance() -> None:
         distance=EARTH_A,
     )
     assert is_nearly_equal(speed_at_earth, 150.24114202 * u.km / u.s)
+
+
+def test_hyperbolic_eccentricity_from_periapsis_and_vinf() -> None:
+    # A 4 solar-radii periapsis with ~233 km/s hyperbolic-excess speed gives the
+    # escaping-hyperbola eccentricity of the boosted solar-dive return
+    # (paper Appendix sec:earth_reintercept): e = 1 + r_p * v_inf**2 / mu.
+    periapsis = 4 * Sun.R
+    e = hyperbolic_eccentricity(periapsis, 233 * u.km / u.s, Sun)
+    assert e > 1.0  # genuinely hyperbolic
+    assert e == pytest.approx(2.14, abs=0.05)
+
+
+def test_true_anomaly_at_radius_ellipse_apoapsis_is_180() -> None:
+    # On any ellipse, apoapsis (r = r_a) sits at true anomaly 180 deg. Take a
+    # (r_p, r_a) = (1, 3) ellipse: e = (3-1)/(3+1) = 0.5.
+    nu = true_anomaly_at_radius(1 * u.AU, 0.5, 3 * u.AU)
+    assert is_nearly_equal(nu, 180 * u.deg, percent=0.001)
+
+
+def test_true_anomaly_at_radius_hyperbola_climbout() -> None:
+    # The boosted solar-dive hyperbola (4 R_sun periapsis, e ~ 2.14) re-crosses
+    # 1 AU at a true anomaly of ~116 deg -- the climb-out half of the ~295 deg
+    # whip-around (paper Appendix sec:earth_reintercept).
+    nu = true_anomaly_at_radius(4 * Sun.R, 2.14, EARTH_A)
+    assert is_nearly_equal(nu, 116 * u.deg, percent=0.03)
+
+
+def test_true_anomaly_at_radius_rejects_unreachable_radius() -> None:
+    # A radius inside periapsis is unreachable (|cos nu| > 1); the function
+    # raises rather than returning a nonsense angle.
+    with pytest.raises(ValueError, match="not reachable"):
+        true_anomaly_at_radius(1 * u.AU, 0.5, 0.5 * u.AU)
+
+
+def test_hyperbolic_time_of_flight_matches_climb_out_week() -> None:
+    # Climbing the boosted solar-dive hyperbola from periapsis out to 1 AU takes
+    # ~1 week (paper Appendix sec:earth_reintercept), which -- added to the ~66 d
+    # fall -- makes the round trip ~0.2 yr.
+    tof = hyperbolic_time_of_flight(4 * Sun.R, 233 * u.km / u.s, 116 * u.deg, Sun)
+    assert is_nearly_equal(tof, 7.0 * u.day, percent=0.1)
+
+
+def test_hyperbolic_time_of_flight_rejects_nonhyperbolic_orbit() -> None:
+    # With zero excess speed the orbit is parabolic (e = 1), not hyperbolic, so
+    # the hyperbolic time-of-flight is undefined and the function raises rather
+    # than dividing by v_infinity = 0.
+    with pytest.raises(ValueError, match="hyperbolic"):
+        hyperbolic_time_of_flight(1 * u.AU, 0 * u.km / u.s, 90 * u.deg, Sun)

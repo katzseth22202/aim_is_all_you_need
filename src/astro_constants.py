@@ -47,6 +47,17 @@ STD_FUDGE_FACTOR: float = (
     0.8  # the fudge factor described in the paper for how elastic PuffSat collisions are
 )
 
+# --- "Sorry, I Don't Need ISRU" solar-dive re-intercept (paper Appendix
+# sec:earth_reintercept) ---
+# The deep dive targets the 4 solar-radii periapsis of the 2005 Solar Probe
+# design (mccomas2005solar), a count of Sun radii so astro_constants stays free
+# of the boinor Sun body; callers multiply by Sun.R.
+SOLAR_DIVE_PERIAPSIS_SOLAR_RADII = 4.0
+# Shallow-dip periapsis of the two-impulse phasing loop: the projectile dips to
+# ~0.45 AU, returns to 1 AU tangentially after one dip period (~0.62 yr), then a
+# second colinear retrograde PuffSat boost drops it into the deep dive.
+TWO_IMPULSE_DIP_PERIAPSIS = 0.45 * u.AU
+
 # --- Suborbital "200 km" rocket delta-v budget (paper Section 2.1) ---
 # The paper claims a reusable suborbital rocket that merely reaches ~200 km
 # altitude (it does NOT reach orbit on its own; PuffSat pulses do the rest) can

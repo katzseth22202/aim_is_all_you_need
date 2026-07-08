@@ -21,13 +21,16 @@ from src.astro_constants import (
 )
 from src.orbit_utils import orbit_from_rp_ra
 from src.scenario import (
+    earth_reintercept_cycle_floor,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
     launch_capacity_time,
     lunar_return_transfer_dv,
+    millionfold_scaling_time,
     paper_scenarios,
     scenarios_to_dataframe,
+    solar_dive_reintercept_gap,
     solar_fusion_velocity,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
@@ -75,8 +78,17 @@ def main() -> None:
     print(
         f"lunar launch cycle capacity time = {launch_capacity_time(lunar_mass_ratio, LUNAR_MONTH)}"
     )
+    # A boosted solar-dive return crosses 1 AU ~136 deg from Earth, so the growth
+    # cycle is set by phasing the return to an Earth resonance (~0.82 yr floor),
+    # not by the bare ~0.5 yr dive. See paper Appendix sec:earth_reintercept.
     print(
-        f"launch cycle capacity of solar periapsis scenario = {launch_capacity_time(2, 0.5 * u.year)}"
+        "solar-dive re-intercept: unphased 1 AU miss = "
+        f"{solar_dive_reintercept_gap():.0f}, cycle floor = "
+        f"{earth_reintercept_cycle_floor():.3f}"
+    )
+    print(
+        "launch capacity millionfold time (double each re-intercept cycle) = "
+        f"{millionfold_scaling_time()}"
     )
     print(
         f"Velocity of rocket at Earth distance after periapsis at 200km/s = {earth_velocity_200km_periapsis()}"

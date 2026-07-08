@@ -9,12 +9,22 @@ from src.propulsion import payload_mass_ratio
 from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    boosted_solar_dive_v_infinity,
+    earth_reintercept_cycle_floor,
     find_best_lunar_return,
+    launch_capacity_time,
     lunar_return_transfer_dv,
+    millionfold_scaling_time,
+    min_energy_solar_dive_time,
     paper_scenarios,
+    periapsis_reaim_cost_per_degree,
     scenarios_to_dataframe,
+    solar_dive_periapsis_speed,
+    solar_dive_reintercept_gap,
+    solar_dive_whip_around_angle,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
+    two_impulse_phasing_loop,
 )
 from tests.test_helpers import is_nearly_equal
 
@@ -128,6 +138,101 @@ def test_find_best_lunar_return_raises_when_no_feasible_burn() -> None:
     # filtered out and the function raises rather than returning None.
     with pytest.raises(ValueError, match="No valid burn"):
         find_best_lunar_return(retrograde_dv_required=1000 * u.km / u.s)
+
+
+def test_solar_dive_periapsis_speed_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: a dive from 1 AU to 4 solar radii reaches
+    # ~309 km/s at periapsis (the paper rounds the ~306 km/s dive speed up to the
+    # local escape speed). Pin the value from the repo's primitives.
+    v = solar_dive_periapsis_speed()
+    assert is_nearly_equal(v, 306.0 * u.km / u.s, percent=0.01)
+
+
+def test_boosted_solar_dive_v_infinity_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: boosting the ~309 km/s escape speed by x1.25
+    # to ~387 km/s leaves ~233 km/s of hyperbolic-excess speed to spare, so the
+    # return genuinely escapes on a hyperbola.
+    v_inf = boosted_solar_dive_v_infinity()
+    assert is_nearly_equal(v_inf, 233 * u.km / u.s, percent=0.02)
+
+
+def test_min_energy_solar_dive_time_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: the minimum-energy fall from 1 AU to 4 solar
+    # radii (half of a ~0.509 AU ellipse) takes ~66 days.
+    t = min_energy_solar_dive_time()
+    assert is_nearly_equal(t, 66 * u.day, percent=0.02)
+
+
+def test_solar_dive_whip_around_angle_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: 180 deg falling to periapsis plus ~115 deg
+    # of hyperbolic climb-out gives a ~295 deg whip-around.
+    whip = solar_dive_whip_around_angle()
+    assert is_nearly_equal(whip, 295 * u.deg, percent=0.02)
+
+
+def test_solar_dive_reintercept_gap_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: over the ~0.2 yr round trip Earth advances
+    # only ~71 deg while the projectile whips ~295 deg and re-crosses ~65 deg
+    # behind launch, an unphased miss of ~136 deg. Crossing 1 AU is not reaching
+    # Earth.
+    gap = solar_dive_reintercept_gap()
+    assert is_nearly_equal(gap, 136 * u.deg, percent=0.03)
+
+
+def test_periapsis_reaim_cost_per_degree_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: re-aiming at the ~309 km/s periapsis costs
+    # ~5.4 km/s per degree, prohibitive against a ~24 km/s dive boost -- so the
+    # miss is fixed by phasing, not re-aiming.
+    cost = periapsis_reaim_cost_per_degree()
+    assert is_nearly_equal(cost, 5.4 * u.km / u.s, percent=0.02)
+
+
+def test_two_impulse_phasing_loop_is_free_in_total_impulse() -> None:
+    # Appendix sec:earth_reintercept: the boost sequence 29.78 / 23.6 / 5.7 km/s
+    # (Earth, dip-aphelion, deep-dive-aphelion) has two colinear retrograde legs
+    # summing to a direct dive's ~24 km/s, and the dip returns after ~0.62 yr.
+    loop = two_impulse_phasing_loop()
+    assert is_nearly_equal(loop.earth_speed, 29.78 * u.km / u.s, percent=0.01)
+    assert is_nearly_equal(loop.dip_aphelion_speed, 23.6 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(
+        loop.deep_dive_aphelion_speed, 5.7 * u.km / u.s, percent=0.02
+    )
+    assert is_nearly_equal(loop.total_boost, 24 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(loop.dip_return_time, 0.62 * u.year, percent=0.02)
+    # The two legs are colinear and retrograde, so they add to the direct boost.
+    leg_one = loop.earth_speed - loop.dip_aphelion_speed
+    leg_two = loop.dip_aphelion_speed - loop.deep_dive_aphelion_speed
+    assert is_nearly_equal(leg_one + leg_two, loop.total_boost, percent=1e-6)
+
+
+def test_earth_reintercept_cycle_floor_matches_appendix() -> None:
+    # Appendix sec:earth_reintercept: Earth reaches the fixed 1 AU crossing
+    # longitude after sweeping the whip-around fraction of a year, ~0.82 yr. This
+    # supersedes the paper's earlier ~0.5 yr ("6 month") cycle.
+    floor = earth_reintercept_cycle_floor()
+    assert is_nearly_equal(floor, 0.82 * u.year, percent=0.02)
+    # The floor is strictly longer than the retired 6-month cycle.
+    assert floor > 0.5 * u.year
+
+
+def test_millionfold_scaling_time_is_about_16_years() -> None:
+    # Appendix sec:earth_reintercept: ~20 doublings at ~0.82 yr each reach a
+    # millionfold in ~16 years -- not the "under a decade" a ~0.5 yr cycle implies.
+    t = millionfold_scaling_time()
+    assert is_nearly_equal(t, 16 * u.year, percent=0.03)
+    # The correction is conservative: the old 6-month cycle gave under a decade.
+    old = launch_capacity_time(2, 0.5 * u.year)
+    assert t > old
+    assert old < 10 * u.year
+
+
+def test_millionfold_scaling_time_uses_derived_floor() -> None:
+    # millionfold_scaling_time defaults to the derived re-intercept floor, so it
+    # equals launch_capacity_time evaluated at that same floor (no magic 0.82).
+    floor = earth_reintercept_cycle_floor()
+    assert is_nearly_equal(
+        millionfold_scaling_time(), launch_capacity_time(2, floor), percent=1e-9
+    )
 
 
 def test_scenarios_to_dataframe_projects_catalog() -> None:

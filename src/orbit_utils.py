@@ -380,6 +380,110 @@ def find_periapsis_radius_from_apoapsis_and_speed(
     return periapsis_radius
 
 
+def hyperbolic_eccentricity(
+    periapsis_radius: u.Quantity, v_infinity: u.Quantity, attractor: Body = Sun
+) -> float:
+    """Eccentricity of the hyperbola with a given periapsis and hyperbolic-excess speed.
+
+    For a hyperbolic orbit the specific energy is ``v_infinity**2 / 2``, so the
+    (negative) semi-major axis is ``a = -mu / v_infinity**2`` and the eccentricity
+    follows from ``r_p = a(1 - e)``:
+
+        e = 1 + r_p * v_infinity**2 / mu.
+
+    Args:
+        periapsis_radius: Periapsis distance from the attractor's center (astropy
+            Quantity, length units).
+        v_infinity: Hyperbolic-excess speed far from the attractor (astropy
+            Quantity, velocity units).
+        attractor: The central body (boinor Body, default Sun).
+
+    Returns:
+        The (dimensionless) eccentricity, strictly greater than 1.
+    """
+    e: u.Quantity = 1 + periapsis_radius * v_infinity**2 / attractor.k
+    return float(e.decompose().value)
+
+
+def true_anomaly_at_radius(
+    periapsis_radius: u.Quantity, eccentricity: float, radius: u.Quantity
+) -> u.Quantity:
+    """True anomaly at which a conic orbit reaches a given radius.
+
+    Inverts the conic equation ``r = p / (1 + e*cos(nu))`` with semi-latus rectum
+    ``p = periapsis_radius * (1 + e)``, giving ``cos(nu) = (p/r - 1) / e``. Valid
+    for ellipses (``e < 1``) and hyperbolas (``e > 1``); the principal value in
+    ``[0, 180) deg`` (the outbound branch) is returned.
+
+    Args:
+        periapsis_radius: Periapsis distance from the attractor's center (astropy
+            Quantity, length units).
+        eccentricity: The (dimensionless) orbital eccentricity.
+        radius: The distance at which to evaluate the true anomaly (astropy
+            Quantity, length units).
+
+    Returns:
+        The true anomaly at the given radius (astropy Quantity, degrees).
+
+    Raises:
+        ValueError: If the radius is not reachable on the orbit (``|cos(nu)| > 1``).
+    """
+    semi_latus_rectum: u.Quantity = periapsis_radius * (1 + eccentricity)
+    cos_nu: float = float(
+        ((semi_latus_rectum / radius).decompose().value - 1) / eccentricity
+    )
+    if not -1.0 <= cos_nu <= 1.0:
+        raise ValueError("Radius is not reachable on this orbit.")
+    return (np.degrees(np.arccos(cos_nu)) * u.deg).to(u.deg)
+
+
+def hyperbolic_time_of_flight(
+    periapsis_radius: u.Quantity,
+    v_infinity: u.Quantity,
+    true_anomaly: u.Quantity,
+    attractor: Body = Sun,
+) -> u.Quantity:
+    """Time from periapsis to a given true anomaly on a hyperbolic orbit.
+
+    Uses the hyperbolic form of Kepler's equation. The hyperbolic eccentric
+    anomaly ``F`` satisfies ``cosh(F) = (e + cos(nu)) / (1 + e*cos(nu))``, the mean
+    anomaly is ``M = e*sinh(F) - F``, and the time is ``M / n`` with mean motion
+    ``n = sqrt(mu / |a|**3)`` and ``|a| = mu / v_infinity**2``.
+
+    Args:
+        periapsis_radius: Periapsis distance from the attractor's center (astropy
+            Quantity, length units).
+        v_infinity: Hyperbolic-excess speed far from the attractor (astropy
+            Quantity, velocity units).
+        true_anomaly: True anomaly measured from periapsis (astropy Quantity,
+            angle units).
+        attractor: The central body (boinor Body, default Sun).
+
+    Returns:
+        The time of flight from periapsis to the given true anomaly (astropy
+        Quantity, days).
+
+    Raises:
+        ValueError: If the orbit is not hyperbolic (``e <= 1``).
+    """
+    eccentricity: float = hyperbolic_eccentricity(
+        periapsis_radius, v_infinity, attractor
+    )
+    if eccentricity <= 1.0:
+        raise ValueError(
+            "hyperbolic_time_of_flight requires a hyperbolic orbit (e > 1)."
+        )
+    nu: float = true_anomaly.to(u.rad).value
+    cosh_f: float = (eccentricity + np.cos(nu)) / (1 + eccentricity * np.cos(nu))
+    hyperbolic_anomaly: float = float(np.arccosh(cosh_f))
+    mean_anomaly: float = (
+        eccentricity * np.sinh(hyperbolic_anomaly) - hyperbolic_anomaly
+    )
+    abs_semimajor_axis: u.Quantity = attractor.k / v_infinity**2
+    mean_motion: u.Quantity = np.sqrt(attractor.k / abs_semimajor_axis**3)
+    return (mean_anomaly / mean_motion).to(u.day)
+
+
 def orbit_from_periapsis_speed_and_apoapsis_radius(
     periapsis_speed: u.Quantity,
     apoapsis_radius: u.Quantity,

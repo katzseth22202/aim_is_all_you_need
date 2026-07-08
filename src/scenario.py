@@ -25,7 +25,7 @@ lower-level calculations to provide comprehensive mission analysis.
 """
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -49,8 +49,10 @@ from src.astro_constants import (
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
+    SOLAR_DIVE_PERIAPSIS_SOLAR_RADII,
     SUBORBITAL_DV_TO_200KM,
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
+    TWO_IMPULSE_DIP_PERIAPSIS,
 )
 
 # Import orbital mechanics functions from orbit_utils
@@ -58,12 +60,15 @@ from src.orbit_utils import (
     apoapsis_speed,
     escape_velocity,
     get_period,
+    hyperbolic_eccentricity,
+    hyperbolic_time_of_flight,
     orbit_from_periapsis_speed_and_apoapsis_radius,
     orbit_from_rp_ra,
     periapsis_speed,
     speed_around_attractor,
     speed_at_distance,
     speed_with_escape_energy,
+    true_anomaly_at_radius,
 )
 
 # Import propulsion functions from propulsion
@@ -589,3 +594,336 @@ def find_parker_orbit_period() -> u.Quantity:
     semimajor_axis: u.Quantity = (EARTH_A + PARKER_PERIAPSIS) / 2
     period: u.Quantity = get_period(Sun, semimajor_axis)
     return period.to(u.year)
+
+
+# ---------------------------------------------------------------------------
+# "Sorry, I Don't Need ISRU" solar-dive Earth re-intercept
+# (paper Appendix sec:earth_reintercept).
+#
+# A boosted solar-dive projectile leaves periapsis on an escaping hyperbola and
+# crosses 1 AU only once, far from where Earth has moved to. Crossing 1 AU is not
+# reaching Earth: the return must be phased to an Earth resonance, and that
+# phasing -- not a 6-month dive -- sets the payload-doubling cycle. The functions
+# below prove the appendix's cited figures from the repo's own primitives and
+# supply the derived cycle floor used by the growth-rate estimate.
+# ---------------------------------------------------------------------------
+
+SOLAR_DIVE_PERIAPSIS = SOLAR_DIVE_PERIAPSIS_SOLAR_RADII * Sun.R
+
+
+def solar_dive_periapsis_speed(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Speed at periapsis of a minimum-energy dive from 1 AU to the solar periapsis.
+
+    The projectile falls from an aphelion at ``apoapsis_radius`` (Earth's orbit)
+    to ``periapsis_radius`` (4 solar radii by default). This backs the appendix's
+    ~309 km/s figure -- the code gives ~306 km/s for the dive itself, which the
+    paper rounds up to the ~309 km/s local escape speed at that radius (see
+    :func:`boosted_solar_dive_v_infinity`).
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        apoapsis_radius: Aphelion distance, i.e. the launch orbit (astropy
+            Quantity, default EARTH_A).
+
+    Returns:
+        The periapsis speed of the dive (astropy Quantity, km/s).
+    """
+    dive_orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=periapsis_radius,
+        attractor_body=Sun,
+    )
+    return periapsis_speed(dive_orbit).to(u.km / u.s)
+
+
+def boosted_solar_dive_v_infinity(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    periapsis_solar_speed: u.Quantity = PERIAPSIS_SOLAR_V,
+    periapsis_solar_burn: u.Quantity = PERIAPSIS_SOLAR_BURN,
+) -> u.Quantity:
+    """Hyperbolic-excess speed left after a periapsis boost at the solar dive.
+
+    A pulsed-propulsion boost at the 4 solar-radii periapsis raises the speed by
+    the same fraction the paper applies at Parker depth (200 -> 250 km/s, i.e.
+    x1.25), lifting the ~309 km/s local escape speed to ~387 km/s. The projectile
+    then escapes with ``sqrt(v_boosted**2 - v_esc**2)`` to spare, the appendix's
+    ~233 km/s.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        periapsis_solar_speed: Reference pre-boost solar-dive speed used to set
+            the boost fraction (astropy Quantity, default PERIAPSIS_SOLAR_V).
+        periapsis_solar_burn: Reference speed increase setting the boost fraction
+            (astropy Quantity, default PERIAPSIS_SOLAR_BURN).
+
+    Returns:
+        The hyperbolic-excess (escape-to-spare) speed (astropy Quantity, km/s).
+    """
+    v_escape: u.Quantity = escape_velocity(Sun, altitude=periapsis_radius - Sun.R)
+    boost_ratio: u.Quantity = (
+        periapsis_solar_speed + periapsis_solar_burn
+    ) / periapsis_solar_speed
+    v_boosted: u.Quantity = v_escape * boost_ratio
+    return np.sqrt(v_boosted**2 - v_escape**2).to(u.km / u.s)
+
+
+def min_energy_solar_dive_time(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Fall time from 1 AU to the solar periapsis on a minimum-energy dive.
+
+    The dive is half of the transfer ellipse whose aphelion is ``apoapsis_radius``
+    and periapsis is ``periapsis_radius`` (a ~0.509 AU semi-major axis for the
+    default 4 solar-radii dive), so the fall takes half the orbital period -- the
+    appendix's ~66 days.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        apoapsis_radius: Aphelion distance, i.e. the launch orbit (astropy
+            Quantity, default EARTH_A).
+
+    Returns:
+        The fall time from aphelion to periapsis (astropy Quantity, days).
+    """
+    dive_orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=periapsis_radius,
+        attractor_body=Sun,
+    )
+    return (get_period(Sun, dive_orbit.a) / 2).to(u.day)
+
+
+def solar_dive_whip_around_angle(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Heliocentric longitude the boosted projectile sweeps from launch to 1 AU re-crossing.
+
+    Falling from aphelion to periapsis always sweeps 180 deg of heliocentric
+    longitude; the boosted climb-out is an escaping hyperbola that adds its true
+    anomaly at the 1 AU re-crossing (~116 deg). The total whip-around is the
+    appendix's ~295 deg, and it barely depends on periapsis depth.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        apoapsis_radius: Re-crossing distance, i.e. Earth's orbit (astropy
+            Quantity, default EARTH_A).
+
+    Returns:
+        The total whip-around angle (astropy Quantity, degrees).
+    """
+    v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
+        periapsis_radius=periapsis_radius
+    )
+    eccentricity: float = hyperbolic_eccentricity(periapsis_radius, v_infinity, Sun)
+    climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
+        periapsis_radius, eccentricity, apoapsis_radius
+    )
+    return (180 * u.deg + climb_true_anomaly).to(u.deg)
+
+
+def solar_dive_reintercept_gap(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Angular gap between where the projectile re-crosses 1 AU and where Earth is.
+
+    Over the ~0.2 yr round trip (fall + hyperbolic climb-out) Earth advances only
+    ~71 deg, while the projectile whips ~295 deg around the Sun and re-crosses
+    ~65 deg *behind* its launch longitude. The unphased miss is therefore ~136 deg
+    -- set by the whip-around, not by Earth's drift.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        apoapsis_radius: Re-crossing distance, i.e. Earth's orbit (astropy
+            Quantity, default EARTH_A).
+
+    Returns:
+        The unphased heliocentric miss angle (astropy Quantity, degrees).
+    """
+    v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
+        periapsis_radius=periapsis_radius
+    )
+    eccentricity: float = hyperbolic_eccentricity(periapsis_radius, v_infinity, Sun)
+    climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
+        periapsis_radius, eccentricity, apoapsis_radius
+    )
+    whip_around: u.Quantity = 180 * u.deg + climb_true_anomaly
+    round_trip: u.Quantity = (
+        min_energy_solar_dive_time(periapsis_radius, apoapsis_radius)
+        + hyperbolic_time_of_flight(
+            periapsis_radius, v_infinity, climb_true_anomaly, Sun
+        )
+    ).to(u.year)
+    earth_advance: u.Quantity = (360 * u.deg) * (round_trip / (1.0 * u.year))
+    # The re-crossing lands (whip_around - 360 deg) relative to launch (negative =
+    # behind); the gap to Earth is that plus Earth's prograde advance.
+    crossing_relative_to_launch: u.Quantity = whip_around - 360 * u.deg
+    return (earth_advance - crossing_relative_to_launch).to(u.deg)
+
+
+def periapsis_reaim_cost_per_degree(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+) -> u.Quantity:
+    """Delta-v to turn the velocity vector by one degree at the solar periapsis.
+
+    Turning the velocity by an angle ``theta`` costs ``2 * v_p * sin(theta/2)``.
+    At the ~309 km/s periapsis (local escape) speed this is the appendix's
+    ~5.4 km/s per degree -- prohibitive against a ~24 km/s dive boost, which is
+    why the miss is fixed by phasing (timing), not by re-aiming at periapsis.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+
+    Returns:
+        The re-aim cost for a one-degree turn (astropy Quantity, km/s per degree).
+    """
+    v_periapsis: u.Quantity = escape_velocity(Sun, altitude=periapsis_radius - Sun.R)
+    return (2 * v_periapsis * np.sin(np.deg2rad(0.5))).to(u.km / u.s)
+
+
+@dataclass(frozen=True)
+class TwoImpulseLoop:
+    """Result of the two-impulse phasing loop at 1 AU (all speeds tangential there).
+
+    Attributes:
+        earth_speed: Earth's circular heliocentric speed (astropy Quantity).
+        dip_aphelion_speed: Speed at 1 AU after the first boost onto the shallow
+            dip orbit (astropy Quantity).
+        deep_dive_aphelion_speed: Speed at 1 AU after the second boost onto the
+            deep dive (astropy Quantity).
+        total_boost: Combined magnitude of the two colinear retrograde boosts,
+            equal to a direct dive's boost (astropy Quantity).
+        dip_return_time: Time for the dip orbit to return to 1 AU (astropy
+            Quantity).
+    """
+
+    earth_speed: u.Quantity
+    dip_aphelion_speed: u.Quantity
+    deep_dive_aphelion_speed: u.Quantity
+    total_boost: u.Quantity
+    dip_return_time: u.Quantity
+
+
+def two_impulse_phasing_loop(
+    dip_periapsis: u.Quantity = TWO_IMPULSE_DIP_PERIAPSIS,
+    deep_dive_periapsis: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> TwoImpulseLoop:
+    """Prove the two-impulse phasing loop is free in total impulse.
+
+    A first PuffSat boost at 1 AU drops the projectile to a shallow ``dip_periapsis``
+    orbit; it returns to 1 AU tangentially after one dip period (~0.62 yr), where a
+    second boost drops it into the deep dive. Both boosts are retrograde and
+    colinear at 1 AU, so their magnitudes sum to a direct dive's single boost
+    (~24 km/s) -- the delay costs no extra impulse, holding the doubling factor at
+    two. The appendix's boost sequence is 29.78, 23.6, 5.7 km/s.
+
+    Args:
+        dip_periapsis: Periapsis of the shallow dip orbit (astropy Quantity,
+            default TWO_IMPULSE_DIP_PERIAPSIS).
+        deep_dive_periapsis: Periapsis of the deep dive (astropy Quantity,
+            default 4 solar radii).
+        apoapsis_radius: The shared aphelion / boost point (astropy Quantity,
+            default EARTH_A).
+
+    Returns:
+        A :class:`TwoImpulseLoop` with the three 1 AU speeds, the total boost, and
+        the dip return time.
+    """
+    earth_speed: u.Quantity = speed_around_attractor(a=apoapsis_radius, attractor=Sun)
+    dip_orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=dip_periapsis,
+        attractor_body=Sun,
+    )
+    dip_aphelion_speed: u.Quantity = apoapsis_speed(dip_orbit)
+    deep_dive_orbit: Orbit = orbit_from_rp_ra(
+        apoapsis_radius=apoapsis_radius,
+        periapsis_radius=deep_dive_periapsis,
+        attractor_body=Sun,
+    )
+    deep_dive_aphelion_speed: u.Quantity = apoapsis_speed(deep_dive_orbit)
+    # Both boosts are retrograde and colinear at 1 AU, so the total is just the
+    # single direct-dive boost from Earth's speed down to the deep-dive aphelion.
+    total_boost: u.Quantity = (earth_speed - deep_dive_aphelion_speed).to(u.km / u.s)
+    dip_return_time: u.Quantity = get_period(Sun, dip_orbit.a).to(u.year)
+    return TwoImpulseLoop(
+        earth_speed=earth_speed.to(u.km / u.s),
+        dip_aphelion_speed=dip_aphelion_speed.to(u.km / u.s),
+        deep_dive_aphelion_speed=deep_dive_aphelion_speed.to(u.km / u.s),
+        total_boost=total_boost,
+        dip_return_time=dip_return_time,
+    )
+
+
+def earth_reintercept_cycle_floor(
+    periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
+    apoapsis_radius: u.Quantity = EARTH_A,
+) -> u.Quantity:
+    """Shortest solar-dive cycle that actually re-intercepts Earth.
+
+    The projectile re-crosses 1 AU at a fixed longitude ``whip_around - 360 deg``
+    behind its launch point. Earth first reaches that longitude after sweeping the
+    complementary ``whip_around`` degrees prograde, i.e. a fraction
+    ``whip_around / 360 deg`` of a year. With a ~295 deg whip-around this floor is
+    the appendix's ~0.82 yr -- it supersedes the paper's earlier implied ~0.5 yr
+    ("6 month") cycle and is the doubling interval for the growth estimate.
+
+    Args:
+        periapsis_radius: Periapsis distance from the Sun's center (astropy
+            Quantity, default 4 solar radii).
+        apoapsis_radius: Re-crossing distance, i.e. Earth's orbit (astropy
+            Quantity, default EARTH_A).
+
+    Returns:
+        The re-intercepting cycle floor (astropy Quantity, years).
+    """
+    whip_around: u.Quantity = solar_dive_whip_around_angle(
+        periapsis_radius, apoapsis_radius
+    )
+    return ((whip_around / (360 * u.deg)) * u.year).to(u.year)
+
+
+def millionfold_scaling_time(
+    doubling_factor: float = 2.0,
+    target_multiple: float = TARGET_LAUNCH_CAPACITY_MULTIPLE,
+    cycle_time: Optional[u.Quantity] = None,
+) -> u.Quantity:
+    """Time to scale launch capacity a millionfold at one doubling per re-intercept cycle.
+
+    Applies :func:`launch_capacity_time` with the Earth re-intercept cycle floor
+    (:func:`earth_reintercept_cycle_floor`, ~0.82 yr) as the doubling interval.
+    At ``doubling_factor`` = 2 this is ~20 doublings over ~0.82 yr each, the
+    appendix's ~16 years -- not the "under a decade" a ~0.5 yr cycle would imply.
+    Only the two-impulse phasing loop holds the factor at two, so ~16 yr is itself
+    a floor.
+
+    Args:
+        doubling_factor: Payload growth per cycle (default 2.0, the two-impulse
+            loop).
+        target_multiple: Target launch-capacity multiple (default
+            TARGET_LAUNCH_CAPACITY_MULTIPLE = 1e6).
+        cycle_time: Doubling interval (astropy Quantity); defaults to the derived
+            Earth re-intercept cycle floor when None.
+
+    Returns:
+        The time to reach the target multiple (astropy Quantity, years).
+    """
+    if cycle_time is None:
+        cycle_time = earth_reintercept_cycle_floor()
+    return launch_capacity_time(
+        capacity_multiple_per_loop=doubling_factor,
+        one_loop_elapsed_time=cycle_time,
+        target_launch_capacity_multiple=target_multiple,
+    )

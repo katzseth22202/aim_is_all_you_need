@@ -38,6 +38,43 @@ optimization result, **not a PuffSat scenario**. Presented on its own, not insid
 the **scenario table**.
 _Avoid_: lunar scenario, lunar row.
 
+### Heliocentric re-intercept (solar-dive return)
+
+The "Sorry, I Don't Need ISRU" cycle sends a payload to a low solar periapsis, boosts it
+with PuffSat collisions, and returns it across `1 AU`. The vocabulary below is what the
+verification functions in `scenario.py` (`solar_dive_*`, `two_impulse_phasing_loop`,
+`earth_reintercept_cycle_floor`, `millionfold_scaling_time`) name.
+
+**Earth re-intercept**:
+The requirement that the boosted return arrive *where Earth actually is*, not merely cross
+`1 AU`. The boosted orbit is an escaping hyperbola that crosses 1 AU only once, ~136° from
+Earth (`solar_dive_reintercept_gap()`). Crossing 1 AU is not reaching Earth.
+_Avoid_: treating "crosses Earth's orbit" as "hits Earth"; the word "interception" (a
+near-term LEO terminal-guidance sense in the paper, unrelated to this heliocentric one).
+
+**Whip-around**:
+The heliocentric longitude the projectile sweeps from launch to its single 1 AU
+re-crossing — 180° falling to periapsis plus the hyperbola's ~115° climb-out, ~295° in all
+(`solar_dive_whip_around_angle()`). The miss is set by this whip, not by Earth's drift, and
+cannot be re-aimed at periapsis (~5.4 km/s per degree, `periapsis_reaim_cost_per_degree()`).
+_Avoid_: "half orbit" (it is more than 3/4 of a turn).
+
+**Phasing loop** (**two-impulse loop**):
+A pay-in-time maneuver that delays the deep dive until Earth reaches the fixed crossing
+point. The two-impulse form dips shallowly (~0.45 AU) then dives; its two boosts are
+colinear and retrograde, so it is free in total impulse (~24 km/s,
+`two_impulse_phasing_loop()`) and holds the doubling factor at two.
+_Avoid_: calling the phasing a "rocket burn" (every impulse is a PuffSat collision);
+re-aiming at periapsis (that is the rejected alternative, not the fix).
+
+**Re-intercept cycle floor**:
+The shortest solar-dive cycle that actually re-intercepts Earth (~0.82 yr,
+`earth_reintercept_cycle_floor()`), equal to the whip-around fraction of a year. It is the
+payload-doubling interval, so a millionfold scaling takes ~16 yr
+(`millionfold_scaling_time()`). Supersedes the paper's earlier implied ~0.5 yr ("6 month")
+cycle and its "under a decade" scaling.
+_Avoid_: the retired ~0.5 yr / 6-month cycle; "under a decade" for the millionfold.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
@@ -47,6 +84,8 @@ _Avoid_: lunar scenario, lunar row.
   per **PuffSat scenario**, no rows of any other kind.
 - The **lunar-return optimum** is produced alongside the catalog but lives outside
   the **scenario table**.
+- The **re-intercept cycle floor** — not the bare dive time — is the payload-doubling
+  interval, so the millionfold scaling time is derived from it, not from a 6-month cycle.
 
 ## Example dialogue
 
@@ -64,3 +103,8 @@ _Avoid_: lunar scenario, lunar row.
 - The old ninth row forced the **lunar-return optimum** into the **scenario table**
   with a tuple-valued `v_rf`. Resolved: it is not a **PuffSat scenario** and is
   presented separately.
+- The solar-dive cycle once doubled payload every ~0.5 yr ("6 months"), implying a
+  millionfold in under a decade. Resolved: crossing 1 AU is not **Earth re-intercept**;
+  the **re-intercept cycle floor** (~0.82 yr, derived from the **whip-around**) is the
+  doubling interval, giving ~16 yr. `main.py` uses the derived floor and the 6-month
+  figure is retired. See `docs/adr/0001-earth-reintercept-cycle.md`.
