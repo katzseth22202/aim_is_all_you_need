@@ -98,6 +98,10 @@ def test_paper_scenarios_is_uniform_catalog() -> None:
     # Every scenario yields a finite, real mass ratio (no tuple-valued v_rf row).
     for scenario in catalog:
         assert np.isfinite(float(scenario.mass_ratio))
+    # Every paper row cites the section that develops it, mirroring the
+    # \autoref each row of the paper's tab:mass_scenarios carries.
+    for scenario in catalog + earth_reintercept_scenarios():
+        assert scenario.paper_ref.startswith("sec:")
 
 
 def test_paper_scenarios_mass_ratios_regression() -> None:
@@ -312,3 +316,4 @@ def test_scenarios_to_dataframe_projects_catalog() -> None:
             float(scenario.mass_ratio)
         )
         assert df.iloc[i]["desc"] == scenario.desc
+        assert df.iloc[i]["paper_ref"] == scenario.paper_ref

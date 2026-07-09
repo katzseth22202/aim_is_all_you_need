@@ -100,12 +100,17 @@ class PuffSatScenario:
         desc: Human-readable description of the scenario.
         v_ri: Initial velocity of the payload before the collision (astropy
             Quantity, default 0 km/s).
+        paper_ref: LaTeX ``\\label`` of the paper section that develops this
+            mission -- the same section each row of the paper's Table
+            ``tab:mass_scenarios`` cites via ``\\autoref``. Empty for ad-hoc
+            scenarios that are not paper rows.
     """
 
     v_rf: u.Quantity
     v_b: u.Quantity
     desc: str
     v_ri: u.Quantity = 0 * u.km / u.s
+    paper_ref: str = ""
 
     @property
     def mass_ratio(self) -> float:
@@ -120,7 +125,14 @@ class PuffSatScenario:
 
 # Columns of the scenario table -- the DataFrame projection of a scenario
 # catalog. This is the single home for the table schema.
-SCENARIO_COLUMNS = ["payload_puffsat_mass_ratio", "v_rf", "v_ri", "v_b", "desc"]
+SCENARIO_COLUMNS = [
+    "payload_puffsat_mass_ratio",
+    "v_rf",
+    "v_ri",
+    "v_b",
+    "desc",
+    "paper_ref",
+]
 
 
 def paper_scenarios() -> List[PuffSatScenario]:
@@ -175,44 +187,52 @@ def paper_scenarios() -> List[PuffSatScenario]:
             v_b=lunar_transfer_periapsis_speed,
             desc="""Eccentric PuffSats with apogee at lunar distance push
 rocket to minimal low Earth orbit""",
+            paper_ref="sec:starship_safelaunch",
         ),
         PuffSatScenario(
             v_rf=0 * u.km / u.s,
             v_b=-leo_speed,
             v_ri=leo_speed,
             desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats in low orbit""",
+            paper_ref="sec:200_mile_high",
         ),
         PuffSatScenario(
             v_rf=0 * u.km / u.s,
             v_b=-lunar_transfer_periapsis_speed,
             v_ri=leo_speed,
             desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit""",
+            paper_ref="sec:200_mile_high",
         ),
         PuffSatScenario(
             v_rf=prograde_dv_parker_burn,
             v_b=retrograde_jovian_speed,
             desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe. Outbound injection only -- the phased Earth-return leg is scored separately (see earth_reintercept_scenarios)""",
+            paper_ref="sec:jupiter_gravity_initial",
         ),
         PuffSatScenario(
             v_rf=retrograde_dv_parker_burn,
             v_b=retrograde_jovian_speed,
             desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun. Outbound injection only; the retrograde orbit is for head-on collision energetics, not Earth-return phasing""",
+            paper_ref="sec:jupiter_gravity_initial",
         ),
         PuffSatScenario(
             v_rf=lunar_transfer_periapsis_speed,
             v_b=retrograde_jovian_speed,
             desc="""PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit""",
+            paper_ref="sec:jupiter_only_growth",
         ),
         PuffSatScenario(
             v_rf=0 * u.km / u.s,
             v_b=-lunar_esc,
             v_ri=lunar_esc,
             desc="""Decelerate trans-lunar payloads to land on the moon""",
+            paper_ref="sec:no_isru_rocket",
         ),
         PuffSatScenario(
             v_rf=min_saturn_speed,
             v_b=phoebe_low_periapsis_speed,
             desc="""PuffSats approach Saturn from Phoebe and push a Helium-3 payload into a temporary very low orbit around Saturn""",
+            paper_ref="sec:mining_helium_3",
         ),
     ]
 
@@ -238,6 +258,7 @@ def scenarios_to_dataframe(scenarios: List[PuffSatScenario]) -> pd.DataFrame:
             scenario.v_ri,
             scenario.v_b,
             scenario.desc,
+            scenario.paper_ref,
         ]
     return df
 
@@ -269,6 +290,7 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
             v_rf=resonant_dive.earth_boost,
             v_b=retrograde_jovian_speed,
             desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.89 yr. Folding the phasing into one Earth boost raises it to ~37.5 km/s, lowering the mass ratio from the prograde Parker injection's ~3.83""",
+            paper_ref="sec:earth_reintercept",
         ),
     ]
 

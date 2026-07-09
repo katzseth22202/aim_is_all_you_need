@@ -35,4 +35,4 @@ export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp
 	mv environment.yml.tmp environment.yml
 
-all: format mypy test run export-env  ## Format code, run mypy, tests, main script, and export environment 
+all: format mypy test run  ## Format code, run mypy, tests, and main script (run export-env separately) 
