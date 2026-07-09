@@ -22,6 +22,7 @@ from src.astro_constants import (
 from src.orbit_utils import orbit_from_rp_ra
 from src.scenario import (
     earth_reintercept_cycle_floor,
+    earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
@@ -58,6 +59,23 @@ def main() -> None:
     print(
         tabulate(
             scenarios_df,
+            headers="keys",
+            tablefmt="grid",
+            showindex=False,
+            maxcolwidths=[None, 15, 15, 15, 40],
+        )
+    )
+    print("=" * 80)
+    # The Parker rows above are outbound injection only: their 1 AU crossing is
+    # pinned at aphelion and misses Earth by ~136 deg. The phased Earth-return
+    # scenario folds the return phasing into a heavier boost, so it is presented
+    # separately. See paper Appendix sec:earth_reintercept.
+    reintercept_df = scenarios_to_dataframe(earth_reintercept_scenarios())
+    print("\nPhased Earth-return scenarios:")
+    print("=" * 80)
+    print(
+        tabulate(
+            reintercept_df,
             headers="keys",
             tablefmt="grid",
             showindex=False,

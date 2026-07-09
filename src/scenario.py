@@ -190,12 +190,12 @@ rocket to minimal low Earth orbit""",
         PuffSatScenario(
             v_rf=prograde_dv_parker_burn,
             v_b=retrograde_jovian_speed,
-            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe""",
+            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe. Outbound injection only -- the phased Earth-return leg is scored separately (see earth_reintercept_scenarios)""",
         ),
         PuffSatScenario(
             v_rf=retrograde_dv_parker_burn,
             v_b=retrograde_jovian_speed,
-            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun""",
+            desc="""PuffSats approach Earth from Jupiter retrograde Hohmann trajectory and push the object to escape velocity and then to a periapsis near Parker Space probe but in a retrograde orbit around the Sun. Outbound injection only; the retrograde orbit is for head-on collision energetics, not Earth-return phasing""",
         ),
         PuffSatScenario(
             v_rf=lunar_transfer_periapsis_speed,
@@ -239,6 +239,37 @@ def scenarios_to_dataframe(scenarios: List[PuffSatScenario]) -> pd.DataFrame:
             scenario.desc,
         ]
     return df
+
+
+def earth_reintercept_scenarios() -> List[PuffSatScenario]:
+    """Phased Earth-return dive scenarios (paper Appendix sec:earth_reintercept).
+
+    The minimum-energy Parker-injection rows in :func:`paper_scenarios` pin the
+    1 AU crossing at the transfer ellipse's aphelion, so the payload re-crosses
+    1 AU ~136 deg from where Earth has moved to (:func:`solar_dive_reintercept_gap`)
+    -- they are an *outbound injection* cost, not a returning orbit. This sibling
+    catalog folds the Earth-return phasing into the boost instead: the
+    single-impulse resonant dive (:func:`single_impulse_resonant_dive`) aims the
+    payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return
+    re-intercepts Earth after ~0.85 yr.
+
+    The phasing is not free: off the same ~69 km/s Jovian-return PuffSat, the
+    boost grows from the prograde Parker row's ~23.7 km/s to ~37 km/s, which
+    lowers the payload/PuffSat mass ratio from ~3.83 to ~2.07. This is the row
+    that is actually "in the right phase for Earth return".
+
+    Returns:
+        The ordered list of phased Earth-return :class:`PuffSatScenario`.
+    """
+    retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
+    resonant_dive = single_impulse_resonant_dive()
+    return [
+        PuffSatScenario(
+            v_rf=resonant_dive.earth_boost,
+            v_b=retrograde_jovian_speed,
+            desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.85 yr. Folding the phasing into one Earth boost raises it to ~37 km/s, lowering the mass ratio from the prograde Parker injection's ~3.83""",
+        ),
+    ]
 
 
 @dataclass(frozen=True)

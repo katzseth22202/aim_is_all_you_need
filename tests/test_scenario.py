@@ -11,6 +11,7 @@ from src.scenario import (
     PuffSatScenario,
     boosted_solar_dive_v_infinity,
     earth_reintercept_cycle_floor,
+    earth_reintercept_scenarios,
     find_best_lunar_return,
     launch_capacity_time,
     lunar_return_transfer_dv,
@@ -273,6 +274,30 @@ def test_millionfold_scaling_time_uses_derived_floor() -> None:
     assert is_nearly_equal(
         millionfold_scaling_time(), launch_capacity_time(2, floor), percent=1e-9
     )
+
+
+def test_earth_reintercept_scenarios_phases_for_return() -> None:
+    # Appendix sec:earth_reintercept: the phased single-impulse resonant dive is
+    # the row that actually re-intercepts Earth. Off the same ~69 km/s Jovian
+    # PuffSat, its boost is the resonant dive's ~37 km/s Earth boost (not the
+    # prograde Parker row's minimum-energy ~23.7 km/s injection).
+    catalog = earth_reintercept_scenarios()
+    assert len(catalog) == 1
+    phased = catalog[0]
+    assert is_nearly_equal(
+        phased.v_rf, single_impulse_resonant_dive().earth_boost, percent=1e-9
+    )
+    # Pin the phased mass ratio (captured from the repo's primitives).
+    assert float(phased.mass_ratio) == pytest.approx(2.07217048, rel=1e-6)
+
+
+def test_earth_reintercept_phasing_lowers_mass_ratio() -> None:
+    # The whole point: folding Earth-return phasing into the boost costs delta-v,
+    # so the phased dive's mass ratio sits below the prograde Parker injection's
+    # ~3.83 (paper_scenarios index 3) -- it does not come for free.
+    phased_ratio = float(earth_reintercept_scenarios()[0].mass_ratio)
+    prograde_parker_ratio = float(paper_scenarios()[3].mass_ratio)
+    assert phased_ratio < prograde_parker_ratio
 
 
 def test_scenarios_to_dataframe_projects_catalog() -> None:
