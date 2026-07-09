@@ -3,7 +3,7 @@
 Every block below names the paper section it supports -- by section title and
 LaTeX ``\\label`` (e.g. ``sec:no_isru_rocket``) as used in the paper source at
 https://github.com/katzseth22202/Balloon-Pulse-Propulsion -- and quotes the
-claim from ``paper/Aim_Is_All_You_Need.pdf`` that the computed values back up.
+paper claim (DOI 10.5281/zenodo.16741183) that the computed values back up.
 """
 
 import pandas as pd

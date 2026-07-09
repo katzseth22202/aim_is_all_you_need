@@ -1,6 +1,6 @@
 # PuffSat Pulse Propulsion Calculations
 
-This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)) (also available in the `paper/` subdirectory). The code provides computational tools for analyzing PuffSat-based propulsion systems for various space missions.
+This repository contains Python implementations of the orbital mechanics calculations described in the research paper "Aim Is All You Need" ([DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)). The code provides computational tools for analyzing PuffSat-based propulsion systems for various space missions.
 
 ## What are PuffSats?
 
@@ -40,10 +40,6 @@ aim_is_all_you_need/
 │   ├── test_orbit_utils.py # Tests for orbital mechanics functions
 │   ├── test_propulsion.py  # Tests for propulsion functions
 │   └── test_scenario.py    # Tests for scenario analysis
-├── paper/                  # Research paper
-│   ├── Aim_Is_All_You_Need.pdf
-│   ├── README.md
-│   └── LICENSE
 ├── pyproject.toml         # Project configuration and dependencies
 ├── requirements.txt       # Development dependencies
 ├── Makefile              # Convenient commands for development
@@ -166,9 +162,9 @@ The test suite includes:
 5. Ensure all tests pass: `make all`
 6. Submit a pull request
 
-### Raw LaTeX Assets
+### Research Paper
 
-The raw LaTeX source files for the included research paper can be found in the separate repository:
+The research paper itself is not included in this repository. The published version is available via [DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183), and the raw LaTeX source files can be found in the separate repository:
 
 **Repository:** [Balloon-Pulse-Propulsion](https://github.com/katzseth22202/Balloon-Pulse-Propulsion)
 
@@ -188,7 +184,7 @@ year = {2025}
 
 ## Citation
 
-If you use this software or the included research paper in your work, please cite it as follows:
+If you use this software or the associated research paper in your work, please cite it as follows:
 
 **Software Citation:**
 ```bibtex
@@ -219,9 +215,6 @@ year = {2025}
 
 ## License
 
-This repository uses a dual licensing structure:
+The code in this repository is licensed under the Apache License 2.0 - see `LICENSE_OF_CODE_ONLY` for details. The source code and computational tools are open source and freely available for use, modification, and distribution.
 
-- **Code**: Licensed under Apache License 2.0 - see `LICENSE_OF_CODE_ONLY` for details
-- **Paper**: All rights reserved - see `paper/LICENSE` for details
-
-The source code and computational tools are open source and freely available for use, modification, and distribution. The research paper content is protected by copyright and requires explicit permission for reproduction or distribution.
+The research paper "Aim Is All You Need" is published separately (all rights reserved) and is protected by copyright; see its [Zenodo record](https://doi.org/10.5281/zenodo.16741183) for details.

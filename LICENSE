@@ -1,6 +1,4 @@
-# Dual License Structure
-
-This repository contains both code and a research paper with different licensing terms:
+# License Structure
 
 ## Code License: Apache License 2.0
 
@@ -10,7 +8,7 @@ All source code, scripts, and computational tools in this repository are license
 
 ## Paper License: All Rights Reserved
 
-The research paper "Aim Is All You Need" (located in the `paper/` directory) is copyrighted and all rights are reserved by the author(s).
+The associated research paper "Aim Is All You Need" (published separately, [DOI: 10.5281/zenodo.16741183](https://doi.org/10.5281/zenodo.16741183)) is copyrighted and all rights are reserved by the author(s). The paper is not distributed as part of this repository.
 
 **Summary**: The paper content, including text, figures, equations, and research findings, may not be reproduced, distributed, or used without explicit permission from the copyright holder(s).
 
