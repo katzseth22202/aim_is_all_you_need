@@ -54,9 +54,9 @@ STD_FUDGE_FACTOR: float = (
 # of the boinor Sun body; callers multiply by Sun.R.
 SOLAR_DIVE_PERIAPSIS_SOLAR_RADII = 4.0
 # Shallow-dip periapsis of the two-impulse phasing loop: the projectile dips to
-# ~0.45 AU, returns to 1 AU tangentially after one dip period (~0.62 yr), then a
+# ~0.50 AU, returns to 1 AU tangentially after one dip period (~0.65 yr), then a
 # second colinear retrograde PuffSat boost drops it into the deep dive.
-TWO_IMPULSE_DIP_PERIAPSIS = 0.45 * u.AU
+TWO_IMPULSE_DIP_PERIAPSIS = 0.50 * u.AU
 # PuffSat boost applied at the 4 solar-radii dive periapsis. Chosen so the
 # hyperbolic-excess (escape-to-spare) speed is ~150 km/s, matching the main
 # text's ~150 km/s Earth-crossing scale for the no-ISRU cycle. This tones down

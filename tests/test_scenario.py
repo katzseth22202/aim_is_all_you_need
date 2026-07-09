@@ -190,17 +190,17 @@ def test_periapsis_reaim_cost_per_degree_matches_appendix() -> None:
 
 
 def test_two_impulse_phasing_loop_is_free_in_total_impulse() -> None:
-    # Appendix sec:earth_reintercept: the boost sequence 29.78 / 23.6 / 5.7 km/s
+    # Appendix sec:earth_reintercept: the boost sequence 29.78 / 24.4 / 5.7 km/s
     # (Earth, dip-aphelion, deep-dive-aphelion) has two colinear retrograde legs
-    # summing to a direct dive's ~24 km/s, and the dip returns after ~0.62 yr.
+    # summing to a direct dive's ~24 km/s, and the dip returns after ~0.65 yr.
     loop = two_impulse_phasing_loop()
     assert is_nearly_equal(loop.earth_speed, 29.78 * u.km / u.s, percent=0.01)
-    assert is_nearly_equal(loop.dip_aphelion_speed, 23.6 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(loop.dip_aphelion_speed, 24.4 * u.km / u.s, percent=0.02)
     assert is_nearly_equal(
         loop.deep_dive_aphelion_speed, 5.7 * u.km / u.s, percent=0.02
     )
     assert is_nearly_equal(loop.total_boost, 24 * u.km / u.s, percent=0.02)
-    assert is_nearly_equal(loop.dip_return_time, 0.62 * u.year, percent=0.02)
+    assert is_nearly_equal(loop.dip_return_time, 0.65 * u.year, percent=0.02)
     # The two legs are colinear and retrograde, so they add to the direct boost.
     leg_one = loop.earth_speed - loop.dip_aphelion_speed
     leg_two = loop.dip_aphelion_speed - loop.deep_dive_aphelion_speed

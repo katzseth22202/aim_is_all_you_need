@@ -62,7 +62,7 @@ _Avoid_: "half orbit" (it is more than 3/4 of a turn).
 
 **Phasing loop** (**two-impulse loop**):
 A pay-in-time maneuver that delays the deep dive until Earth reaches the fixed crossing
-point. The two-impulse form dips shallowly (~0.45 AU) then dives; its two boosts are
+point. The two-impulse form dips shallowly (~0.50 AU) then dives; its two boosts are
 colinear and retrograde, so it is free in total impulse (~24 km/s,
 `two_impulse_phasing_loop()`) and holds the doubling factor at two.
 _Avoid_: calling the phasing a "rocket burn" (every impulse is a PuffSat collision);
@@ -81,9 +81,9 @@ ellipse the 1 AU launch point sits on; treating the boost as free (only the two-
 loop is free).
 
 **Re-intercept cycle floor**:
-The shortest solar-dive cycle that actually re-intercepts Earth (~0.82 yr,
+The shortest solar-dive cycle that actually re-intercepts Earth (~0.86 yr,
 `earth_reintercept_cycle_floor()`), equal to the whip-around fraction of a year. It is the
-payload-doubling interval, so a millionfold scaling takes ~16 yr
+payload-doubling interval, so a millionfold scaling takes ~17 yr
 (`millionfold_scaling_time()`). Supersedes the paper's earlier implied ~0.5 yr ("6 month")
 cycle and its "under a decade" scaling.
 _Avoid_: the retired ~0.5 yr / 6-month cycle; "under a decade" for the millionfold.
@@ -118,6 +118,6 @@ _Avoid_: the retired ~0.5 yr / 6-month cycle; "under a decade" for the millionfo
   presented separately.
 - The solar-dive cycle once doubled payload every ~0.5 yr ("6 months"), implying a
   millionfold in under a decade. Resolved: crossing 1 AU is not **Earth re-intercept**;
-  the **re-intercept cycle floor** (~0.82 yr, derived from the **whip-around**) is the
-  doubling interval, giving ~16 yr. `main.py` uses the derived floor and the 6-month
+  the **re-intercept cycle floor** (~0.86 yr, derived from the **whip-around**) is the
+  doubling interval, giving ~17 yr. `main.py` uses the derived floor and the 6-month
   figure is retired. See `docs/adr/0001-earth-reintercept-cycle.md`.

@@ -851,11 +851,11 @@ def two_impulse_phasing_loop(
     """Prove the two-impulse phasing loop is free in total impulse.
 
     A first PuffSat boost at 1 AU drops the projectile to a shallow ``dip_periapsis``
-    orbit; it returns to 1 AU tangentially after one dip period (~0.62 yr), where a
+    orbit; it returns to 1 AU tangentially after one dip period (~0.65 yr), where a
     second boost drops it into the deep dive. Both boosts are retrograde and
     colinear at 1 AU, so their magnitudes sum to a direct dive's single boost
     (~24 km/s) -- the delay costs no extra impulse, holding the doubling factor at
-    two. The appendix's boost sequence is 29.78, 23.6, 5.7 km/s.
+    two. The appendix's boost sequence is 29.78, 24.4, 5.7 km/s.
 
     Args:
         dip_periapsis: Periapsis of the shallow dip orbit (astropy Quantity,
