@@ -125,13 +125,13 @@ def test_speed_at_distance() -> None:
 
 
 def test_hyperbolic_eccentricity_from_periapsis_and_vinf() -> None:
-    # A 4 solar-radii periapsis with ~233 km/s hyperbolic-excess speed gives the
+    # A 4 solar-radii periapsis with ~150 km/s hyperbolic-excess speed gives the
     # escaping-hyperbola eccentricity of the boosted solar-dive return
     # (paper Appendix sec:earth_reintercept): e = 1 + r_p * v_inf**2 / mu.
     periapsis = 4 * Sun.R
-    e = hyperbolic_eccentricity(periapsis, 233 * u.km / u.s, Sun)
+    e = hyperbolic_eccentricity(periapsis, 150 * u.km / u.s, Sun)
     assert e > 1.0  # genuinely hyperbolic
-    assert e == pytest.approx(2.14, abs=0.05)
+    assert e == pytest.approx(1.47, abs=0.05)
 
 
 def test_true_anomaly_at_radius_ellipse_apoapsis_is_180() -> None:
@@ -142,11 +142,11 @@ def test_true_anomaly_at_radius_ellipse_apoapsis_is_180() -> None:
 
 
 def test_true_anomaly_at_radius_hyperbola_climbout() -> None:
-    # The boosted solar-dive hyperbola (4 R_sun periapsis, e ~ 2.14) re-crosses
-    # 1 AU at a true anomaly of ~116 deg -- the climb-out half of the ~295 deg
+    # The boosted solar-dive hyperbola (4 R_sun periapsis, e ~ 1.47) re-crosses
+    # 1 AU at a true anomaly of ~130 deg -- the climb-out part of the ~310 deg
     # whip-around (paper Appendix sec:earth_reintercept).
-    nu = true_anomaly_at_radius(4 * Sun.R, 2.14, EARTH_A)
-    assert is_nearly_equal(nu, 116 * u.deg, percent=0.03)
+    nu = true_anomaly_at_radius(4 * Sun.R, 1.47, EARTH_A)
+    assert is_nearly_equal(nu, 130 * u.deg, percent=0.03)
 
 
 def test_true_anomaly_at_radius_rejects_unreachable_radius() -> None:
@@ -156,12 +156,13 @@ def test_true_anomaly_at_radius_rejects_unreachable_radius() -> None:
         true_anomaly_at_radius(1 * u.AU, 0.5, 0.5 * u.AU)
 
 
-def test_hyperbolic_time_of_flight_matches_climb_out_week() -> None:
+def test_hyperbolic_time_of_flight_matches_climb_out() -> None:
     # Climbing the boosted solar-dive hyperbola from periapsis out to 1 AU takes
-    # ~1 week (paper Appendix sec:earth_reintercept), which -- added to the ~66 d
-    # fall -- makes the round trip ~0.2 yr.
-    tof = hyperbolic_time_of_flight(4 * Sun.R, 233 * u.km / u.s, 116 * u.deg, Sun)
-    assert is_nearly_equal(tof, 7.0 * u.day, percent=0.1)
+    # ~10 days (paper Appendix sec:earth_reintercept), which -- added to the ~66 d
+    # fall -- makes the round trip ~0.21 yr. The time of flight is steep near the
+    # asymptote, so use the climb anomaly at full precision (~130.4 deg).
+    tof = hyperbolic_time_of_flight(4 * Sun.R, 150 * u.km / u.s, 130.4 * u.deg, Sun)
+    assert is_nearly_equal(tof, 10.3 * u.day, percent=0.1)
 
 
 def test_hyperbolic_time_of_flight_rejects_nonhyperbolic_orbit() -> None:

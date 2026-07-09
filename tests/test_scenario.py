@@ -151,11 +151,11 @@ def test_solar_dive_periapsis_speed_matches_appendix() -> None:
 
 
 def test_boosted_solar_dive_v_infinity_matches_appendix() -> None:
-    # Appendix sec:earth_reintercept: boosting the ~309 km/s escape speed by x1.25
-    # to ~387 km/s leaves ~233 km/s of hyperbolic-excess speed to spare, so the
-    # return genuinely escapes on a hyperbola.
+    # Appendix sec:earth_reintercept: a ~34.5 km/s PuffSat boost lifts the
+    # ~309 km/s escape speed to ~343 km/s, leaving ~150 km/s of hyperbolic-excess
+    # speed to spare, so the return genuinely escapes on a hyperbola.
     v_inf = boosted_solar_dive_v_infinity()
-    assert is_nearly_equal(v_inf, 233 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(v_inf, 150 * u.km / u.s, percent=0.01)
 
 
 def test_min_energy_solar_dive_time_matches_appendix() -> None:
@@ -166,19 +166,19 @@ def test_min_energy_solar_dive_time_matches_appendix() -> None:
 
 
 def test_solar_dive_whip_around_angle_matches_appendix() -> None:
-    # Appendix sec:earth_reintercept: 180 deg falling to periapsis plus ~115 deg
-    # of hyperbolic climb-out gives a ~295 deg whip-around.
+    # Appendix sec:earth_reintercept: 180 deg falling to periapsis plus ~130 deg
+    # of hyperbolic climb-out gives a ~310 deg whip-around.
     whip = solar_dive_whip_around_angle()
-    assert is_nearly_equal(whip, 295 * u.deg, percent=0.02)
+    assert is_nearly_equal(whip, 310 * u.deg, percent=0.02)
 
 
 def test_solar_dive_reintercept_gap_matches_appendix() -> None:
-    # Appendix sec:earth_reintercept: over the ~0.2 yr round trip Earth advances
-    # only ~71 deg while the projectile whips ~295 deg and re-crosses ~65 deg
-    # behind launch, an unphased miss of ~136 deg. Crossing 1 AU is not reaching
+    # Appendix sec:earth_reintercept: over the ~0.21 yr round trip Earth advances
+    # only ~76 deg while the projectile whips ~310 deg and re-crosses ~50 deg
+    # behind launch, an unphased miss of ~125 deg. Crossing 1 AU is not reaching
     # Earth.
     gap = solar_dive_reintercept_gap()
-    assert is_nearly_equal(gap, 136 * u.deg, percent=0.03)
+    assert is_nearly_equal(gap, 125 * u.deg, percent=0.03)
 
 
 def test_periapsis_reaim_cost_per_degree_matches_appendix() -> None:
@@ -210,14 +210,14 @@ def test_two_impulse_phasing_loop_is_free_in_total_impulse() -> None:
 def test_single_impulse_resonant_dive_matches_appendix() -> None:
     # Appendix sec:earth_reintercept: folding the phasing into one Earth boost
     # aims the projectile outbound to a ~1.9 AU aphelion; it re-intercepts Earth
-    # after ~0.85 yr, and the boost grows to ~37 km/s (a ~24 km/s retrograde
-    # component plus a ~28 km/s outbound radial one).
+    # after ~0.89 yr, and the boost grows to ~37.5 km/s (a ~24 km/s retrograde
+    # component plus a ~29 km/s outbound radial one).
     dive = single_impulse_resonant_dive()
     assert is_nearly_equal(dive.closing_aphelion, 1.9 * u.AU, percent=0.02)
-    assert is_nearly_equal(dive.reintercept_time, 0.85 * u.year, percent=0.02)
-    assert is_nearly_equal(dive.earth_boost, 37 * u.km / u.s, percent=0.02)
+    assert is_nearly_equal(dive.reintercept_time, 0.89 * u.year, percent=0.02)
+    assert is_nearly_equal(dive.earth_boost, 37.5 * u.km / u.s, percent=0.02)
     assert is_nearly_equal(dive.retrograde_component, 24 * u.km / u.s, percent=0.02)
-    assert is_nearly_equal(dive.radial_component, 28 * u.km / u.s, percent=0.03)
+    assert is_nearly_equal(dive.radial_component, 29 * u.km / u.s, percent=0.03)
 
 
 def test_single_impulse_resonant_dive_boost_decomposition() -> None:
@@ -238,9 +238,9 @@ def test_single_impulse_resonant_dive_boost_decomposition() -> None:
 
 def test_single_impulse_resonant_dive_costs_more_than_free_phasing() -> None:
     # Appendix sec:earth_reintercept: the single-impulse route needs only the Earth
-    # node but is not free -- its ~37 km/s boost exceeds the two-impulse loop's free
-    # ~24 km/s total, which is why its doubling factor falls below two. Its ~0.85 yr
-    # cycle is also longer than the ~0.82 yr two-impulse floor.
+    # node but is not free -- its ~37.5 km/s boost exceeds the two-impulse loop's free
+    # ~24 km/s total, which is why its doubling factor falls below two. Its ~0.89 yr
+    # cycle is also longer than the ~0.86 yr two-impulse floor.
     dive = single_impulse_resonant_dive()
     assert dive.earth_boost > two_impulse_phasing_loop().total_boost
     assert dive.reintercept_time > earth_reintercept_cycle_floor()
@@ -248,19 +248,19 @@ def test_single_impulse_resonant_dive_costs_more_than_free_phasing() -> None:
 
 def test_earth_reintercept_cycle_floor_matches_appendix() -> None:
     # Appendix sec:earth_reintercept: Earth reaches the fixed 1 AU crossing
-    # longitude after sweeping the whip-around fraction of a year, ~0.82 yr. This
+    # longitude after sweeping the whip-around fraction of a year, ~0.86 yr. This
     # supersedes the paper's earlier ~0.5 yr ("6 month") cycle.
     floor = earth_reintercept_cycle_floor()
-    assert is_nearly_equal(floor, 0.82 * u.year, percent=0.02)
+    assert is_nearly_equal(floor, 0.86 * u.year, percent=0.02)
     # The floor is strictly longer than the retired 6-month cycle.
     assert floor > 0.5 * u.year
 
 
-def test_millionfold_scaling_time_is_about_16_years() -> None:
-    # Appendix sec:earth_reintercept: ~20 doublings at ~0.82 yr each reach a
-    # millionfold in ~16 years -- not the "under a decade" a ~0.5 yr cycle implies.
+def test_millionfold_scaling_time_is_about_17_years() -> None:
+    # Appendix sec:earth_reintercept: ~20 doublings at ~0.86 yr each reach a
+    # millionfold in ~17 years -- not the "under a decade" a ~0.5 yr cycle implies.
     t = millionfold_scaling_time()
-    assert is_nearly_equal(t, 16 * u.year, percent=0.03)
+    assert is_nearly_equal(t, 17 * u.year, percent=0.03)
     # The correction is conservative: the old 6-month cycle gave under a decade.
     old = launch_capacity_time(2, 0.5 * u.year)
     assert t > old
@@ -279,7 +279,7 @@ def test_millionfold_scaling_time_uses_derived_floor() -> None:
 def test_earth_reintercept_scenarios_phases_for_return() -> None:
     # Appendix sec:earth_reintercept: the phased single-impulse resonant dive is
     # the row that actually re-intercepts Earth. Off the same ~69 km/s Jovian
-    # PuffSat, its boost is the resonant dive's ~37 km/s Earth boost (not the
+    # PuffSat, its boost is the resonant dive's ~37.5 km/s Earth boost (not the
     # prograde Parker row's minimum-energy ~23.7 km/s injection).
     catalog = earth_reintercept_scenarios()
     assert len(catalog) == 1
@@ -288,7 +288,7 @@ def test_earth_reintercept_scenarios_phases_for_return() -> None:
         phased.v_rf, single_impulse_resonant_dive().earth_boost, percent=1e-9
     )
     # Pin the phased mass ratio (captured from the repo's primitives).
-    assert float(phased.mass_ratio) == pytest.approx(2.07217048, rel=1e-6)
+    assert float(phased.mass_ratio) == pytest.approx(2.05041932, rel=1e-6)
 
 
 def test_earth_reintercept_phasing_lowers_mass_ratio() -> None:

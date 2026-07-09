@@ -50,6 +50,7 @@ from src.astro_constants import (
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
+    SOLAR_DIVE_PERIAPSIS_BURN,
     SOLAR_DIVE_PERIAPSIS_SOLAR_RADII,
     SUBORBITAL_DV_TO_200KM,
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
@@ -246,16 +247,16 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
 
     The minimum-energy Parker-injection rows in :func:`paper_scenarios` pin the
     1 AU crossing at the transfer ellipse's aphelion, so the payload re-crosses
-    1 AU ~136 deg from where Earth has moved to (:func:`solar_dive_reintercept_gap`)
+    1 AU ~125 deg from where Earth has moved to (:func:`solar_dive_reintercept_gap`)
     -- they are an *outbound injection* cost, not a returning orbit. This sibling
     catalog folds the Earth-return phasing into the boost instead: the
     single-impulse resonant dive (:func:`single_impulse_resonant_dive`) aims the
     payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return
-    re-intercepts Earth after ~0.85 yr.
+    re-intercepts Earth after ~0.89 yr.
 
     The phasing is not free: off the same ~69 km/s Jovian-return PuffSat, the
-    boost grows from the prograde Parker row's ~23.7 km/s to ~37 km/s, which
-    lowers the payload/PuffSat mass ratio from ~3.83 to ~2.07. This is the row
+    boost grows from the prograde Parker row's ~23.7 km/s to ~37.5 km/s, which
+    lowers the payload/PuffSat mass ratio from ~3.83 to ~2.05. This is the row
     that is actually "in the right phase for Earth return".
 
     Returns:
@@ -267,7 +268,7 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
         PuffSatScenario(
             v_rf=resonant_dive.earth_boost,
             v_b=retrograde_jovian_speed,
-            desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.85 yr. Folding the phasing into one Earth boost raises it to ~37 km/s, lowering the mass ratio from the prograde Parker injection's ~3.83""",
+            desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.89 yr. Folding the phasing into one Earth boost raises it to ~37.5 km/s, lowering the mass ratio from the prograde Parker injection's ~3.83""",
         ),
     ]
 
@@ -675,33 +676,27 @@ def solar_dive_periapsis_speed(
 
 def boosted_solar_dive_v_infinity(
     periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
-    periapsis_solar_speed: u.Quantity = PERIAPSIS_SOLAR_V,
-    periapsis_solar_burn: u.Quantity = PERIAPSIS_SOLAR_BURN,
+    periapsis_burn: u.Quantity = SOLAR_DIVE_PERIAPSIS_BURN,
 ) -> u.Quantity:
     """Hyperbolic-excess speed left after a periapsis boost at the solar dive.
 
-    A pulsed-propulsion boost at the 4 solar-radii periapsis raises the speed by
-    the same fraction the paper applies at Parker depth (200 -> 250 km/s, i.e.
-    x1.25), lifting the ~309 km/s local escape speed to ~387 km/s. The projectile
-    then escapes with ``sqrt(v_boosted**2 - v_esc**2)`` to spare, the appendix's
-    ~233 km/s.
+    A pulsed-propulsion boost of ``periapsis_burn`` (~34.5 km/s) at the 4
+    solar-radii periapsis lifts the ~309 km/s local escape speed to ~343 km/s.
+    The projectile then escapes with ``sqrt(v_boosted**2 - v_esc**2)`` to spare,
+    the appendix's ~150 km/s -- matching the main text's ~150 km/s
+    Earth-crossing scale for the no-ISRU cycle.
 
     Args:
         periapsis_radius: Periapsis distance from the Sun's center (astropy
             Quantity, default 4 solar radii).
-        periapsis_solar_speed: Reference pre-boost solar-dive speed used to set
-            the boost fraction (astropy Quantity, default PERIAPSIS_SOLAR_V).
-        periapsis_solar_burn: Reference speed increase setting the boost fraction
-            (astropy Quantity, default PERIAPSIS_SOLAR_BURN).
+        periapsis_burn: Speed increase from the PuffSat boost at periapsis
+            (astropy Quantity, default SOLAR_DIVE_PERIAPSIS_BURN).
 
     Returns:
         The hyperbolic-excess (escape-to-spare) speed (astropy Quantity, km/s).
     """
     v_escape: u.Quantity = escape_velocity(Sun, altitude=periapsis_radius - Sun.R)
-    boost_ratio: u.Quantity = (
-        periapsis_solar_speed + periapsis_solar_burn
-    ) / periapsis_solar_speed
-    v_boosted: u.Quantity = v_escape * boost_ratio
+    v_boosted: u.Quantity = v_escape + periapsis_burn
     return np.sqrt(v_boosted**2 - v_escape**2).to(u.km / u.s)
 
 
@@ -741,8 +736,8 @@ def solar_dive_whip_around_angle(
 
     Falling from aphelion to periapsis always sweeps 180 deg of heliocentric
     longitude; the boosted climb-out is an escaping hyperbola that adds its true
-    anomaly at the 1 AU re-crossing (~116 deg). The total whip-around is the
-    appendix's ~295 deg, and it barely depends on periapsis depth.
+    anomaly at the 1 AU re-crossing (~130 deg). The total whip-around is the
+    appendix's ~310 deg, and it barely depends on periapsis depth.
 
     Args:
         periapsis_radius: Periapsis distance from the Sun's center (astropy
@@ -769,9 +764,9 @@ def solar_dive_reintercept_gap(
 ) -> u.Quantity:
     """Angular gap between where the projectile re-crosses 1 AU and where Earth is.
 
-    Over the ~0.2 yr round trip (fall + hyperbolic climb-out) Earth advances only
-    ~71 deg, while the projectile whips ~295 deg around the Sun and re-crosses
-    ~65 deg *behind* its launch longitude. The unphased miss is therefore ~136 deg
+    Over the ~0.21 yr round trip (fall + hyperbolic climb-out) Earth advances only
+    ~76 deg, while the projectile whips ~310 deg around the Sun and re-crosses
+    ~50 deg *behind* its launch longitude. The unphased miss is therefore ~125 deg
     -- set by the whip-around, not by Earth's drift.
 
     Args:
@@ -914,14 +909,14 @@ class SingleImpulseResonantDive:
         closing_aphelion: The aphelion that makes the return re-intercept Earth
             (astropy Quantity, ~1.9 AU for the default dive).
         reintercept_time: Time from the Earth boost to the 1 AU re-crossing
-            (astropy Quantity, ~0.85 yr).
+            (astropy Quantity, ~0.89 yr).
         earth_boost: Magnitude of the single Earth boost (astropy Quantity,
-            ~37 km/s), the vector sum of its retrograde and radial components.
+            ~37.5 km/s), the vector sum of its retrograde and radial components.
         retrograde_component: Tangential (retrograde) part of the boost -- the
             same ~24 km/s a direct dive spends to drop to the solar periapsis
             (astropy Quantity).
         radial_component: Outbound radial part of the boost that buys the phasing
-            coast (astropy Quantity, ~28 km/s).
+            coast (astropy Quantity, ~29 km/s).
         launch_true_anomaly: True anomaly of the 1 AU launch point on the closing
             ellipse, just short of aphelion (astropy Quantity, ~169 deg).
     """
@@ -940,15 +935,15 @@ def single_impulse_resonant_dive(
 ) -> SingleImpulseResonantDive:
     """Solve the aphelion that makes a single-impulse solar dive re-intercept Earth.
 
-    The direct dive re-crosses 1 AU ~136 deg from Earth (:func:`solar_dive_reintercept_gap`).
+    The direct dive re-crosses 1 AU ~125 deg from Earth (:func:`solar_dive_reintercept_gap`).
     Folding the phasing into the single Earth boost aims the projectile *outbound*
     first, onto an ellipse with periapsis at the solar dive and a raised aphelion.
     The re-crossing longitude and its arrival time both grow with that aphelion, so
     exactly one aphelion makes Earth's advance equal the longitude the projectile
     sweeps -- the geometry closes. This roots that condition rather than hardcoding
     it, mirroring :func:`earth_reintercept_cycle_floor`, and reproduces the
-    appendix's ~1.9 AU aphelion, ~0.85 yr re-cross, and ~37 km/s boost (a ~24 km/s
-    retrograde component plus a ~28 km/s outbound radial one).
+    appendix's ~1.9 AU aphelion, ~0.89 yr re-cross, and ~37.5 km/s boost (a ~24 km/s
+    retrograde component plus a ~29 km/s outbound radial one).
 
     The closure residual is monotonic in the aphelion over ``(launch_radius,
     4 * launch_radius)``, so the root found is the first (shortest) resonance.
@@ -1063,8 +1058,8 @@ def earth_reintercept_cycle_floor(
     The projectile re-crosses 1 AU at a fixed longitude ``whip_around - 360 deg``
     behind its launch point. Earth first reaches that longitude after sweeping the
     complementary ``whip_around`` degrees prograde, i.e. a fraction
-    ``whip_around / 360 deg`` of a year. With a ~295 deg whip-around this floor is
-    the appendix's ~0.82 yr -- it supersedes the paper's earlier implied ~0.5 yr
+    ``whip_around / 360 deg`` of a year. With a ~310 deg whip-around this floor is
+    the appendix's ~0.86 yr -- it supersedes the paper's earlier implied ~0.5 yr
     ("6 month") cycle and is the doubling interval for the growth estimate.
 
     Args:
@@ -1090,10 +1085,10 @@ def millionfold_scaling_time(
     """Time to scale launch capacity a millionfold at one doubling per re-intercept cycle.
 
     Applies :func:`launch_capacity_time` with the Earth re-intercept cycle floor
-    (:func:`earth_reintercept_cycle_floor`, ~0.82 yr) as the doubling interval.
-    At ``doubling_factor`` = 2 this is ~20 doublings over ~0.82 yr each, the
-    appendix's ~16 years -- not the "under a decade" a ~0.5 yr cycle would imply.
-    Only the two-impulse phasing loop holds the factor at two, so ~16 yr is itself
+    (:func:`earth_reintercept_cycle_floor`, ~0.86 yr) as the doubling interval.
+    At ``doubling_factor`` = 2 this is ~20 doublings over ~0.86 yr each, the
+    appendix's ~17 years -- not the "under a decade" a ~0.5 yr cycle would imply.
+    Only the two-impulse phasing loop holds the factor at two, so ~17 yr is itself
     a floor.
 
     Args:

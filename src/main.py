@@ -67,7 +67,7 @@ def main() -> None:
     )
     print("=" * 80)
     # The Parker rows above are outbound injection only: their 1 AU crossing is
-    # pinned at aphelion and misses Earth by ~136 deg. The phased Earth-return
+    # pinned at aphelion and misses Earth by ~125 deg. The phased Earth-return
     # scenario folds the return phasing into a heavier boost, so it is presented
     # separately. See paper Appendix sec:earth_reintercept.
     reintercept_df = scenarios_to_dataframe(earth_reintercept_scenarios())
@@ -97,8 +97,8 @@ def main() -> None:
     print(
         f"lunar launch cycle capacity time = {launch_capacity_time(lunar_mass_ratio, LUNAR_MONTH)}"
     )
-    # A boosted solar-dive return crosses 1 AU ~136 deg from Earth, so the growth
-    # cycle is set by phasing the return to an Earth resonance (~0.82 yr floor),
+    # A boosted solar-dive return crosses 1 AU ~125 deg from Earth, so the growth
+    # cycle is set by phasing the return to an Earth resonance (~0.86 yr floor),
     # not by the bare ~0.5 yr dive. See paper Appendix sec:earth_reintercept.
     print(
         "solar-dive re-intercept: unphased 1 AU miss = "

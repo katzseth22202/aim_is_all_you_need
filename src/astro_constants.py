@@ -57,6 +57,12 @@ SOLAR_DIVE_PERIAPSIS_SOLAR_RADII = 4.0
 # ~0.45 AU, returns to 1 AU tangentially after one dip period (~0.62 yr), then a
 # second colinear retrograde PuffSat boost drops it into the deep dive.
 TWO_IMPULSE_DIP_PERIAPSIS = 0.45 * u.AU
+# PuffSat boost applied at the 4 solar-radii dive periapsis. Chosen so the
+# hyperbolic-excess (escape-to-spare) speed is ~150 km/s, matching the main
+# text's ~150 km/s Earth-crossing scale for the no-ISRU cycle. This tones down
+# an earlier formulation that scaled the Parker boost fraction (x1.25) up to
+# the deeper dive, which left an aggressive ~233 km/s of excess.
+SOLAR_DIVE_PERIAPSIS_BURN = 34.5 * u.km / u.s
 
 # --- Suborbital "200 km" rocket delta-v budget (paper Section 2.1) ---
 # The paper claims a reusable suborbital rocket that merely reaches ~200 km
