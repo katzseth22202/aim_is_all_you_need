@@ -21,6 +21,9 @@ from src.astro_constants import (
     VENUS_A,
 )
 from src.scenario import (
+    apoapsis_raise_economics,
+    apoapsis_raise_finite_burn,
+    apoapsis_raise_reintercept,
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
@@ -96,11 +99,13 @@ def main() -> None:
     # scenario folds the return phasing into a heavier boost, so it is presented
     # separately.
     print_scenario_table(
-        "Phased Earth-return scenarios -- the 'Phased single-impulse resonant "
-        "dive' row of Table 'tab:mass_scenarios', derived in Appendix 'Earth "
-        "Re-Intercept and the Phasing Loop' (sec:earth_reintercept)",
-        "Backs the paper's 37.53 / 69.272 / 2.05 table row: folding return "
-        "phasing into one Earth boost costs mass ratio vs. the ~3.83 Parker row.",
+        "Phased Earth-return scenarios -- the two phased rows of Table "
+        "'tab:mass_scenarios', derived in Appendix 'Earth Re-Intercept and the "
+        "Phasing Loop' (sec:earth_reintercept)",
+        "Row 1 backs the 37.53 / 69.272 / 2.05 resonant-dive row (folding phasing "
+        "into one Earth boost costs mass ratio vs. the ~3.83 Parker row). Row 2 is "
+        "the apoapsis-raise re-intercept: v_rf=11.0 / v_b=24.06 / ratio 2.62, the "
+        "lowest-closing-speed member (design doc Sec.7 tab:mass_scenarios row).",
         scenarios_to_dataframe(earth_reintercept_scenarios()),
     )
 
@@ -163,6 +168,70 @@ def main() -> None:
         "-- the timescale behind the ~0.21 yr round trip",
         "full period of the Earth-to-Parker-periapsis transfer orbit = "
         f"{find_parker_orbit_period()}",
+    )
+
+    # Apoapsis-raise Earth re-intercept: the lowest-closing-speed member of the
+    # sec:earth_reintercept family (apoapsis_raise_reintercept_design.md). The
+    # impulsive design point, its economics, and a finite-thrust SEP check that
+    # confirms the impulsive burn -- the citable reproduction of the design doc.
+    apoapsis_raise = apoapsis_raise_reintercept()
+    print_paper_point(
+        "Appendix: Earth Re-Intercept -- apoapsis-raise re-intercept "
+        "(sec:earth_reintercept)",
+        "raise heliocentric aphelion to ~2.26 AU with a methalox Oberth burn, take "
+        "one retrograde argon-SEP burn at apoapsis, and fall back to intercept "
+        "Earth at a ~24 km/s closing speed after ~1.69 yr -- no solar dive, no "
+        "gravity assist, no off-Earth boost node (design doc Sec.4)",
+        f"phasing-exact aphelion Q = {apoapsis_raise.aphelion:.3f} "
+        f"(leg-1 a1 = {apoapsis_raise.leg1_semimajor_axis:.3f}); "
+        f"phasing residual = {apoapsis_raise.phasing_residual.to(u.deg).value:.1e} "
+        "deg (root-solved to ~0)",
+        f"departure burn dv1 = {apoapsis_raise.departure_burn:.3f} (methalox), "
+        f"apoapsis burn dv2 = {apoapsis_raise.sep_burn:.3f} (argon SEP)",
+        f"closing speed at 200 km = {apoapsis_raise.closing_speed:.3f} vs 2x "
+        f"escape target {apoapsis_raise.twice_escape_target:.3f} "
+        f"(v_inf at SOI = {apoapsis_raise.v_infinity_arrival:.3f}); "
+        f"transit = {apoapsis_raise.transit_time:.3f}",
+        f"combined dry fraction reaching Earth = "
+        f"{apoapsis_raise.combined_dry_fraction:.3f} "
+        f"(methalox {apoapsis_raise.methalox_mass_fraction:.3f} x argon "
+        f"{apoapsis_raise.sep_mass_fraction:.3f}); truncated perihelion "
+        f"{apoapsis_raise.truncated_perihelion:.3f} (never reached)",
+    )
+    apoapsis_econ = apoapsis_raise_economics(apoapsis_raise)
+    print_paper_point(
+        "Appendix: Earth Re-Intercept -- apoapsis-raise economics "
+        "(sec:earth_reintercept)",
+        "m_r/m_p ~ 2.62 new payload per returning PuffSat gives ~+54.7% net growth "
+        "per 1.69 yr cycle, reaching a millionfold in ~54 yr -- ~3x slower than the "
+        "~17 yr solar-dive loop, the price of the gentler 24 km/s closing speed "
+        "(design doc Sec.5)",
+        f"payload/PuffSat mass ratio m_r/m_p = "
+        f"{apoapsis_econ.payload_puffsat_mass_ratio:.3f} (f=0.8, v_rf=Earth escape "
+        "at 200 km, v_p=closing speed)",
+        f"net growth per cycle = {apoapsis_econ.net_growth_per_cycle:.4f} "
+        f"(+{100 * (apoapsis_econ.net_growth_per_cycle - 1):.1f}% per "
+        f"{apoapsis_econ.cycle_time:.3f}; {apoapsis_econ.doublings_per_year:.3f} "
+        "doublings/yr)",
+        f"time to millionfold = {apoapsis_econ.time_to_millionfold:.1f} "
+        f"({apoapsis_econ.cycles_to_millionfold:.1f} cycles)",
+    )
+    apoapsis_finite = apoapsis_raise_finite_burn(reintercept=apoapsis_raise)
+    print_paper_point(
+        "Appendix: Earth Re-Intercept -- finite-thrust SEP check "
+        "(sec:earth_reintercept)",
+        "a 60-90 day SEP burn centered on apoapsis reproduces the impulsive kick "
+        "to within ~1% in closing speed, ~1 day in transit, ~0.005 AU in "
+        "perihelion, and under 1 deg in phasing (design doc Sec.3)",
+        f"finite {apoapsis_finite.burn_duration:.0f} burn: closing speed = "
+        f"{apoapsis_finite.closing_speed:.3f} vs impulsive "
+        f"{apoapsis_raise.closing_speed:.3f} "
+        f"({apoapsis_finite.closing_speed_error:.2%} difference)",
+        f"finite transit = {apoapsis_finite.transit_time:.3f} vs impulsive "
+        f"{apoapsis_raise.transit_time:.3f}; finite perihelion = "
+        f"{apoapsis_finite.truncated_perihelion:.3f} vs impulsive "
+        f"{apoapsis_raise.truncated_perihelion:.3f}; finite phasing residual = "
+        f"{apoapsis_finite.phasing_residual:.2f}",
     )
 
     print_paper_point(

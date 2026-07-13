@@ -84,3 +84,30 @@ SUBORBITAL_DV_TO_200KM = (
 # sea-level value makes the resulting propellant-fraction estimate an upper bound,
 # which strengthens the paper's "under 60 percent" claim.
 METHALOX_SEA_LEVEL_ISP = 310 * u.s
+
+# --- Apoapsis-raise Earth re-intercept (candidate sec:earth_reintercept option;
+#     design doc apoapsis_raise_reintercept_design.md in the paper source repo) ---
+# A projectile leaves Earth at 200 km (C3=0), an Oberth methalox burn raises its
+# heliocentric aphelion to Q, a retrograde argon-SEP burn at apoapsis lowers
+# perihelion, and it falls back to intercept Earth at 1 AU. The lowest-closing-
+# speed member of the sec:earth_reintercept family: no solar dive, no gravity
+# assist, no off-Earth boost node, only onboard propellant.
+#
+# Methalox vacuum Isp for the Oberth departure burn at 200 km (Leg 1). Higher than
+# the 310 s sea-level value above because the departure burn fires in vacuum.
+METHALOX_VACUUM_ISP = 380 * u.s
+# Argon solar-electric (SEP) Isp for the retrograde apoapsis burn (Leg 2).
+ARGON_SEP_ISP = 2000 * u.s
+# Retrograde SEP delta-v spent at apoapsis (Leg 2). Capped at the design's full
+# 4 km/s SEP budget; the phasing-exact optimum spends it in full (raising Delta-v2
+# does not shrink the phasing-locked orbit, only deepens the closing speed).
+APOAPSIS_RAISE_SEP_DV = 4.0 * u.km / u.s
+# Aphelion search bracket (AU) for the phasing-exact apoapsis root solve. The lone
+# phasing-exact Earth intercept sits at Q ~ 2.26 AU; this brackets it while
+# excluding the anti-phased (~180 deg miss) feature near Q ~ 1.65 AU. The design
+# searched Q in [2.0, 3.0]; narrowed here to isolate the single root.
+APOAPSIS_RAISE_APHELION_BRACKET = (2.1, 2.45)
+# Nominal SEP burn duration for the finite-thrust check. A 60-90 day burn centered
+# on apoapsis reproduces the impulsive kick to within ~1% in closing speed; apoapsis
+# is the slowest part of the orbit, so the thrust stays near-tangential throughout.
+APOAPSIS_RAISE_SEP_BURN_DURATION = 90 * u.day
