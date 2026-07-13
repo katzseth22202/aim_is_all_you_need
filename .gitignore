@@ -219,3 +219,6 @@ todos/*
 
 # Claude Code local settings/state
 .claude/
+
+# macOS
+.DS_Store
