@@ -80,6 +80,31 @@ JUPITER_FLYBY_MAX_TOF = 7 * u.year
 # closing speed (~69.3).
 JUPITER_FLYBY_VB_TRADE_TARGETS = (45.0, 50.0, 55.0, 60.0, 65.0, 70.0)
 
+# --- Unpowered V/E/M assist chain to the retrograde return (companion to the
+#     powered Jovian flyby above; ADR 0003-assist-chain-search; CONTEXT.md
+#     "Unpowered assist chain") ---
+# Minimum flyby altitude above the surface at the chain bodies (Venus, Earth,
+# Mars). 300 km clears the Venusian and Martian atmospheres and matches the
+# repo's LEO reference altitude scale.
+LOW_ASSIST_FLYBY_ALTITUDE = 300 * u.km
+# Hard cap on the whole trip: departure -> inner-planet flyby chain -> Jupiter
+# -> first retrograde 1 AU crossing. Looser than the powered flyby's 7 yr
+# because the chain spends time pumping v-infinity instead of propellant.
+ASSIST_CHAIN_MAX_TRIP_TIME = 10 * u.year
+# Cap on the number of inner-planet flybys before the Jovian leg.
+ASSIST_CHAIN_MAX_FLYBYS = 5
+# Deep-space maneuver budget reserved for planetary phasing. The chain model is
+# phasing-free (each planet is wherever the trajectory needs it), so this
+# reserve is charged as spent methalox in the delivered-fraction accounting --
+# the headline mass numbers already carry the cost of making real ephemerides
+# line up.
+ASSIST_CHAIN_PHASING_BUDGET = 0.300 * u.km / u.s
+# Departure-burn probes (km/s) for the minimum-burn scan, bracketing the
+# analytic Venus-reach floor (~0.2794 km/s, venus_reach_departure_floor()) and
+# the beam-search feasibility edge (~0.29 km/s at the production beam
+# settings).
+ASSIST_CHAIN_BURN_CANDIDATES = (0.250, 0.280, 0.290, 0.300)
+
 # --- Suborbital "200 km" rocket delta-v budget (paper Section 2.1) ---
 # The paper claims a reusable suborbital rocket that merely reaches ~200 km
 # altitude (it does NOT reach orbit on its own; PuffSat pulses do the rest) can

@@ -11,6 +11,7 @@ from astropy import units as u
 from tabulate import tabulate
 
 from src.astro_constants import (
+    ASSIST_CHAIN_MAX_TRIP_TIME,
     CERES_A,
     EARTH_A,
     JUPITER_FLYBY_MAX_TOF,
@@ -26,6 +27,7 @@ from src.scenario import (
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
+    assist_chain_return,
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
@@ -35,6 +37,7 @@ from src.scenario import (
     launch_capacity_time,
     lunar_return_transfer_dv,
     millionfold_scaling_time,
+    minimum_departure_burn_assist_chain,
     paper_scenarios,
     parker_injection_burns,
     powered_jovian_flyby_return,
@@ -44,6 +47,7 @@ from src.scenario import (
     solar_fusion_velocity,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
+    venus_reach_departure_floor,
 )
 
 
@@ -349,6 +353,86 @@ def main() -> None:
                 "achieved v_b",
                 "end-to-end",
                 "TOF (yr)",
+            ],
+            tablefmt="grid",
+        )
+    )
+
+    # Unpowered V/E/M assist chain: the same retrograde return with gravity
+    # assists in place of the 4.45 km/s departure burn. Phasing-free model; a
+    # fixed 300 m/s deep-space-maneuver budget is charged as spent methalox so
+    # the mass numbers carry the cost of real planetary phasing.
+    venus_floor = venus_reach_departure_floor()
+    chain_scan = minimum_departure_burn_assist_chain(
+        target_collision_speed=flyby.collision_speed
+    )
+    chain_minimum = chain_scan.minimum
+    chain_fast = assist_chain_return(
+        departure_burn=0.300 * u.km / u.s,
+        target_collision_speed=flyby.collision_speed,
+    )
+    if chain_minimum is None or chain_fast is None:
+        raise RuntimeError("assist-chain scan unexpectedly found no feasible chain")
+    infeasible_probes = ", ".join(
+        f"{burn.to_value(u.m / u.s):.0f}" for burn in chain_scan.infeasible_burns
+    )
+    print_paper_point(
+        "Unpowered V/E/M Assist Chain to the Retrograde Return -- PLANNED "
+        "companion to the powered Jovian flyby (sec:jupiter_only_growth); not "
+        "yet in the published paper",
+        "proposed claim: a Venus/Earth/Mars gravity-assist ladder replaces the "
+        "4.45 km/s powered-flyby departure burn with ~0.3 km/s -- barely above "
+        "the Venus-reach floor -- at the price of trip time and planetary "
+        "phasing (charged here as a 300 m/s deep-space-maneuver budget)",
+        f"Venus-reach floor = {venus_floor.to(u.m / u.s):.1f}: below it Venus is "
+        "unreachable; exactly at it the arrival is tangent to Venus's orbit and "
+        "Tisserand-locked (an unpowered flyby can rotate but never grow the "
+        "excess speed, so a tangent arrival is a dead end)",
+        f"beam-search scan at target v_b >= {flyby.collision_speed:.2f}: "
+        f"infeasible at [{infeasible_probes}] m/s; minimum feasible burn = "
+        f"{chain_minimum.departure_burn.to(u.m / u.s):.0f} "
+        f"({chain_minimum.sequence}, total {chain_minimum.total_time:.2f}, "
+        f"v_b {chain_minimum.collision_speed:.2f})",
+        f"at 300 m/s the chain is fast: {chain_fast.sequence}, "
+        f"{chain_fast.flyby_count} inner-planet flybys, total "
+        f"{chain_fast.total_time:.2f} (chain {chain_fast.chain_time:.2f} + "
+        f"return {chain_fast.return_time:.2f}; cap {ASSIST_CHAIN_MAX_TRIP_TIME}), "
+        f"v_inf at Jupiter {chain_fast.v_infinity_jupiter:.2f}, Jovian bend "
+        f"{chain_fast.jovian_bend_angle:.1f}, v_b {chain_fast.collision_speed:.2f}",
+        f"mass accounting at 300 m/s: delivered fraction "
+        f"{chain_fast.delivered_fraction:.3f} (burn + "
+        f"{chain_fast.phasing_budget.to(u.m / u.s):.0f} phasing budget) x mass "
+        f"ratio {chain_fast.payload_puffsat_mass_ratio:.3f} = end-to-end "
+        f"{chain_fast.end_to_end_mass_ratio:.3f} vs the powered flyby's "
+        f"{flyby.end_to_end_mass_ratio:.3f}",
+    )
+    print(
+        "\nUnpowered assist chain at 300 m/s departure -- node-by-node "
+        "(rotations are free unpowered flyby bends; v_inf is the Tisserand "
+        "invariant each flyby preserves)"
+    )
+    print(
+        tabulate(
+            [
+                [
+                    step.body,
+                    f"{step.rotation_angle.to_value(u.deg):+.1f}",
+                    f"{step.v_infinity.to_value(u.km / u.s):.3f}",
+                    step.target,
+                    "outbound" if step.outbound_arrival else "inbound",
+                    f"{step.leg_time.to_value(u.year):.2f}",
+                    f"{step.elapsed.to_value(u.year):.2f}",
+                ]
+                for step in chain_fast.steps
+            ],
+            headers=[
+                "at body",
+                "rotate (deg)",
+                "v_inf (km/s)",
+                "leg to",
+                "arrival",
+                "leg (yr)",
+                "elapsed (yr)",
             ],
             tablefmt="grid",
         )

@@ -6,6 +6,9 @@ from astropy import units as u
 from boinor.bodies import Earth, Jupiter
 
 from src.astro_constants import (
+    ASSIST_CHAIN_MAX_FLYBYS,
+    ASSIST_CHAIN_MAX_TRIP_TIME,
+    ASSIST_CHAIN_PHASING_BUDGET,
     CERES_A,
     EARTH_A,
     JUPITER_A,
@@ -19,18 +22,21 @@ from src.orbit_utils import (
     apoapsis_speed,
     hyperbolic_eccentricity,
     orbit_from_rp_ra,
+    periapsis_speed,
     speed_with_escape_energy,
 )
 from src.propulsion import payload_mass_ratio, retrograde_jovian_hohmann_transfer
 from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    _conic_radius_crossings,
     _flyby_return_leg,
     _powered_flyby_leg,
     _powered_flyby_params,
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
+    assist_chain_return,
     boosted_solar_dive_v_infinity,
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
@@ -41,6 +47,7 @@ from src.scenario import (
     lunar_transfer_periapsis_speed,
     millionfold_scaling_time,
     min_energy_solar_dive_time,
+    minimum_departure_burn_assist_chain,
     paper_scenarios,
     parker_injection_burns,
     periapsis_reaim_cost_per_degree,
@@ -53,6 +60,7 @@ from src.scenario import (
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
     two_impulse_phasing_loop,
+    venus_reach_departure_floor,
 )
 from tests.test_helpers import is_nearly_equal
 
@@ -615,3 +623,119 @@ def test_jupiter_flyby_vb_trade_curve():
         # Monotone within a small optimizer tolerance.
         assert point.total_burn >= previous_burn - 0.1 * kms
         previous_burn = point.total_burn
+
+
+def test_venus_reach_departure_floor() -> None:
+    # The analytic floor of the assist chain: below ~279.4 m/s even the best
+    # (anti-tangential) aim leaves the transfer perihelion above Venus's orbit.
+    # In particular the hoped-for 250 m/s cannot reach Venus at all.
+    floor = venus_reach_departure_floor()
+    assert 0.279 * u.km / u.s < floor < 0.280 * u.km / u.s
+    assert floor > 0.250 * u.km / u.s
+
+
+def test_conic_radius_crossings_reproduces_hohmann_leg(flyby_params):
+    # Fed the periapsis state of the Earth->Jupiter Hohmann ellipse, the leg
+    # machinery must reproduce the textbook transfer: the Jupiter crossing at
+    # aphelion after the half period (~2.731 yr) at the apoapsis speed, and the
+    # Mars-radius crossings as an outbound/inbound pair sharing h/r.
+    transfer = orbit_from_rp_ra(periapsis_radius=EARTH_A, apoapsis_radius=JUPITER_A)
+    v_peri = periapsis_speed(transfer).to_value(u.km / u.s)
+    jupiter_crossings = _conic_radius_crossings(
+        flyby_params.mu_sun,
+        flyby_params.r_earth_orbit,
+        v_peri,
+        0.0,
+        flyby_params.r_jupiter_orbit,
+    )
+    assert jupiter_crossings
+    v_apo = apoapsis_speed(transfer).to_value(u.km / u.s)
+    leg_time, v_t1, v_r1, _ = jupiter_crossings[0]
+    assert is_nearly_equal((leg_time * u.s).to(u.year), 2.731 * u.year, percent=0.1)
+    assert v_t1 == pytest.approx(v_apo, rel=1e-6)
+    assert v_r1 == pytest.approx(0.0, abs=1e-3)
+    mars_crossings = _conic_radius_crossings(
+        flyby_params.mu_sun,
+        flyby_params.r_earth_orbit,
+        v_peri,
+        0.0,
+        float(MARS_A.to_value(u.km)),
+    )
+    assert len(mars_crossings) == 2
+    outbound = [c for c in mars_crossings if c[3]]
+    inbound = [c for c in mars_crossings if not c[3]]
+    assert len(outbound) == 1 and len(inbound) == 1
+    assert outbound[0][0] < inbound[0][0]  # outward crossing comes first
+    assert outbound[0][2] > 0.0 > inbound[0][2]  # radial speed signs
+    h = flyby_params.r_earth_orbit * v_peri
+    assert outbound[0][1] == pytest.approx(h / float(MARS_A.to_value(u.km)), rel=1e-9)
+
+
+@pytest.mark.slow
+def test_assist_chain_return_at_300_mps(flyby_optimum):
+    # The replay-validated headline chain: 300 m/s of departure burn (vs the
+    # powered flyby's 4.45 km/s) reaches the same-target retrograde return via
+    # an E-V pump ladder in well under the 10 yr cap.
+    result = assist_chain_return(
+        departure_burn=0.300 * u.km / u.s,
+        target_collision_speed=flyby_optimum.collision_speed,
+    )
+    assert result is not None
+    assert result.collision_speed >= flyby_optimum.collision_speed * 0.9999
+    assert result.total_time <= ASSIST_CHAIN_MAX_TRIP_TIME
+    assert result.total_time < 4.0 * u.year  # calibrated chain: ~3.46 yr
+    assert result.sequence.startswith("E-V") and result.sequence.endswith("-J")
+    assert 1 <= result.flyby_count <= ASSIST_CHAIN_MAX_FLYBYS
+    # Departure is a coast state, not a flyby: its rotation must be zero.
+    assert result.steps[0].rotation_angle == 0.0 * u.deg
+    # Bookkeeping consistency: legs sum to the chain time, chain + return to
+    # the total, and elapsed is monotone.
+    legs_total = sum((step.leg_time for step in result.steps), start=0.0 * u.year)
+    assert is_nearly_equal(legs_total, result.chain_time, percent=0.001)
+    assert is_nearly_equal(
+        result.chain_time + result.return_time, result.total_time, percent=0.001
+    )
+    elapsed = [step.elapsed.to_value(u.year) for step in result.steps]
+    assert elapsed == sorted(elapsed)
+    # Same v_b convention as the powered flyby: 1 AU closing speed folded
+    # through Earth's well to the surface.
+    assert is_nearly_equal(
+        result.collision_speed,
+        speed_with_escape_energy(result.closing_speed_1au, Earth),
+        percent=0.001,
+    )
+    # Mass accounting: burn + phasing budget through the rocket equation, times
+    # the mass ratio at the achieved v_b against the same push as the flyby.
+    assert result.phasing_budget == ASSIST_CHAIN_PHASING_BUDGET
+    assert result.end_to_end_mass_ratio == pytest.approx(
+        result.delivered_fraction * result.payload_puffsat_mass_ratio, rel=1e-9
+    )
+    assert result.payload_puffsat_mass_ratio == pytest.approx(
+        payload_mass_ratio(
+            v_rf=lunar_transfer_periapsis_speed(), v_b=result.collision_speed
+        ),
+        rel=1e-6,
+    )
+    # The point of the chain: with propellant nearly free, the end-to-end mass
+    # ratio beats the powered flyby's optimum.
+    assert result.end_to_end_mass_ratio > flyby_optimum.end_to_end_mass_ratio
+
+
+@pytest.mark.slow
+def test_minimum_departure_burn_assist_chain(flyby_optimum):
+    # The default probe grid brackets the Venus-reach floor: 250 and 280 m/s
+    # find no chain (280 clears the floor but is Tisserand-locked too tightly
+    # for the beam), while 290 m/s closes -- an order of magnitude below the
+    # powered flyby's departure burn.
+    scan = minimum_departure_burn_assist_chain(
+        target_collision_speed=flyby_optimum.collision_speed
+    )
+    assert scan.minimum is not None
+    assert is_nearly_equal(
+        scan.minimum.departure_burn, 0.290 * u.km / u.s, percent=0.001
+    )
+    infeasible = [burn.to_value(u.km / u.s) for burn in scan.infeasible_burns]
+    assert infeasible == [0.250, 0.280]
+    assert scan.minimum.total_time <= ASSIST_CHAIN_MAX_TRIP_TIME
+    assert scan.minimum.collision_speed >= scan.target_collision_speed * 0.9999
+    assert scan.minimum.departure_burn < flyby_optimum.departure_burn / 10.0

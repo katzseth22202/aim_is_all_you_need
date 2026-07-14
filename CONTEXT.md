@@ -140,6 +140,55 @@ Hard constraint: outbound Earth→Jupiter plus return Jupiter→1 AU time of fli
 ≤ 7 yr (time inside Jupiter's sphere of influence is negligible). Excludes extreme
 apoapsis-raise trajectories. Baseline Hohmann-out/Hohmann-back is ~5.5 yr.
 
+### Unpowered assist chain
+
+The companion question to the powered flyby: can Venus/Earth/Mars gravity assists
+replace the 4.45 km/s departure burn? Implemented as `assist_chain_return()` /
+`minimum_departure_burn_assist_chain()` / `venus_reach_departure_floor()` (ADR
+`0003-assist-chain-search`). Headline finding: yes — ~0.29–0.30 km/s at departure
+(barely above the ~0.2794 km/s Venus-reach floor) reaches the same-target
+retrograde return in ~3.5 yr at 300 m/s, with a 300 m/s phasing budget charged on
+top the end-to-end mass ratio is ~5.7 versus the powered flyby's ~2.0.
+
+**Tisserand invariant**:
+An unpowered flyby rotates the planet-relative excess velocity but can never
+change its *magnitude*. Growing the heliocentric energy therefore requires
+arriving at a body with the excess velocity misaligned from the planet's motion —
+which a flyby at *another* body sets up. That is the whole mechanism of the chain.
+_Avoid_: "the flyby added energy" without naming which body's frame; expecting a
+single body to pump itself (same-body flybys only re-aim).
+
+**Tisserand lock**:
+The dead end at the exactly-minimum Venus transfer: the arrival is tangent to
+Venus's orbit, so the excess velocity is aligned, every rotation of it is wasted
+re-aiming, and the maximum Earth-relative excess is frozen at its launch value
+forever. No amount of trip time escapes it.
+_Avoid_: treating the Venus-reach floor (`venus_reach_departure_floor()`,
+~279.4 m/s) as the chain's minimum burn — *at* the floor the chain is locked;
+feasibility starts a few m/s above it (square-root escape: misalignment grows as
+the square root of the margin above the floor).
+
+**Pump ladder**:
+The alternating-body climb the search finds (e.g. E-V-E-V-V-E-J): each hop
+arrives more misaligned, so each flyby converts more of the (fixed) local excess
+speed into heliocentric energy, until Jupiter is reachable at ~15 km/s of excess.
+
+**Phasing budget**:
+The model is phasing-free — each planet is wherever the trajectory needs it — so
+a fixed 300 m/s deep-space-maneuver reserve (`ASSIST_CHAIN_PHASING_BUDGET`) is
+charged as spent methalox in the delivered-fraction accounting. The headline mass
+numbers already carry the estimated cost of making real ephemerides line up.
+_Avoid_: quoting the chain's delivered fraction from the departure burn alone;
+calling the reserve a flyby burn (all flybys are strictly unpowered).
+
+**Feasibility witness**:
+The beam search proves feasibility by exhibiting a replayed chain; a `None` means
+"not found at these beam settings", never "infeasible". Minimum-burn results are
+upper bounds on the true minimum (the calibrated production beam closes at
+~290 m/s; a finer beam closes at ~285 m/s).
+_Avoid_: reading `None` as a proof; global top-by-speed pruning (it made
+feasibility non-monotone in the burn — pruning is time-bucketed instead).
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
