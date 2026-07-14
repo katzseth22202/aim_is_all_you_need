@@ -64,6 +64,22 @@ TWO_IMPULSE_DIP_PERIAPSIS = 0.50 * u.AU
 # the deeper dive, which left an aggressive ~233 km/s of excess.
 SOLAR_DIVE_PERIAPSIS_BURN = 34.5 * u.km / u.s
 
+# --- Powered Jovian flyby retrograde return (planned subsection under
+#     sec:jupiter_only_growth; ADR 0002; CONTEXT.md "Jupiter powered-flyby
+#     retrograde return") ---
+# Floor on the Jovian flyby periapsis altitude (above the 1-bar level). Juno-class
+# perijove: conservative against radiation/atmosphere, and nearly free -- the
+# Oberth penalty versus a 200 km graze is only ~40 m/s of delta-v.
+LOW_JUPITER_ALTITUDE = 4000 * u.km
+# Hard cap on outbound (Earth->Jupiter) plus return (Jupiter->1 AU) heliocentric
+# time of flight. Excludes extreme apoapsis-raise trajectories; the
+# Hohmann-out/Hohmann-back baseline is ~5.5 yr, leaving ~1.5 yr of slack.
+JUPITER_FLYBY_MAX_TOF = 7 * u.year
+# Earth-closing-speed targets (km/s) for the v_b trade curve printed alongside
+# the optimum: from plunge-like returns (~45) up past the retrograde-Hohmann
+# closing speed (~69.3).
+JUPITER_FLYBY_VB_TRADE_TARGETS = (45.0, 50.0, 55.0, 60.0, 65.0, 70.0)
+
 # --- Suborbital "200 km" rocket delta-v budget (paper Section 2.1) ---
 # The paper claims a reusable suborbital rocket that merely reaches ~200 km
 # altitude (it does NOT reach orbit on its own; PuffSat pulses do the rest) can

@@ -13,6 +13,7 @@ from tabulate import tabulate
 from src.astro_constants import (
     CERES_A,
     EARTH_A,
+    JUPITER_FLYBY_MAX_TOF,
     LUNAR_MONTH,
     MARS_A,
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
@@ -20,6 +21,7 @@ from src.astro_constants import (
     SATURN_A,
     VENUS_A,
 )
+from src.propulsion import payload_mass_ratio
 from src.scenario import (
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
@@ -29,10 +31,13 @@ from src.scenario import (
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
+    jupiter_flyby_vb_trade_curve,
     launch_capacity_time,
     lunar_return_transfer_dv,
     millionfold_scaling_time,
     paper_scenarios,
+    parker_injection_burns,
+    powered_jovian_flyby_return,
     scenarios_to_dataframe,
     single_impulse_resonant_dive,
     solar_dive_reintercept_gap,
@@ -275,6 +280,78 @@ def main() -> None:
         f"{lunar_return_transfer_dv(VENUS_A).to(u.m / u.s)}",
         "lunar-return delta-v beyond lunar escape to Mars transfer = "
         f"{lunar_return_transfer_dv(MARS_A).to(u.m / u.s)}",
+    )
+
+    # Powered Jovian flyby retrograde return: the leg the three Jovian-return
+    # catalog rows assume but never derive. PLANNED paper subsection under
+    # sec:jupiter_only_growth (ADR 0002-jupiter-flyby-objective); the catalog
+    # rows above deliberately keep the paper's published retrograde-Hohmann
+    # v_b ~ 69.27 km/s until the paper adopts these numbers.
+    flyby = powered_jovian_flyby_return()
+    parker_prograde_burn, parker_retrograde_burn = parker_injection_burns()
+    print_paper_point(
+        "Powered Jovian Flyby Retrograde Return -- PLANNED subsection under "
+        "Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
+        "not yet in the published paper (ADR 0002)",
+        "proposed claim: maximizing delivered mass x collision mass ratio -- "
+        "not minimizing delta-v, which degenerates into a barely-retrograde "
+        "plunge (ADR 0002) -- sets both burns of the leg that puts a PuffSat "
+        "onto a retrograde Earth-crossing orbit",
+        f"departure burn dv1 = {flyby.departure_burn:.3f} above escape at "
+        f"200 km (v_inf = {flyby.v_infinity_earth:.3f}; free-aim angle = "
+        f"{flyby.aim_angle:.2f} -- the optimizer picks a tangential departure)",
+        f"flyby burn dv2 = {flyby.flyby_burn:.4f} at periapsis "
+        f"{flyby.flyby_periapsis_radius:.0f} (altitude "
+        f"{flyby.flyby_periapsis_altitude:.0f}): the unpowered bend suffices "
+        f"at the optimum; turn = {flyby.turn_angle:.1f}, v_inf "
+        f"{flyby.v_infinity_jupiter_in:.2f} -> "
+        f"{flyby.v_infinity_jupiter_out:.2f}",
+        f"achieved v_b = {flyby.collision_speed:.2f} vs the catalog rows' "
+        "retrograde-Hohmann 69.27 km/s; truncated return perihelion = "
+        f"{flyby.return_perihelion:.4f} (never reached -- intercepted at 1 AU)",
+        f"delivered fraction {flyby.delivered_fraction:.3f} x mass ratio "
+        f"{flyby.payload_puffsat_mass_ratio:.3f} (vs the "
+        "sec:jupiter_only_growth push) = end-to-end "
+        f"{flyby.end_to_end_mass_ratio:.3f}",
+        f"time of flight = {flyby.outbound_time:.2f} out + "
+        f"{flyby.return_time:.2f} back = {flyby.total_time:.2f} "
+        f"(cap {JUPITER_FLYBY_MAX_TOF})",
+        "Parker rows re-scored at the achieved v_b: prograde ratio = "
+        f"{payload_mass_ratio(v_rf=parker_prograde_burn, v_b=flyby.collision_speed):.3f}, "
+        "retrograde ratio = "
+        f"{payload_mass_ratio(v_rf=parker_retrograde_burn, v_b=flyby.collision_speed):.3f}",
+    )
+    print(
+        "\nPowered Jovian flyby -- min total burn vs target v_b (ADR 0002 "
+        "trade curve; shows how flat the plateau around the optimum is)"
+    )
+    print(
+        tabulate(
+            [
+                [
+                    f"{point.target_collision_speed.to_value(u.km / u.s):.0f}",
+                    "yes" if point.feasible else "no",
+                    f"{point.total_burn.to_value(u.km / u.s):.2f}",
+                    f"{point.departure_burn.to_value(u.km / u.s):.2f}",
+                    f"{point.flyby_burn.to_value(u.km / u.s):.2f}",
+                    f"{point.achieved_collision_speed.to_value(u.km / u.s):.2f}",
+                    f"{point.end_to_end_mass_ratio:.3f}",
+                    f"{point.total_time.to_value(u.year):.2f}",
+                ]
+                for point in jupiter_flyby_vb_trade_curve()
+            ],
+            headers=[
+                "target v_b",
+                "feasible",
+                "total dv",
+                "dv1 Earth",
+                "dv2 Jupiter",
+                "achieved v_b",
+                "end-to-end",
+                "TOF (yr)",
+            ],
+            tablefmt="grid",
+        )
     )
 
     suborbital_frac = float(suborbital_200km_propellant_fraction())

@@ -3,12 +3,31 @@
 import numpy as np
 import pytest
 from astropy import units as u
+from boinor.bodies import Earth, Jupiter
 
-from src.astro_constants import CERES_A, EARTH_A, MARS_A, SATURN_A, VENUS_A
-from src.propulsion import payload_mass_ratio
+from src.astro_constants import (
+    CERES_A,
+    EARTH_A,
+    JUPITER_A,
+    JUPITER_FLYBY_MAX_TOF,
+    LOW_JUPITER_ALTITUDE,
+    MARS_A,
+    SATURN_A,
+    VENUS_A,
+)
+from src.orbit_utils import (
+    apoapsis_speed,
+    hyperbolic_eccentricity,
+    orbit_from_rp_ra,
+    speed_with_escape_energy,
+)
+from src.propulsion import payload_mass_ratio, retrograde_jovian_hohmann_transfer
 from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    _flyby_return_leg,
+    _powered_flyby_leg,
+    _powered_flyby_params,
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
@@ -16,12 +35,16 @@ from src.scenario import (
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
     find_best_lunar_return,
+    jupiter_flyby_vb_trade_curve,
     launch_capacity_time,
     lunar_return_transfer_dv,
+    lunar_transfer_periapsis_speed,
     millionfold_scaling_time,
     min_energy_solar_dive_time,
     paper_scenarios,
+    parker_injection_burns,
     periapsis_reaim_cost_per_degree,
+    powered_jovian_flyby_return,
     scenarios_to_dataframe,
     single_impulse_resonant_dive,
     solar_dive_periapsis_speed,
@@ -420,3 +443,175 @@ def test_apoapsis_raise_finite_burn_confirms_impulsive() -> None:
         < finite_90.closing_speed_error
         < finite_180.closing_speed_error
     )
+
+
+# ---------------------------------------------------------------------------
+# Powered Jovian flyby retrograde return (ADR 0002-jupiter-flyby-objective).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def flyby_params():
+    """Float parameter block for the powered-flyby helpers."""
+    return _powered_flyby_params()
+
+
+@pytest.fixture(scope="module")
+def flyby_optimum():
+    """The end-to-end optimum, computed once for the module (seeded search)."""
+    return powered_jovian_flyby_return()
+
+
+def test_flyby_return_leg_reproduces_retrograde_hohmann(flyby_params):
+    # The v_b convention pin: fed the retrograde Jupiter->Earth Hohmann state
+    # (tangential retrograde at Jupiter's orbit radius, apoapsis speed of the
+    # 1 AU x 5.2028 AU transfer ellipse), the float return leg must reproduce
+    # retrograde_jovian_hohmann_transfer() -- the ~69.27 km/s the catalog's
+    # three Jovian rows assume.
+    v_apo = apoapsis_speed(
+        orbit_from_rp_ra(apoapsis_radius=JUPITER_A, periapsis_radius=EARTH_A)
+    ).to_value(u.km / u.s)
+    leg = _flyby_return_leg(-v_apo, 0.0, flyby_params)
+    assert leg is not None
+    reference = retrograde_jovian_hohmann_transfer()
+    assert is_nearly_equal(leg.collision_speed * u.km / u.s, reference, percent=0.001)
+    # Tangential arrival: the return perihelion is 1 AU itself.
+    assert is_nearly_equal(leg.perihelion * u.km, EARTH_A.to(u.km), percent=0.001)
+    # Half the transfer ellipse period, ~2.73 yr.
+    assert is_nearly_equal((leg.tof * u.s).to(u.year), 2.731 * u.year, percent=0.01)
+
+
+def test_flyby_return_leg_rejects_prograde(flyby_params):
+    # Retrograde is orbit-level: a prograde tangential state must be rejected,
+    # not scored (the retrograde-plunge degeneracy guard, ADR 0002).
+    assert _flyby_return_leg(+5.0, 0.0, flyby_params) is None
+    assert _flyby_return_leg(0.0, -10.0, flyby_params) is None
+
+
+def test_powered_flyby_unpowered_limit(flyby_params):
+    # With dv2 = 0 the split hyperbola collapses to a single one: the excess
+    # speed is conserved and the turn equals the unpowered 2*asin(1/e), with e
+    # from the cross-module hyperbolic_eccentricity. Pin point verified
+    # feasible: v_inf = 11 km/s, tangential, periapsis 6x the floor.
+    periapsis_radius = 6.0 * flyby_params.periapsis_floor
+    leg = _powered_flyby_leg(
+        v_infinity_earth=11.0,
+        aim_angle=0.0,
+        periapsis_radius=periapsis_radius,
+        flyby_burn=0.0,
+        descending_arrival=False,
+        bend_sign=1.0,
+        params=flyby_params,
+    )
+    assert leg is not None
+    assert leg.v_infinity_out == pytest.approx(leg.v_infinity_in, rel=1e-9)
+    ecc = hyperbolic_eccentricity(
+        periapsis_radius * u.km, leg.v_infinity_in * u.km / u.s, Jupiter
+    )
+    assert leg.turn_angle == pytest.approx(2.0 * np.arcsin(1.0 / ecc), rel=1e-9)
+
+
+def test_powered_flyby_burn_grows_v_infinity(flyby_params):
+    # A periapsis burn pumps the outgoing excess speed above the incoming one
+    # (Oberth) while shrinking the outbound bend contribution: the powered
+    # trajectory's turn must be smaller than the unpowered one at the same
+    # periapsis, since the faster outbound hyperbola bends less.
+    periapsis_radius = 2.0 * flyby_params.periapsis_floor
+    powered = _powered_flyby_leg(
+        12.0, 0.0, periapsis_radius, 2.0, False, 1.0, flyby_params
+    )
+    assert powered is not None
+    assert powered.v_infinity_out > powered.v_infinity_in
+    ecc_in = 1.0 + periapsis_radius * powered.v_infinity_in**2 / (
+        flyby_params.mu_jupiter
+    )
+    unpowered_turn = 2.0 * np.arcsin(1.0 / ecc_in)
+    assert powered.turn_angle < unpowered_turn
+
+
+def test_powered_jovian_flyby_return_optimum(flyby_optimum, flyby_params):
+    # Constraints hold at the optimum.
+    assert flyby_optimum.total_time <= JUPITER_FLYBY_MAX_TOF * 1.0001
+    assert (
+        flyby_optimum.flyby_periapsis_radius
+        >= (Jupiter.R + LOW_JUPITER_ALTITUDE) * 0.9999
+    )
+    assert flyby_optimum.return_perihelion <= EARTH_A * 1.0001
+    # The achieved v_b lands strictly between the barely-retrograde plunge
+    # (~49.5 km/s) and the retrograde Hohmann the catalog rows assume
+    # (~69.27 km/s) -- the interior optimum of ADR 0002.
+    assert 45.0 * u.km / u.s < flyby_optimum.collision_speed
+    assert flyby_optimum.collision_speed < retrograde_jovian_hohmann_transfer()
+    # End-to-end objective is internally consistent and beats a hand-checked
+    # feasible powered trajectory (v_inf=12, tangential, 2x floor, dv2=2:
+    # end-to-end ~1.33).
+    assert flyby_optimum.end_to_end_mass_ratio == pytest.approx(
+        flyby_optimum.delivered_fraction * flyby_optimum.payload_puffsat_mass_ratio,
+        rel=1e-9,
+    )
+    hand_case = _powered_flyby_leg(
+        12.0, 0.0, 2.0 * flyby_params.periapsis_floor, 2.0, False, 1.0, flyby_params
+    )
+    assert hand_case is not None
+    assert flyby_optimum.end_to_end_mass_ratio > hand_case.end_to_end
+    assert flyby_optimum.end_to_end_mass_ratio > 1.5
+    # Mass ratio is scored against the sec:jupiter_only_growth push.
+    assert flyby_optimum.payload_puffsat_mass_ratio == pytest.approx(
+        payload_mass_ratio(
+            v_rf=lunar_transfer_periapsis_speed(), v_b=flyby_optimum.collision_speed
+        ),
+        rel=1e-9,
+    )
+    # v_b uses the retrograde_jovian_hohmann_transfer convention: the 1 AU
+    # closing speed folded through Earth's well to the surface.
+    assert is_nearly_equal(
+        flyby_optimum.collision_speed,
+        speed_with_escape_energy(flyby_optimum.closing_speed_1au, Earth),
+        percent=0.001,
+    )
+    # Departure burn is the Oberth increment above escape at 200 km.
+    v_esc_leo = flyby_params.v_esc_leo * u.km / u.s
+    assert is_nearly_equal(
+        flyby_optimum.departure_burn,
+        np.sqrt(flyby_optimum.v_infinity_earth**2 + v_esc_leo**2) - v_esc_leo,
+        percent=0.001,
+    )
+
+
+def test_parker_rows_rescoreable_at_flyby_v_b(flyby_optimum):
+    # The grill decision: the two Parker rows are reported at the achieved v_b,
+    # not optimized for. Both injection burns must sit below the achieved v_b
+    # so their mass ratios are defined there.
+    prograde_burn, retrograde_burn = parker_injection_burns()
+    assert prograde_burn < flyby_optimum.collision_speed
+    assert retrograde_burn < flyby_optimum.collision_speed
+    assert payload_mass_ratio(v_rf=prograde_burn, v_b=flyby_optimum.collision_speed) > 0
+    assert (
+        payload_mass_ratio(v_rf=retrograde_burn, v_b=flyby_optimum.collision_speed) > 0
+    )
+
+
+@pytest.mark.slow
+def test_jupiter_flyby_vb_trade_curve():
+    # The ADR 0002 trade curve: min total burn is nondecreasing in the v_b
+    # floor, every feasible point meets its floor, and the mid-range targets
+    # spanning plunge-to-Hohmann are all reachable within the 7 yr cap.
+    points = jupiter_flyby_vb_trade_curve()
+    assert len(points) == 6
+    kms = u.km / u.s
+    feasible = [p for p in points if p.feasible]
+    # 50-65 km/s must all be feasible (45 and 70 may sit at the edges).
+    for point in points:
+        if 50.0 * kms <= point.target_collision_speed <= 65.0 * kms:
+            assert point.feasible
+    previous_burn = -np.inf * kms
+    for point in feasible:
+        # Floors are met (up to optimizer tolerance).
+        assert point.achieved_collision_speed >= point.target_collision_speed * 0.9999
+        assert point.total_time <= JUPITER_FLYBY_MAX_TOF * 1.0001
+        assert is_nearly_equal(
+            point.total_burn, point.departure_burn + point.flyby_burn, percent=0.001
+        )
+        # Monotone within a small optimizer tolerance.
+        assert point.total_burn >= previous_burn - 0.1 * kms
+        previous_burn = point.total_burn

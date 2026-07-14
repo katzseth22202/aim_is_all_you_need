@@ -31,10 +31,10 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
-from boinor.bodies import Body, Earth, Moon, Saturn, Sun
+from boinor.bodies import Body, Earth, Jupiter, Moon, Saturn, Sun
 from boinor.twobody import Orbit
 from scipy.integrate import solve_ivp
-from scipy.optimize import brentq
+from scipy.optimize import brentq, differential_evolution
 
 from src.astro_constants import (
     APOAPSIS_RAISE_APHELION_BRACKET,
@@ -44,7 +44,10 @@ from src.astro_constants import (
     EARTH_A,
     EFFECTIVE_DV_LUNAR,
     JUPITER_A,
+    JUPITER_FLYBY_MAX_TOF,
+    JUPITER_FLYBY_VB_TRADE_TARGETS,
     LEO_ALTITUDE,
+    LOW_JUPITER_ALTITUDE,
     LOW_SATURN_ALTITUDE,
     METHALOX_SEA_LEVEL_ISP,
     METHALOX_VACUUM_ISP,
@@ -58,6 +61,7 @@ from src.astro_constants import (
     RETROGRADE_FRACTION,
     SOLAR_DIVE_PERIAPSIS_BURN,
     SOLAR_DIVE_PERIAPSIS_SOLAR_RADII,
+    STD_FUDGE_FACTOR,
     SUBORBITAL_DV_TO_200KM,
     TARGET_LAUNCH_CAPACITY_MULTIPLE,
     TWO_IMPULSE_DIP_PERIAPSIS,
@@ -141,6 +145,47 @@ SCENARIO_COLUMNS = [
 ]
 
 
+def lunar_transfer_periapsis_speed() -> u.Quantity:
+    """Speed at the 200 km Earth periapsis of the LEO-to-Moon transfer ellipse.
+
+    The `v_rf` of the ``sec:jupiter_only_growth`` catalog row and the push target
+    the powered Jovian flyby's end-to-end mass ratio is scored against.
+
+    Returns:
+        The periapsis speed of the lunar transfer orbit (astropy Quantity, km/s).
+    """
+    return periapsis_speed(
+        orbit=orbit_from_rp_ra(
+            apoapsis_radius=MOON_A,
+            periapsis_radius=Earth.R + LEO_ALTITUDE,
+            attractor_body=Earth,
+        )
+    )
+
+
+def parker_injection_burns() -> Tuple[u.Quantity, u.Quantity]:
+    """Burns to inject a payload from Earth toward a Parker-class periapsis.
+
+    The `v_rf` values of the two ``sec:jupiter_gravity_initial`` catalog rows: the
+    delta-v at 200 km that sends the payload onto a prograde (respectively
+    retrograde) heliocentric transfer whose aphelion is 1 AU and whose periapsis
+    is the Parker Space Probe's.
+
+    Returns:
+        Tuple of (prograde burn, retrograde burn) (astropy Quantities, km/s).
+    """
+    parker_orbit = orbit_from_rp_ra(
+        apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
+    )
+    parker_apoapsis_speed = apoapsis_speed(orbit=parker_orbit)
+    earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
+    # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
+    prograde = burn_for_v_infinity(earth_speed - parker_apoapsis_speed)
+    # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
+    retrograde = burn_for_v_infinity(earth_speed + parker_apoapsis_speed)
+    return prograde, retrograde
+
+
 def paper_scenarios() -> List[PuffSatScenario]:
     """Build the catalog of PuffSat scenarios analyzed in the paper.
 
@@ -153,27 +198,10 @@ def paper_scenarios() -> List[PuffSatScenario]:
         The ordered list of :class:`PuffSatScenario` from the paper.
     """
     low_earth_periapsis = Earth.R + LEO_ALTITUDE
-    lunar_transfer_orbit = orbit_from_rp_ra(
-        apoapsis_radius=MOON_A,
-        periapsis_radius=low_earth_periapsis,
-        attractor_body=Earth,
-    )
-    lunar_transfer_periapsis_speed = periapsis_speed(orbit=lunar_transfer_orbit)
+    lunar_periapsis_speed = lunar_transfer_periapsis_speed()
     leo_speed = speed_around_attractor(a=low_earth_periapsis, attractor=Earth)
 
-    parker_orbit = orbit_from_rp_ra(
-        apoapsis_radius=EARTH_A, periapsis_radius=PARKER_PERIAPSIS
-    )
-    parker_apoapsis_speed = apoapsis_speed(orbit=parker_orbit)
-    earth_speed = speed_around_attractor(a=EARTH_A, attractor=Sun)
-    # v_infinity for prograde transfer from Earth to Parker orbit apoapsis
-    prograde_v_infinity_earth_to_parker = earth_speed - parker_apoapsis_speed
-    prograde_dv_parker_burn = burn_for_v_infinity(prograde_v_infinity_earth_to_parker)
-    # v_infinity for retrograde transfer from Earth to Parker orbit apoapsis
-    retrograde_v_infinity_earth_to_parker = earth_speed + parker_apoapsis_speed
-    retrograde_dv_parker_burn = burn_for_v_infinity(
-        retrograde_v_infinity_earth_to_parker
-    )
+    prograde_dv_parker_burn, retrograde_dv_parker_burn = parker_injection_burns()
     retrograde_jovian_speed = retrograde_jovian_hohmann_transfer()
 
     lunar_esc = escape_velocity(body=Moon)
@@ -190,7 +218,7 @@ def paper_scenarios() -> List[PuffSatScenario]:
     return [
         PuffSatScenario(
             v_rf=leo_speed,
-            v_b=lunar_transfer_periapsis_speed,
+            v_b=lunar_periapsis_speed,
             desc="""Eccentric PuffSats with apogee at lunar distance push
 rocket to minimal low Earth orbit""",
             paper_ref="sec:starship_safelaunch",
@@ -204,7 +232,7 @@ rocket to minimal low Earth orbit""",
         ),
         PuffSatScenario(
             v_rf=0 * u.km / u.s,
-            v_b=-lunar_transfer_periapsis_speed,
+            v_b=-lunar_periapsis_speed,
             v_ri=leo_speed,
             desc="""Decelerate intercity rocket for powered reentry with retrograde PuffSats from lunar orbit""",
             paper_ref="sec:200_mile_high",
@@ -222,7 +250,7 @@ rocket to minimal low Earth orbit""",
             paper_ref="sec:jupiter_gravity_initial",
         ),
         PuffSatScenario(
-            v_rf=lunar_transfer_periapsis_speed,
+            v_rf=lunar_periapsis_speed,
             v_b=retrograde_jovian_speed,
             desc="""PuffSats approach Earth from Jupiter and push a rocket into an elliptical orbit""",
             paper_ref="sec:jupiter_only_growth",
@@ -1693,3 +1721,781 @@ def apoapsis_raise_finite_burn(
         phasing_residual=float(residual) * u.deg,
         closing_speed_error=closing_speed_error,
     )
+
+
+# ---------------------------------------------------------------------------
+# Powered Jovian flyby retrograde return (planned subsection under
+# sec:jupiter_only_growth; ADR 0002-jupiter-flyby-objective; CONTEXT.md
+# "Jupiter powered-flyby retrograde return").
+#
+# The leg the catalog's Jovian-return rows assume but never derive: an Oberth
+# methalox burn at 200 km above Earth (from C3 = 0, PuffSat-provided), a coast
+# to Jupiter, and a powered gravity assist -- a second impulsive methalox burn
+# at Jovian periapsis -- that bends and pumps the trajectory into a retrograde
+# heliocentric return crossing 1 AU. Planar patched conic; circular coplanar
+# planet orbits; velocities in the local (tangential, radial-outward) basis.
+#
+# "Minimize total delta-v" is ill-posed here (the retrograde-plunge degeneracy,
+# see the ADR), so the optimizer maximizes the end-to-end mass ratio instead:
+# delivered mass fraction x payload mass ratio at the achieved collision speed.
+# The internal helpers work in floats (km, s, km/s) for optimizer speed, like
+# apoapsis_raise_finite_burn; Quantities appear only at the public boundary.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _FlybyParams:
+    """Float-valued physical inputs of the powered-flyby search (km, s, km/s).
+
+    Attributes:
+        mu_sun: Sun gravitational parameter (km^3/s^2).
+        mu_jupiter: Jupiter gravitational parameter (km^3/s^2).
+        r_earth_orbit: Earth heliocentric orbit radius, 1 AU (km).
+        r_jupiter_orbit: Jupiter heliocentric orbit radius (km).
+        v_earth_orbit: Earth circular heliocentric speed (km/s).
+        v_jupiter_orbit: Jupiter circular heliocentric speed (km/s).
+        v_esc_leo: Earth escape speed at the 200 km burn altitude (km/s).
+        v_esc_surface: Earth surface escape speed -- the collision-speed
+            convention of retrograde_jovian_hohmann_transfer (km/s).
+        periapsis_floor: Minimum Jovian flyby periapsis radius, center-based (km).
+        exhaust_speed: Methalox vacuum effective exhaust speed (km/s).
+        v_rf: Push target of the growth row the mass ratio is scored on (km/s).
+        max_tof: Cap on outbound + return heliocentric time of flight (s).
+    """
+
+    mu_sun: float
+    mu_jupiter: float
+    r_earth_orbit: float
+    r_jupiter_orbit: float
+    v_earth_orbit: float
+    v_jupiter_orbit: float
+    v_esc_leo: float
+    v_esc_surface: float
+    periapsis_floor: float
+    exhaust_speed: float
+    v_rf: float
+    max_tof: float
+
+
+def _powered_flyby_params(
+    max_total_tof: u.Quantity = JUPITER_FLYBY_MAX_TOF,
+    periapsis_floor_altitude: u.Quantity = LOW_JUPITER_ALTITUDE,
+) -> _FlybyParams:
+    """Build the float parameter block for the powered-flyby search.
+
+    Args:
+        max_total_tof: Cap on outbound + return time of flight (astropy Quantity).
+        periapsis_floor_altitude: Minimum flyby altitude above Jupiter's 1-bar
+            level (astropy Quantity).
+
+    Returns:
+        The :class:`_FlybyParams` with everything converted to km / s / km/s.
+    """
+    mu_sun = float(Sun.k.to_value(u.km**3 / u.s**2))
+    r_earth_orbit = float(EARTH_A.to_value(u.km))
+    r_jupiter_orbit = float(JUPITER_A.to_value(u.km))
+    return _FlybyParams(
+        mu_sun=mu_sun,
+        mu_jupiter=float(Jupiter.k.to_value(u.km**3 / u.s**2)),
+        r_earth_orbit=r_earth_orbit,
+        r_jupiter_orbit=r_jupiter_orbit,
+        v_earth_orbit=float(np.sqrt(mu_sun / r_earth_orbit)),
+        v_jupiter_orbit=float(np.sqrt(mu_sun / r_jupiter_orbit)),
+        v_esc_leo=float(escape_velocity(Earth, LEO_ALTITUDE).to_value(u.km / u.s)),
+        v_esc_surface=float(escape_velocity(Earth).to_value(u.km / u.s)),
+        periapsis_floor=float((Jupiter.R + periapsis_floor_altitude).to_value(u.km)),
+        exhaust_speed=float(
+            exhaust_velocity_from_isp(METHALOX_VACUUM_ISP).to_value(u.km / u.s)
+        ),
+        v_rf=float(lunar_transfer_periapsis_speed().to_value(u.km / u.s)),
+        max_tof=float(max_total_tof.to_value(u.s)),
+    )
+
+
+def _elliptic_tof_seconds(mu: float, a: float, ecc: float, nu: float) -> float:
+    """Time from periapsis to true anomaly ``nu`` (rad, [0, pi]) on an ellipse.
+
+    Float twin of :func:`orbit_utils.elliptic_time_of_flight` for the optimizer's
+    hot loop.
+
+    Args:
+        mu: Gravitational parameter (km^3/s^2).
+        a: Semi-major axis (km).
+        ecc: Eccentricity, 0 <= ecc < 1.
+        nu: True anomaly from periapsis (rad, in [0, pi]).
+
+    Returns:
+        The time of flight (s).
+    """
+    eccentric_anomaly = 2.0 * np.arctan2(
+        np.sqrt(1.0 - ecc) * np.sin(nu / 2.0),
+        np.sqrt(1.0 + ecc) * np.cos(nu / 2.0),
+    )
+    mean_anomaly = eccentric_anomaly - ecc * np.sin(eccentric_anomaly)
+    return float(mean_anomaly / np.sqrt(mu / a**3))
+
+
+def _hyperbolic_tof_seconds(mu: float, a_abs: float, ecc: float, nu: float) -> float:
+    """Time from periapsis to true anomaly ``nu`` (rad, [0, pi)) on a hyperbola.
+
+    Float twin of :func:`orbit_utils.hyperbolic_time_of_flight` for the
+    optimizer's hot loop.
+
+    Args:
+        mu: Gravitational parameter (km^3/s^2).
+        a_abs: Absolute semi-major axis |a| (km).
+        ecc: Eccentricity, ecc > 1.
+        nu: True anomaly from periapsis (rad), within the reachable branch.
+
+    Returns:
+        The time of flight (s).
+    """
+    cosh_f = (ecc + np.cos(nu)) / (1.0 + ecc * np.cos(nu))
+    hyperbolic_anomaly = float(np.arccosh(max(cosh_f, 1.0)))
+    mean_anomaly = ecc * np.sinh(hyperbolic_anomaly) - hyperbolic_anomaly
+    return float(mean_anomaly / np.sqrt(mu / a_abs**3))
+
+
+def _true_anomaly_at_radius_rad(p: float, ecc: float, r: float) -> Optional[float]:
+    """Principal true anomaly (rad, [0, pi]) where a conic reaches radius ``r``.
+
+    Args:
+        p: Semi-latus rectum (km).
+        ecc: Eccentricity (> 0).
+        r: Radius to reach (km).
+
+    Returns:
+        The true anomaly in [0, pi], or None if the radius is unreachable.
+    """
+    cos_nu = (p / r - 1.0) / ecc
+    if abs(cos_nu) > 1.0 + 1e-9:
+        return None
+    return float(np.arccos(np.clip(cos_nu, -1.0, 1.0)))
+
+
+@dataclass(frozen=True)
+class _ReturnLeg:
+    """Float summary of the retrograde Jupiter-to-1 AU return leg.
+
+    Attributes:
+        perihelion: Perihelion radius of the return orbit (km).
+        tof: Time of flight from the flyby to the first inbound 1 AU crossing (s).
+        closing_speed: Earth-relative speed at the 1 AU crossing (km/s).
+        collision_speed: Closing speed folded through Earth's gravity well to the
+            surface-escape convention of retrograde_jovian_hohmann_transfer (km/s).
+    """
+
+    perihelion: float
+    tof: float
+    closing_speed: float
+    collision_speed: float
+
+
+def _flyby_return_leg(
+    v_tangential: float, v_radial: float, params: _FlybyParams
+) -> Optional[_ReturnLeg]:
+    """Score the heliocentric return from Jupiter's orbit radius to 1 AU.
+
+    Takes the post-flyby heliocentric velocity at ``r_jupiter_orbit`` in the
+    (tangential, radial-outward) basis. The orbit must be retrograde
+    (``v_tangential < 0``) and cross 1 AU; the leg ends at the first *inbound*
+    1 AU crossing. Internally the orbit is mirrored to a prograde twin (radii
+    and times are unchanged) so the conic formulas keep a positive angular
+    momentum.
+
+    Args:
+        v_tangential: Post-flyby tangential heliocentric speed (km/s, negative
+            for retrograde).
+        v_radial: Post-flyby radial-outward heliocentric speed (km/s).
+        params: The float parameter block.
+
+    Returns:
+        The :class:`_ReturnLeg`, or None if the state is not retrograde, never
+        crosses 1 AU, or never comes back inward.
+    """
+    if v_tangential >= 0.0:
+        return None
+    mu = params.mu_sun
+    r_j = params.r_jupiter_orbit
+    r_e = params.r_earth_orbit
+    # Mirrored prograde twin: same radii and times, positive angular momentum.
+    v_t = -v_tangential
+    v_r = v_radial
+    energy = (v_t * v_t + v_r * v_r) / 2.0 - mu / r_j
+    h = r_j * v_t
+    p = h * h / mu
+    ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
+    if abs(ecc - 1.0) < 1e-9 or ecc < 1e-9:
+        return None
+    perihelion = p / (1.0 + ecc)
+    if perihelion > r_e:
+        return None
+    nu_jupiter = _true_anomaly_at_radius_rad(p, ecc, r_j)
+    nu_earth = _true_anomaly_at_radius_rad(p, ecc, r_e)
+    if nu_jupiter is None or nu_earth is None:
+        return None
+    if ecc > 1.0:
+        # Hyperbolic return: only an already-inbound state ever re-crosses 1 AU.
+        if v_r > 0.0:
+            return None
+        a_abs = p / (ecc * ecc - 1.0)
+        tof = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_jupiter)
+        tof -= _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_earth)
+    else:
+        a = p / (1.0 - ecc * ecc)
+        period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
+        t_jupiter = _elliptic_tof_seconds(mu, a, ecc, nu_jupiter)
+        t_earth = _elliptic_tof_seconds(mu, a, ecc, nu_earth)
+        if v_r > 0.0:
+            # Out to aphelion first, then back in through 1 AU.
+            tof = (period - t_earth) - t_jupiter
+        else:
+            tof = t_jupiter - t_earth
+    if tof <= 0.0:
+        return None
+    v1_sq = 2.0 * (energy + mu / r_e)
+    v_t1 = h / r_e
+    v_r1_sq = max(0.0, v1_sq - v_t1 * v_t1)
+    # Un-mirrored the tangential speed is -v_t1, so the Earth-relative closing
+    # speed is hypot(v_t1 + v_earth, v_r1).
+    closing = float(np.hypot(v_t1 + params.v_earth_orbit, np.sqrt(v_r1_sq)))
+    collision = float(np.hypot(closing, params.v_esc_surface))
+    return _ReturnLeg(
+        perihelion=perihelion, tof=tof, closing_speed=closing, collision_speed=collision
+    )
+
+
+@dataclass(frozen=True)
+class _FlybyLeg:
+    """Float summary of one full Earth-to-1-AU powered-flyby trajectory.
+
+    Attributes:
+        departure_burn: Oberth burn above escape at 200 km, delta-v1 (km/s).
+        flyby_burn: Impulsive burn at Jovian periapsis, delta-v2 (km/s).
+        v_infinity_earth: Hyperbolic excess speed leaving Earth (km/s).
+        aim_angle: Angle of the departure excess velocity off Earth's orbital
+            velocity (rad; positive tilts radially outward).
+        periapsis_radius: Jovian flyby periapsis radius, center-based (km).
+        v_infinity_in: Jupiter-relative excess speed before the burn (km/s).
+        v_infinity_out: Jupiter-relative excess speed after the burn (km/s).
+        turn_angle: Total split-hyperbola bend asin(1/e_in) + asin(1/e_out) (rad).
+        return_leg: The scored retrograde return.
+        outbound_tof: Earth-to-Jupiter heliocentric time of flight (s).
+        delivered_fraction: Mass fraction surviving both burns.
+        mass_ratio: Payload/PuffSat mass ratio at the achieved collision speed.
+        end_to_end: delivered_fraction x mass_ratio, the objective.
+    """
+
+    departure_burn: float
+    flyby_burn: float
+    v_infinity_earth: float
+    aim_angle: float
+    periapsis_radius: float
+    v_infinity_in: float
+    v_infinity_out: float
+    turn_angle: float
+    return_leg: _ReturnLeg
+    outbound_tof: float
+    delivered_fraction: float
+    mass_ratio: float
+    end_to_end: float
+
+
+def _powered_flyby_leg(
+    v_infinity_earth: float,
+    aim_angle: float,
+    periapsis_radius: float,
+    flyby_burn: float,
+    descending_arrival: bool,
+    bend_sign: float,
+    params: _FlybyParams,
+) -> Optional[_FlybyLeg]:
+    """Evaluate one powered-flyby trajectory from its four knobs.
+
+    Free-aim departure: the burn cost depends only on ``v_infinity_earth``;
+    ``aim_angle`` orients the excess velocity for free. The flyby is a split
+    hyperbola -- an impulsive tangential burn at periapsis joins an inbound and
+    an outbound hyperbola of different eccentricities, so the total bend is
+    ``asin(1/e_in) + asin(1/e_out)``, rotated to the side ``bend_sign`` picks.
+
+    Args:
+        v_infinity_earth: Hyperbolic excess speed leaving Earth (km/s).
+        aim_angle: Angle of the excess velocity off Earth's orbital velocity
+            (rad; positive tilts radially outward).
+        periapsis_radius: Jovian flyby periapsis radius, center-based (km).
+        flyby_burn: Impulsive burn at Jovian periapsis, >= 0 (km/s).
+        descending_arrival: Arrive at Jupiter's orbit radius past aphelion
+            (inward-moving) instead of on the outbound branch.
+        bend_sign: +1 rotates the excess velocity from tangential toward
+            radial-outward, -1 the other way (which side Jupiter is passed on).
+        params: The float parameter block.
+
+    Returns:
+        The :class:`_FlybyLeg`, or None if infeasible (cannot reach Jupiter,
+        non-retrograde return, no 1 AU crossing, or over the time-of-flight cap).
+    """
+    mu = params.mu_sun
+    r_e = params.r_earth_orbit
+    r_j = params.r_jupiter_orbit
+    if v_infinity_earth <= 0.0 or flyby_burn < 0.0:
+        return None
+    if periapsis_radius < params.periapsis_floor * (1.0 - 1e-12):
+        return None
+    departure_burn = float(
+        np.hypot(v_infinity_earth, params.v_esc_leo) - params.v_esc_leo
+    )
+
+    # Outbound heliocentric transfer from the free-aimed departure state.
+    v_t0 = params.v_earth_orbit + v_infinity_earth * float(np.cos(aim_angle))
+    v_r0 = v_infinity_earth * float(np.sin(aim_angle))
+    if v_t0 <= 0.0:
+        return None
+    energy = (v_t0 * v_t0 + v_r0 * v_r0) / 2.0 - mu / r_e
+    h = r_e * v_t0
+    p = h * h / mu
+    ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
+    if abs(ecc - 1.0) < 1e-9 or ecc < 1e-9:
+        return None
+    if ecc < 1.0 and p / (1.0 - ecc) < r_j:
+        return None
+    if ecc > 1.0 and descending_arrival:
+        return None
+    nu_depart = _true_anomaly_at_radius_rad(p, ecc, r_e)
+    nu_arrive = _true_anomaly_at_radius_rad(p, ecc, r_j)
+    if nu_depart is None or nu_arrive is None:
+        return None
+    if ecc < 1.0:
+        a = p / (1.0 - ecc * ecc)
+        period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
+        t_depart = _elliptic_tof_seconds(mu, a, ecc, nu_depart)
+        t_arrive = _elliptic_tof_seconds(mu, a, ecc, nu_arrive)
+        if descending_arrival:
+            t_arrive = period - t_arrive
+    else:
+        a_abs = p / (ecc * ecc - 1.0)
+        t_depart = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_depart)
+        t_arrive = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_arrive)
+    if v_r0 < 0.0:
+        t_depart = -t_depart
+    outbound_tof = t_arrive - t_depart
+    if outbound_tof <= 0.0:
+        return None
+
+    # Jupiter-relative arrival state.
+    v_arr_sq = 2.0 * (energy + mu / r_j)
+    v_t_arr = h / r_j
+    v_r_arr_sq = v_arr_sq - v_t_arr * v_t_arr
+    if v_r_arr_sq < -1e-9:
+        return None
+    v_r_arr = float(np.sqrt(max(0.0, v_r_arr_sq)))
+    if descending_arrival:
+        v_r_arr = -v_r_arr
+    rel_t = v_t_arr - params.v_jupiter_orbit
+    rel_r = v_r_arr
+    w_in = float(np.hypot(rel_t, rel_r))
+    if w_in < 1e-6:
+        return None
+
+    # Split-hyperbola powered flyby at periapsis_radius.
+    mu_j = params.mu_jupiter
+    ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
+    half_turn_in = float(np.arcsin(1.0 / ecc_in))
+    v_peri_in = float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius))
+    v_peri_out = v_peri_in + flyby_burn
+    w_out_sq = v_peri_out * v_peri_out - 2.0 * mu_j / periapsis_radius
+    if w_out_sq <= 0.0:
+        return None
+    w_out = float(np.sqrt(w_out_sq))
+    ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
+    half_turn_out = float(np.arcsin(1.0 / ecc_out))
+    turn = half_turn_in + half_turn_out
+    cos_turn = float(np.cos(bend_sign * turn))
+    sin_turn = float(np.sin(bend_sign * turn))
+    unit_t = rel_t / w_in
+    unit_r = rel_r / w_in
+    out_t = cos_turn * unit_t - sin_turn * unit_r
+    out_r = sin_turn * unit_t + cos_turn * unit_r
+    v_t_out = params.v_jupiter_orbit + w_out * out_t
+    v_r_out = w_out * out_r
+
+    return_leg = _flyby_return_leg(v_t_out, v_r_out, params)
+    if return_leg is None:
+        return None
+    if outbound_tof + return_leg.tof > params.max_tof:
+        return None
+    if return_leg.collision_speed <= params.v_rf:
+        return None
+
+    delivered = float(np.exp(-(departure_burn + flyby_burn) / params.exhaust_speed))
+    # payload_mass_ratio with v_ri = 0, inlined for the float hot loop.
+    mass_ratio = float(
+        2.0
+        * STD_FUDGE_FACTOR
+        / np.log(
+            return_leg.collision_speed / (return_leg.collision_speed - params.v_rf)
+        )
+    )
+    return _FlybyLeg(
+        departure_burn=departure_burn,
+        flyby_burn=flyby_burn,
+        v_infinity_earth=v_infinity_earth,
+        aim_angle=aim_angle,
+        periapsis_radius=periapsis_radius,
+        v_infinity_in=w_in,
+        v_infinity_out=w_out,
+        turn_angle=turn,
+        return_leg=return_leg,
+        outbound_tof=outbound_tof,
+        delivered_fraction=delivered,
+        mass_ratio=mass_ratio,
+        end_to_end=delivered * mass_ratio,
+    )
+
+
+# Search-space bounds for the differential-evolution knobs:
+# (v_infinity_earth km/s, aim_angle rad, log10(periapsis/floor), flyby_burn km/s).
+# The Hohmann departure needs ~8.79 km/s of excess, so 8.5 undercuts the
+# feasible edge; 25 km/s costs a ~16 km/s burn the objective would never pay.
+_FLYBY_BOUNDS: List[Tuple[float, float]] = [
+    (8.5, 25.0),
+    (-np.pi, np.pi),
+    (0.0, 2.5),
+    (0.0, 12.0),
+]
+_FLYBY_INFEASIBLE_PENALTY = 1e3
+
+
+def _flyby_from_vector(
+    x: npt.NDArray[np.float64],
+    descending_arrival: bool,
+    bend_sign: float,
+    params: _FlybyParams,
+) -> Optional[_FlybyLeg]:
+    """Evaluate a knob vector (see ``_FLYBY_BOUNDS``) into a flyby leg.
+
+    Args:
+        x: Knob vector (v_infinity_earth, aim_angle, log10(rp/floor), flyby_burn).
+        descending_arrival: Arrival-branch discrete choice.
+        bend_sign: Flyby bend-side discrete choice (+1 or -1).
+        params: The float parameter block.
+
+    Returns:
+        The evaluated :class:`_FlybyLeg`, or None if infeasible.
+    """
+    periapsis_radius = params.periapsis_floor * float(10.0 ** x[2])
+    return _powered_flyby_leg(
+        v_infinity_earth=float(x[0]),
+        aim_angle=float(x[1]),
+        periapsis_radius=periapsis_radius,
+        flyby_burn=float(x[3]),
+        descending_arrival=descending_arrival,
+        bend_sign=bend_sign,
+        params=params,
+    )
+
+
+def _flyby_objective(
+    x: npt.NDArray[np.float64],
+    descending_arrival: bool,
+    bend_sign: float,
+    params: _FlybyParams,
+) -> float:
+    """Penalized objective for the end-to-end optimum: minimize -end_to_end."""
+    leg = _flyby_from_vector(x, descending_arrival, bend_sign, params)
+    if leg is None:
+        return _FLYBY_INFEASIBLE_PENALTY
+    return -leg.end_to_end
+
+
+def _flyby_trade_objective(
+    x: npt.NDArray[np.float64],
+    descending_arrival: bool,
+    bend_sign: float,
+    params: _FlybyParams,
+    target_collision_speed: float,
+) -> float:
+    """Penalized objective for the trade curve: minimize total burn at a v_b floor."""
+    leg = _flyby_from_vector(x, descending_arrival, bend_sign, params)
+    if leg is None:
+        return _FLYBY_INFEASIBLE_PENALTY
+    shortfall = target_collision_speed - leg.return_leg.collision_speed
+    if shortfall > 0.0:
+        # Keep the penalty smooth but strictly above any feasible burn total
+        # (bounds cap the total near ~28 km/s).
+        return 50.0 + shortfall
+    return leg.departure_burn + leg.flyby_burn
+
+
+def _optimize_flyby(
+    objective_args: Tuple[object, ...],
+    objective: object,
+    params: _FlybyParams,
+    seed: int,
+    popsize: int,
+    maxiter: int,
+) -> Optional[Tuple[_FlybyLeg, bool, float]]:
+    """Run differential evolution over the four discrete branch/side combos.
+
+    Args:
+        objective_args: Extra args appended after (descending, bend_sign, params).
+        objective: The penalized objective callable.
+        params: The float parameter block.
+        seed: Random seed for deterministic results.
+        popsize: Differential-evolution population multiplier.
+        maxiter: Differential-evolution iteration cap.
+
+    Returns:
+        Tuple of (best leg, descending_arrival, bend_sign) by objective value,
+        or None if every combo came back infeasible.
+    """
+    best: Optional[Tuple[_FlybyLeg, bool, float]] = None
+    best_value = _FLYBY_INFEASIBLE_PENALTY
+    for descending_arrival in (False, True):
+        for bend_sign in (1.0, -1.0):
+            result = differential_evolution(
+                objective,
+                bounds=_FLYBY_BOUNDS,
+                args=(descending_arrival, bend_sign, params) + objective_args,
+                seed=seed,
+                popsize=popsize,
+                maxiter=maxiter,
+                tol=1e-10,
+                polish=True,
+            )
+            if result.fun >= _FLYBY_INFEASIBLE_PENALTY:
+                continue
+            leg = _flyby_from_vector(result.x, descending_arrival, bend_sign, params)
+            if leg is not None and result.fun < best_value:
+                best = (leg, descending_arrival, bend_sign)
+                best_value = float(result.fun)
+    return best
+
+
+@dataclass(frozen=True)
+class PoweredJovianFlybyReturn:
+    """Optimum of the powered Jovian flyby retrograde return (ADR 0002).
+
+    The two burns of the leg that puts a PuffSat onto a retrograde
+    Earth-crossing orbit, chosen to maximize the end-to-end mass ratio
+    (delivered mass fraction x payload mass ratio at the achieved collision
+    speed) under the seven-year time-of-flight cap. Not a
+    :class:`PuffSatScenario`: like the lunar-return optimum, it blends a rocket
+    burn cost with a collision mass ratio, so it is reported on its own.
+
+    Attributes:
+        v_infinity_earth: Hyperbolic excess speed leaving Earth (km/s).
+        aim_angle: Free-aim angle of the excess velocity off Earth's orbital
+            velocity (deg; positive tilts radially outward).
+        departure_burn: Oberth burn above escape at 200 km, delta-v1 (km/s).
+        flyby_periapsis_radius: Jovian flyby periapsis, center-based (km).
+        flyby_periapsis_altitude: The same periapsis above the 1-bar level (km).
+        flyby_burn: Impulsive periapsis burn at Jupiter, delta-v2 (km/s).
+        v_infinity_jupiter_in: Jupiter-relative excess speed before the burn (km/s).
+        v_infinity_jupiter_out: Jupiter-relative excess speed after the burn (km/s).
+        turn_angle: Total split-hyperbola bend (deg).
+        descending_arrival: Whether the optimum arrives at Jupiter's orbit radius
+            past aphelion (inward-moving).
+        bend_sign: Which side the flyby bends toward (+1 tangential-to-outward).
+        return_perihelion: Perihelion of the retrograde return orbit (AU).
+        closing_speed_1au: Earth-relative speed at the 1 AU crossing (km/s).
+        collision_speed: The closing speed folded through Earth's well -- the
+            achieved v_b, on the retrograde_jovian_hohmann_transfer convention
+            (km/s).
+        outbound_time: Earth-to-Jupiter time of flight (yr).
+        return_time: Jupiter-to-1 AU time of flight (yr).
+        total_time: Sum of the two legs (yr), <= the seven-year cap.
+        delivered_fraction: Mass fraction surviving both methalox burns.
+        payload_puffsat_mass_ratio: Mass ratio at the achieved collision speed
+            against the sec:jupiter_only_growth push.
+        end_to_end_mass_ratio: The objective, delivered x ratio.
+    """
+
+    v_infinity_earth: u.Quantity
+    aim_angle: u.Quantity
+    departure_burn: u.Quantity
+    flyby_periapsis_radius: u.Quantity
+    flyby_periapsis_altitude: u.Quantity
+    flyby_burn: u.Quantity
+    v_infinity_jupiter_in: u.Quantity
+    v_infinity_jupiter_out: u.Quantity
+    turn_angle: u.Quantity
+    descending_arrival: bool
+    bend_sign: float
+    return_perihelion: u.Quantity
+    closing_speed_1au: u.Quantity
+    collision_speed: u.Quantity
+    outbound_time: u.Quantity
+    return_time: u.Quantity
+    total_time: u.Quantity
+    delivered_fraction: float
+    payload_puffsat_mass_ratio: float
+    end_to_end_mass_ratio: float
+
+
+def _leg_to_result(
+    leg: _FlybyLeg, descending_arrival: bool, bend_sign: float, params: _FlybyParams
+) -> PoweredJovianFlybyReturn:
+    """Wrap a float flyby leg into the public Quantity-valued result."""
+    return PoweredJovianFlybyReturn(
+        v_infinity_earth=leg.v_infinity_earth * u.km / u.s,
+        aim_angle=(np.degrees(leg.aim_angle) * u.deg),
+        departure_burn=leg.departure_burn * u.km / u.s,
+        flyby_periapsis_radius=leg.periapsis_radius * u.km,
+        flyby_periapsis_altitude=(leg.periapsis_radius * u.km - Jupiter.R.to(u.km)),
+        flyby_burn=leg.flyby_burn * u.km / u.s,
+        v_infinity_jupiter_in=leg.v_infinity_in * u.km / u.s,
+        v_infinity_jupiter_out=leg.v_infinity_out * u.km / u.s,
+        turn_angle=(np.degrees(leg.turn_angle) * u.deg),
+        descending_arrival=descending_arrival,
+        bend_sign=bend_sign,
+        return_perihelion=(leg.return_leg.perihelion * u.km).to(u.AU),
+        closing_speed_1au=leg.return_leg.closing_speed * u.km / u.s,
+        collision_speed=leg.return_leg.collision_speed * u.km / u.s,
+        outbound_time=(leg.outbound_tof * u.s).to(u.year),
+        return_time=(leg.return_leg.tof * u.s).to(u.year),
+        total_time=((leg.outbound_tof + leg.return_leg.tof) * u.s).to(u.year),
+        delivered_fraction=leg.delivered_fraction,
+        payload_puffsat_mass_ratio=leg.mass_ratio,
+        end_to_end_mass_ratio=leg.end_to_end,
+    )
+
+
+def powered_jovian_flyby_return(
+    max_total_tof: u.Quantity = JUPITER_FLYBY_MAX_TOF,
+    periapsis_floor_altitude: u.Quantity = LOW_JUPITER_ALTITUDE,
+    seed: int = 0,
+) -> PoweredJovianFlybyReturn:
+    """Optimize the powered Jovian flyby that returns a PuffSat retrograde.
+
+    Searches the four continuous knobs (departure excess speed, free-aim angle,
+    flyby periapsis radius, flyby burn) and the two discrete choices (arrival
+    branch, bend side) for the trajectory maximizing the end-to-end mass ratio,
+    subject to a retrograde 1 AU crossing and the seven-year cap. See ADR
+    0002-jupiter-flyby-objective for why the objective is not minimum delta-v
+    (the retrograde-plunge degeneracy) and CONTEXT.md for the vocabulary.
+
+    The achieved collision speed is expected to land strictly between the
+    barely-retrograde plunge (~50 km/s) and the retrograde Hohmann the catalog
+    rows assume (~69.3 km/s); the catalog rows deliberately keep the paper's
+    published value (see the ADR).
+
+    Args:
+        max_total_tof: Cap on outbound + return time of flight (astropy
+            Quantity, default JUPITER_FLYBY_MAX_TOF = 7 yr).
+        periapsis_floor_altitude: Minimum flyby altitude above Jupiter's 1-bar
+            level (astropy Quantity, default LOW_JUPITER_ALTITUDE = 4000 km).
+        seed: Random seed for the differential-evolution search (deterministic).
+
+    Returns:
+        The :class:`PoweredJovianFlybyReturn` optimum.
+
+    Raises:
+        ValueError: If no feasible trajectory exists under the constraints.
+    """
+    params = _powered_flyby_params(max_total_tof, periapsis_floor_altitude)
+    best = _optimize_flyby(
+        objective_args=(),
+        objective=_flyby_objective,
+        params=params,
+        seed=seed,
+        popsize=20,
+        maxiter=300,
+    )
+    if best is None:
+        raise ValueError(
+            "No feasible powered Jovian flyby found under the given constraints."
+        )
+    leg, descending_arrival, bend_sign = best
+    return _leg_to_result(leg, descending_arrival, bend_sign, params)
+
+
+@dataclass(frozen=True)
+class JupiterFlybyTradePoint:
+    """One point of the delta-v versus collision-speed trade curve (ADR 0002).
+
+    Attributes:
+        target_collision_speed: The v_b floor this point was solved for (km/s).
+        feasible: Whether any trajectory meets the floor under the constraints.
+        departure_burn: Delta-v1 of the cheapest meeting trajectory (km/s).
+        flyby_burn: Delta-v2 of the cheapest meeting trajectory (km/s).
+        total_burn: departure_burn + flyby_burn (km/s).
+        achieved_collision_speed: The v_b actually reached (km/s, >= target).
+        end_to_end_mass_ratio: The end-to-end metric at this point (not what it
+            optimizes -- it minimizes total burn).
+        total_time: Outbound + return time of flight (yr).
+    """
+
+    target_collision_speed: u.Quantity
+    feasible: bool
+    departure_burn: u.Quantity
+    flyby_burn: u.Quantity
+    total_burn: u.Quantity
+    achieved_collision_speed: u.Quantity
+    end_to_end_mass_ratio: float
+    total_time: u.Quantity
+
+
+def jupiter_flyby_vb_trade_curve(
+    targets: Tuple[float, ...] = JUPITER_FLYBY_VB_TRADE_TARGETS,
+    max_total_tof: u.Quantity = JUPITER_FLYBY_MAX_TOF,
+    periapsis_floor_altitude: u.Quantity = LOW_JUPITER_ALTITUDE,
+    seed: int = 0,
+) -> List[JupiterFlybyTradePoint]:
+    """Sweep minimum total burn against a floor on the collision speed v_b.
+
+    The defence of the point optimum: shows how flat the propellant landscape is
+    between plunge-like returns and the retrograde Hohmann, pre-answering the
+    sensitivity question when the paper adopts the numbers (ADR 0002).
+
+    Args:
+        targets: Collision-speed floors in km/s (default
+            JUPITER_FLYBY_VB_TRADE_TARGETS).
+        max_total_tof: Cap on outbound + return time of flight (astropy Quantity).
+        periapsis_floor_altitude: Minimum flyby altitude above Jupiter's 1-bar
+            level (astropy Quantity).
+        seed: Random seed for the differential-evolution search (deterministic).
+
+    Returns:
+        One :class:`JupiterFlybyTradePoint` per target, in the given order;
+        infeasible targets come back with ``feasible=False`` and NaN quantities.
+    """
+    params = _powered_flyby_params(max_total_tof, periapsis_floor_altitude)
+    kms = u.km / u.s
+    points: List[JupiterFlybyTradePoint] = []
+    for target in targets:
+        best = _optimize_flyby(
+            objective_args=(float(target),),
+            objective=_flyby_trade_objective,
+            params=params,
+            seed=seed,
+            popsize=16,
+            maxiter=200,
+        )
+        if best is None:
+            points.append(
+                JupiterFlybyTradePoint(
+                    target_collision_speed=target * kms,
+                    feasible=False,
+                    departure_burn=np.nan * kms,
+                    flyby_burn=np.nan * kms,
+                    total_burn=np.nan * kms,
+                    achieved_collision_speed=np.nan * kms,
+                    end_to_end_mass_ratio=float("nan"),
+                    total_time=np.nan * u.year,
+                )
+            )
+            continue
+        leg, _, _ = best
+        points.append(
+            JupiterFlybyTradePoint(
+                target_collision_speed=target * kms,
+                feasible=True,
+                departure_burn=leg.departure_burn * kms,
+                flyby_burn=leg.flyby_burn * kms,
+                total_burn=(leg.departure_burn + leg.flyby_burn) * kms,
+                achieved_collision_speed=leg.return_leg.collision_speed * kms,
+                end_to_end_mass_ratio=leg.end_to_end,
+                total_time=((leg.outbound_tof + leg.return_leg.tof) * u.s).to(u.year),
+            )
+        )
+    return points

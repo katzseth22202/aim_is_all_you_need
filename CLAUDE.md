@@ -81,6 +81,20 @@ mypy is configured in strict mode (`pyproject.toml`). Key settings:
 
 All new functions in `src/` must have full type annotations and Google-style docstrings (see `cursor-rules.toml`).
 
+## Grill Sessions (grill-me / grill-with-docs)
+
+When running an interview/grill session in this repo:
+
+- **Explain why the question is being asked.** Before each question, give brief
+  context: what decision hangs on the answer, and what changes downstream
+  depending on which way it goes.
+- **Justify recommendations.** When marking an option "(Recommended)", state the
+  reasoning for the recommendation — don't just label it.
+- **Clarify jargon first.** Any technical term used in the explanation preceding
+  a question (e.g. v∞, Oberth effect, patched conic, C3) must be defined in
+  plain language at first use, either inline or in a short glossary line. Don't
+  assume the reader holds the whole orbital-mechanics vocabulary in their head.
+
 ## Scratch / Todo Directory
 
 `todos/` exists for Claude's scratch files, plans, notes, and todo lists. The directory is gitignored (`todos/*` is excluded, only `.gitkeep` is tracked), so write freely there without worrying about accidental commits. Use it for anything that would clutter the repo otherwise — intermediate analyses, draft notes, working scratchpads.

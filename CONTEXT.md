@@ -88,6 +88,58 @@ payload-doubling interval, so a millionfold scaling takes ~17 yr
 cycle and its "under a decade" scaling.
 _Avoid_: the retired ~0.5 yr / 6-month cycle; "under a decade" for the millionfold.
 
+### Jupiter powered-flyby retrograde return
+
+How a PuffSat actually gets onto the retrograde Earth-crossing trajectory that the
+catalog's three Jovian-return rows assume: an Oberth departure burn at 200 km above
+Earth (starting from C3 = 0, PuffSat-provided), a coast to Jupiter, and a powered
+gravity assist there that bends and pumps the trajectory into a retrograde
+heliocentric return. Implemented as `powered_jovian_flyby_return()` /
+`jupiter_flyby_vb_trade_curve()` (ADR `0002-jupiter-flyby-objective`); the paper
+subsection under `sec:jupiter_only_growth` is still pending, so the catalog rows
+keep the published retrograde-Hohmann `v_b` (~69.27 km/s). Headline finding: at the
+end-to-end optimum the flyby burn is *zero* — the unpowered bend of a ~13.6 km/s
+excess arrival already yields the best retrograde return (`v_b` ~51 km/s,
+end-to-end ~2.0 on a flat 49–55 km/s plateau); the Jupiter burn only starts paying
+when a `v_b` floor above ~66 km/s is demanded.
+
+**Powered Jovian flyby**:
+A gravity assist with an impulsive periapsis burn. The burn splits the flyby into
+two hyperbolas sharing one periapsis but with *different* eccentricities, so the
+total bend is the sum of two different asymptote half-angles — a burn changes the
+turning geometry, it is not "unpowered bend plus a tangent kick".
+_Avoid_: applying the unpowered turning-angle formula `sin(δ/2) = 1/e` across a
+powered flyby.
+
+**Retrograde-plunge degeneracy**:
+Why "minimize propellant subject to any retrograde 1 AU crossing" is ill-posed: the
+cheapest trajectories drive the post-flyby tangential velocity to 0⁻ (a near-radial
+plunge, `|v∞_out| → v_Jupiter`), so there is no minimizer and every near-optimum is a
+barely-retrograde plunge with weak closing speed. The objective must reward `v_b`.
+_Avoid_: "minimize total Δv" as the lone objective for retrograde-return legs.
+
+**End-to-end mass ratio**:
+The objective for this leg: (delivered mass fraction after both methalox burns, via
+the rocket equation) × (payload **mass ratio** at the achieved Earth-closing `v_b`),
+scored against the `sec:jupiter_only_growth` push (`v_rf` = lunar-transfer periapsis
+speed). Folds propellant and collision strength into one well-posed scalar; the two
+Parker rows are reported at the resulting `v_b`, not optimized for.
+_Avoid_: optimizing propellant and `v_b` separately.
+
+**Free-aim departure**:
+The Earth-departure burn's propellant cost depends only on the hyperbolic-excess
+*speed*; aiming the excess-velocity vector at any in-plane angle to Earth's orbital
+velocity is free (it just rotates the escape hyperbola). The outbound leg therefore
+has two knobs — excess speed and aim angle — at a single propellant price, and the
+optimizer searches both rather than assuming a tangential departure.
+_Avoid_: assuming departure must be along Earth's velocity; charging propellant for
+the aim angle.
+
+**Seven-year cap**:
+Hard constraint: outbound Earth→Jupiter plus return Jupiter→1 AU time of flight
+≤ 7 yr (time inside Jupiter's sphere of influence is negligible). Excludes extreme
+apoapsis-raise trajectories. Baseline Hohmann-out/Hohmann-back is ~5.5 yr.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
