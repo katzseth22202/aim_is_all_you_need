@@ -148,7 +148,11 @@ replace the 4.45 km/s departure burn? Implemented as `assist_chain_return()` /
 `0003-assist-chain-search`). Headline finding: yes — ~0.29–0.30 km/s at departure
 (barely above the ~0.2794 km/s Venus-reach floor) reaches the same-target
 retrograde return in ~3.5 yr at 300 m/s, with a 300 m/s phasing budget charged on
-top the end-to-end mass ratio is ~5.7 versus the powered flyby's ~2.0.
+top the end-to-end mass ratio is ~5.7 versus the powered flyby's ~2.0. Sequence
+robustness (ADR `0004-pump-ladder-vs-vve`): Cassini-style V-V-E only opens at
+~1 km/s of departure burn — same-body legs cannot pump, so the ladder's V↔E
+alternations are mandatory at low burn — and the ~15.4 km/s Jovian arrival uses
+~96 of ~122 available bend degrees, comfortably inside the unpowered envelope.
 
 **Tisserand invariant**:
 An unpowered flyby rotates the planet-relative excess velocity but can never

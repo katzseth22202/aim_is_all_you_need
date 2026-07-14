@@ -29,6 +29,7 @@ from src.propulsion import payload_mass_ratio, retrograde_jovian_hohmann_transfe
 from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    _assist_chain_params,
     _conic_radius_crossings,
     _flyby_return_leg,
     _powered_flyby_leg,
@@ -41,6 +42,7 @@ from src.scenario import (
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
     find_best_lunar_return,
+    hohmann_v_infinity,
     jupiter_flyby_vb_trade_curve,
     launch_capacity_time,
     lunar_return_transfer_dv,
@@ -671,8 +673,46 @@ def test_conic_radius_crossings_reproduces_hohmann_leg(flyby_params):
     assert outbound[0][1] == pytest.approx(h / float(MARS_A.to_value(u.km)), rel=1e-9)
 
 
+def test_venus_only_pump_ceiling_blocks_vve_at_300_mps(flyby_params) -> None:
+    # ADR 0004: a V->V leg preserves the Venus-relative excess speed (the
+    # Tisserand invariant), so any number of Venus-only interior flybys caps
+    # the Earth-return excess at the single-Venus-pump ceiling. At a 300 m/s
+    # departure that ceiling (~5.24 km/s) sits below even the Hohmann
+    # Jupiter-reach excess (~8.79), so Cassini-style E-V..V-E-J chains cannot
+    # close at low burn -- the pump ladder's V<->E alternations are mandatory.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+
+    def max_excess_at(body_from, excess, body_to):
+        best = 0.0
+        for aim in np.linspace(-np.pi, np.pi, 721):
+            v_t = body_from.v_circ + excess * np.cos(aim)
+            v_r = excess * np.sin(aim)
+            for _, v_t1, v_r1, _ in _conic_radius_crossings(
+                params.flyby.mu_sun,
+                body_from.orbit_radius,
+                float(v_t),
+                float(v_r),
+                body_to.orbit_radius,
+            ):
+                best = max(best, float(np.hypot(v_t1 - body_to.v_circ, v_r1)))
+        return best
+
+    v_esc = flyby_params.v_esc_leo
+    launch_excess = np.sqrt((v_esc + 0.300) ** 2 - v_esc**2)
+    max_w_venus = max_excess_at(earth, launch_excess, venus)
+    ceiling = max_excess_at(venus, max_w_venus, earth)
+    assert 5.0 < ceiling < 5.5  # the ~5.24 km/s single-Venus-pump ceiling
+    jupiter_reach = hohmann_v_infinity(JUPITER_A).to_value(u.km / u.s)
+    assert ceiling < jupiter_reach
+    # The retrograde hard floor is stricter still: even a Hohmann arrival's
+    # excess at Jupiter is far below Jupiter's orbital speed, so no unpowered
+    # bend of any size can turn it retrograde.
+    assert jupiter_reach < flyby_params.v_jupiter_orbit
+
+
 @pytest.mark.slow
-def test_assist_chain_return_at_300_mps(flyby_optimum):
+def test_assist_chain_return_at_300_mps(flyby_optimum, flyby_params):
     # The replay-validated headline chain: 300 m/s of departure burn (vs the
     # powered flyby's 4.45 km/s) reaches the same-target retrograde return via
     # an E-V pump ladder in well under the 10 yr cap.
@@ -719,6 +759,18 @@ def test_assist_chain_return_at_300_mps(flyby_optimum):
     # The point of the chain: with propellant nearly free, the end-to-end mass
     # ratio beats the powered flyby's optimum.
     assert result.end_to_end_mass_ratio > flyby_optimum.end_to_end_mass_ratio
+    # ADR 0004 bend margin: retrograde requires the Jovian arrival excess to
+    # exceed Jupiter's own orbital speed (the hard floor VVE cannot clear at
+    # low burn), and the bend actually used must fit inside the unpowered
+    # turning limit at the ADR 0002 perijove floor -- with room to spare
+    # (~96 of ~122 deg at the ~15.4 km/s arrival).
+    w_jupiter = result.v_infinity_jupiter.to_value(u.km / u.s)
+    assert w_jupiter > flyby_params.v_jupiter_orbit
+    ecc = 1.0 + flyby_params.periapsis_floor * w_jupiter**2 / flyby_params.mu_jupiter
+    bend_limit_deg = 2.0 * np.degrees(np.arcsin(1.0 / ecc))
+    bend_used_deg = abs(result.jovian_bend_angle.to_value(u.deg))
+    assert bend_used_deg <= bend_limit_deg
+    assert bend_limit_deg - bend_used_deg > 10.0  # not scraping the limit
 
 
 @pytest.mark.slow
