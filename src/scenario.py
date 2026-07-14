@@ -3307,3 +3307,101 @@ def minimum_departure_burn_assist_chain(
         infeasible_burns=tuple(infeasible),
         minimum=None,
     )
+
+
+@dataclass(frozen=True)
+class AssistChainWindowCadence:
+    """Synodic launch-window cadence of the assist-chain family (ADR 0005).
+
+    The phasing-free chain model cannot say *when* a chain flies, but the
+    window structure follows from synodic periods: every chain starts E->V,
+    so windows open at the Earth-Venus synodic cadence, gated secondarily by
+    Jupiter's phase; resonant-rev stretching of the interior ladder (quantized
+    Venus/Earth revolutions) plus the DSM phasing budget absorb the residual.
+
+    Attributes:
+        venus_window: Earth-Venus synodic period -- the base cadence at which
+            chain launch windows open (yr).
+        jupiter_window: Earth-Jupiter synodic period -- how often Jupiter's
+            phase gate recurs (yr).
+        earth_venus_cycle: The 5-synodic Earth-Venus near-cycle (~8 yr) after
+            which the inner-ladder geometry nearly repeats (yr).
+        triple_realignment: Approximate recurrence of the full
+            Venus-Earth-Jupiter geometry: 15 Earth-Venus synodics, which is
+            also ~22 Earth-Jupiter synodics and ~2 Jupiter years (yr).
+        effective_cycle_floor: Chain trip time with zero relaunch wait (yr).
+        effective_cycle_ceiling: Trip time plus one full Venus window of
+            relaunch wait -- the worst case for a returning cohort (yr).
+        doubling_time_floor: Fleet doubling time at the chain's end-to-end
+            mass ratio and the floor cycle (yr).
+        doubling_time_ceiling: The same at the ceiling cycle (yr).
+    """
+
+    venus_window: u.Quantity
+    jupiter_window: u.Quantity
+    earth_venus_cycle: u.Quantity
+    triple_realignment: u.Quantity
+    effective_cycle_floor: u.Quantity
+    effective_cycle_ceiling: u.Quantity
+    doubling_time_floor: u.Quantity
+    doubling_time_ceiling: u.Quantity
+
+
+def assist_chain_window_cadence(
+    total_time: u.Quantity, end_to_end_mass_ratio: float
+) -> AssistChainWindowCadence:
+    """Launch-window cadence and growth-cycle timing of the assist chain.
+
+    Computes the synodic scaffolding behind "how often can an E-V ladder
+    fly": Kepler periods of Venus, Earth, and Jupiter give the Earth-Venus
+    window cadence (~1.6 yr), the Earth-Jupiter phase gate (~1.1 yr), the
+    ~8 yr Earth-Venus near-cycle, and the ~24 yr full realignment. The
+    effective growth cycle is the chain's trip time plus between zero and one
+    Venus window of relaunch wait; doubling times follow from the end-to-end
+    mass ratio per cycle. This is a cadence *estimate*, not an ephemeris
+    search: which specific calendar windows work, and their trip-time spread,
+    would need Lambert arcs against real planet positions (ADR 0005).
+
+    Args:
+        total_time: Chain trip time, e.g. an AssistChainReturn.total_time
+            (astropy Quantity).
+        end_to_end_mass_ratio: Mass multiplier per cycle, e.g. an
+            AssistChainReturn.end_to_end_mass_ratio (> 1).
+
+    Returns:
+        The :class:`AssistChainWindowCadence`.
+
+    Raises:
+        ValueError: If end_to_end_mass_ratio is not greater than 1 (no growth,
+            so no doubling time exists).
+    """
+    if end_to_end_mass_ratio <= 1.0:
+        raise ValueError("end_to_end_mass_ratio must exceed 1 for a growth cycle")
+    mu_sun = Sun.k
+
+    def kepler_period(semi_major_axis: u.Quantity) -> u.Quantity:
+        return (2.0 * np.pi * np.sqrt(semi_major_axis.to(u.km) ** 3 / mu_sun)).to(
+            u.year
+        )
+
+    def synodic_period(period_a: u.Quantity, period_b: u.Quantity) -> u.Quantity:
+        return abs(1.0 / (1.0 / period_a - 1.0 / period_b)).to(u.year)
+
+    period_venus = kepler_period(VENUS_A)
+    period_earth = kepler_period(EARTH_A)
+    period_jupiter = kepler_period(JUPITER_A)
+    venus_window = synodic_period(period_venus, period_earth)
+    jupiter_window = synodic_period(period_earth, period_jupiter)
+    floor_cycle = total_time.to(u.year)
+    ceiling_cycle = floor_cycle + venus_window
+    doublings_per_cycle = float(np.log(end_to_end_mass_ratio) / np.log(2.0))
+    return AssistChainWindowCadence(
+        venus_window=venus_window,
+        jupiter_window=jupiter_window,
+        earth_venus_cycle=5.0 * venus_window,
+        triple_realignment=15.0 * venus_window,
+        effective_cycle_floor=floor_cycle,
+        effective_cycle_ceiling=ceiling_cycle,
+        doubling_time_floor=floor_cycle / doublings_per_cycle,
+        doubling_time_ceiling=ceiling_cycle / doublings_per_cycle,
+    )

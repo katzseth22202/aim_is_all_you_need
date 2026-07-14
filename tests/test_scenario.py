@@ -38,6 +38,7 @@ from src.scenario import (
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
     assist_chain_return,
+    assist_chain_window_cadence,
     boosted_solar_dive_v_infinity,
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
@@ -709,6 +710,38 @@ def test_venus_only_pump_ceiling_blocks_vve_at_300_mps(flyby_params) -> None:
     # excess at Jupiter is far below Jupiter's orbital speed, so no unpowered
     # bend of any size can turn it retrograde.
     assert jupiter_reach < flyby_params.v_jupiter_orbit
+
+
+def test_assist_chain_window_cadence() -> None:
+    # ADR 0005: the synodic scaffolding behind "how often can the chain fly".
+    # Pins the textbook periods -- Earth-Venus synodic ~1.60 yr (583.9 d),
+    # Earth-Jupiter ~1.09 yr, the 8-yr Earth-Venus near-cycle, the ~24 yr full
+    # V-E-J realignment (also ~2 Jupiter years) -- and the growth arithmetic
+    # at the calibrated 300 m/s chain's trip time and end-to-end ratio.
+    cadence = assist_chain_window_cadence(
+        total_time=3.46 * u.year, end_to_end_mass_ratio=5.72
+    )
+    assert is_nearly_equal(cadence.venus_window, 1.599 * u.year, percent=0.1)
+    assert is_nearly_equal(cadence.jupiter_window, 1.092 * u.year, percent=0.1)
+    assert is_nearly_equal(cadence.earth_venus_cycle, 7.99 * u.year, percent=0.1)
+    assert 23.5 * u.year < cadence.triple_realignment < 24.5 * u.year
+    # The realignment is also ~22 Earth-Jupiter synodics and ~2 Jupiter years.
+    assert is_nearly_equal(
+        cadence.triple_realignment, 22.0 * cadence.jupiter_window, percent=0.3
+    )
+    # Effective cycle spans trip time to trip time plus one Venus window.
+    assert cadence.effective_cycle_floor == 3.46 * u.year
+    assert is_nearly_equal(
+        cadence.effective_cycle_ceiling - cadence.effective_cycle_floor,
+        cadence.venus_window,
+        percent=0.001,
+    )
+    # Doubling every ~1.4-2.0 yr at ~5.7x per cycle.
+    assert 1.3 * u.year < cadence.doubling_time_floor < 1.5 * u.year
+    assert 1.9 * u.year < cadence.doubling_time_ceiling < 2.1 * u.year
+    # No growth cycle exists at ratio <= 1.
+    with pytest.raises(ValueError, match="must exceed 1"):
+        assist_chain_window_cadence(3.46 * u.year, 0.9)
 
 
 @pytest.mark.slow

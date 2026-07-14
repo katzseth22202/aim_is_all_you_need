@@ -193,6 +193,18 @@ upper bounds on the true minimum (the calibrated production beam closes at
 _Avoid_: reading `None` as a proof; global top-by-speed pruning (it made
 feasibility non-monotone in the burn — pruning is time-bucketed instead).
 
+**Launch-window cadence**:
+How often the chain family can fly (`assist_chain_window_cadence()`, ADR
+`0005-launch-window-cadence`): windows open every Earth-Venus synodic period
+(~1.6 yr), gated secondarily by Jupiter's ~1.1 yr phase; resonant-rev stretching
+of the ladder plus the **phasing budget** let most windows fly some family
+member. Effective growth cycle = trip time + 0..1 Venus window (~3.5–5 yr),
+doubling every ~1.4–2.0 yr at the 300 m/s chain's end-to-end ratio.
+_Avoid_: treating the ~8 yr Earth-Venus cycle or ~24 yr V-E-J realignment as the
+launch cadence (they are geometry-repeat curiosities); quoting the cadence as an
+ephemeris-verified guarantee (it is synodic scaffolding — real calendar windows
+need Lambert arcs against actual planet positions).
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.

@@ -28,6 +28,7 @@ from src.scenario import (
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
     assist_chain_return,
+    assist_chain_window_cadence,
     earth_reintercept_cycle_floor,
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
@@ -436,6 +437,39 @@ def main() -> None:
             ],
             tablefmt="grid",
         )
+    )
+
+    # Launch-window cadence of the chain family: synodic scaffolding, not an
+    # ephemeris search (ADR 0005). Flagged for the paper because it makes the
+    # Jupiter-only growth cycle's timing story concrete and fairly optimistic.
+    cadence = assist_chain_window_cadence(
+        total_time=chain_fast.total_time,
+        end_to_end_mass_ratio=chain_fast.end_to_end_mass_ratio,
+    )
+    print_paper_point(
+        "Assist-Chain Launch-Window Cadence -- PLANNED for the paper under "
+        "Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
+        "ADR 0005",
+        "proposed claim: chain launch windows open every Earth-Venus synodic "
+        "period; resonant-rev stretching of the ladder plus the 300 m/s DSM "
+        "budget let most windows fly some family member, so the growth cycle "
+        "is trip time plus at most one window of relaunch wait",
+        f"window cadence = {cadence.venus_window:.2f} (Earth-Venus synodic); "
+        f"Jupiter phase gate recurs every {cadence.jupiter_window:.2f}; "
+        f"ladder geometry near-repeats every {cadence.earth_venus_cycle:.1f} "
+        f"(8-yr Earth-Venus cycle); full V-E-J realignment ~ "
+        f"{cadence.triple_realignment:.0f}",
+        f"effective growth cycle = {cadence.effective_cycle_floor:.2f} to "
+        f"{cadence.effective_cycle_ceiling:.2f} (trip + 0..1 Venus window)",
+        f"fleet doubling every {cadence.doubling_time_floor:.2f} to "
+        f"{cadence.doubling_time_ceiling:.2f} at end-to-end "
+        f"{chain_fast.end_to_end_mass_ratio:.2f} per cycle; millionfold in "
+        f"{launch_capacity_time(chain_fast.end_to_end_mass_ratio, cadence.effective_cycle_floor):.1f}"
+        " to "
+        f"{launch_capacity_time(chain_fast.end_to_end_mass_ratio, cadence.effective_cycle_ceiling):.1f}",
+        "caveat: synodic estimate, not an ephemeris search -- specific "
+        "calendar windows and their trip-time spread need Lambert arcs "
+        "against real planet positions",
     )
 
     suborbital_frac = float(suborbital_200km_propellant_fraction())
