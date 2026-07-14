@@ -270,7 +270,8 @@ def scenarios_to_dataframe(scenarios: List[PuffSatScenario]) -> pd.DataFrame:
 
 
 def earth_reintercept_scenarios() -> List[PuffSatScenario]:
-    """Phased Earth-return dive scenarios (paper Appendix sec:earth_reintercept).
+    """Phased Earth-return dive scenarios (resonant dive: paper Appendix
+    sec:earth_reintercept; apoapsis-raise: sec:apoapsis_raise_loop).
 
     The minimum-energy Parker-injection rows in :func:`paper_scenarios` pin the
     1 AU crossing at the transfer ellipse's aphelion, so the payload re-crosses
@@ -292,7 +293,10 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
     re-intercepts Earth at ~24 km/s after raising aphelion to ~2.26 AU -- no solar
     dive, no gravity assist, no off-Earth boost node. Its v_rf/v_b are the
     departure escape speed and the closing speed, not a Jovian-return boost, so it
-    is scored on its own collision rather than off the ~69 km/s PuffSat.
+    is scored on its own collision rather than off the ~69 km/s PuffSat. It now has
+    its own paper subsection, "Apoapsis-Raise Return With Onboard Burns"
+    (sec:apoapsis_raise_loop), folded in under Jupiter-Only Exponential Launch
+    Growth rather than the sec:earth_reintercept appendix that Row 1 cites.
 
     Returns:
         The ordered list of phased Earth-return :class:`PuffSatScenario`.
@@ -310,8 +314,8 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
         PuffSatScenario(
             v_rf=escape_velocity(Earth, LEO_ALTITUDE),
             v_b=apoapsis_raise.closing_speed,
-            desc="""Apoapsis-raise Earth re-intercept: a methalox Oberth burn raises heliocentric aphelion to ~2.26 AU, one retrograde argon-SEP burn at apoapsis lowers perihelion, and the craft falls back to intercept Earth at ~24 km/s after ~1.69 yr, pushing the next payload to Earth escape. Lowest-closing-speed member of sec:earth_reintercept -- no solar dive, no gravity assist, no off-Earth boost node, only onboard propellant""",
-            paper_ref="sec:earth_reintercept",
+            desc="""Apoapsis-raise Earth re-intercept: a methalox Oberth burn raises heliocentric aphelion to ~2.26 AU, one retrograde argon-SEP burn at apoapsis lowers perihelion, and the craft falls back to intercept Earth at ~24 km/s after ~1.69 yr, pushing the next payload to Earth escape. The gentlest member of the family -- no solar dive, no gravity assist, no off-Earth boost node, only onboard propellant""",
+            paper_ref="sec:apoapsis_raise_loop",
         ),
     ]
 
