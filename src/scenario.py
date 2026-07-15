@@ -2728,6 +2728,10 @@ class _ChainTerminal:
         leg_tof: Last chain body to Jupiter's orbit radius (s).
         outbound_arrival: Whether the Jovian leg arrives moving outward.
         bend_angle: Unpowered Jovian bend applied to the excess velocity (rad).
+        arrival_direction: Direction of the incoming Jupiter-relative excess
+            velocity in the (tangential, radial-outward) basis (rad). The bend
+            is applied relative to this, so it is what bounds which outgoing
+            directions -- and hence which return legs -- are reachable.
         v_infinity_jupiter: Jupiter-relative excess speed (km/s).
         return_leg: The scored retrograde return.
         total_time: Departure to first retrograde 1 AU crossing (s).
@@ -2736,6 +2740,7 @@ class _ChainTerminal:
     leg_tof: float
     outbound_arrival: bool
     bend_angle: float
+    arrival_direction: float
     v_infinity_jupiter: float
     return_leg: _ReturnLeg
     total_time: float
@@ -2796,6 +2801,7 @@ def _jovian_terminal(
                     leg_tof=leg_tof,
                     outbound_arrival=outbound,
                     bend_angle=float(bend),
+                    arrival_direction=phi,
                     v_infinity_jupiter=w,
                     return_leg=return_leg,
                     total_time=total_time,
@@ -2995,7 +3001,13 @@ class AssistChainReturn:
         flyby_count: Number of inner-planet gravity assists (excludes the
             departure node and the Jovian bend).
         v_infinity_jupiter: Jupiter-relative excess speed at arrival (km/s).
+            Tisserand-fixed: the unpowered bend rotates this vector but cannot
+            change its magnitude, so it caps the reachable collision speed.
         jovian_bend_angle: Unpowered bend applied at Jupiter (deg).
+        jovian_arrival_direction: Direction of the incoming Jupiter-relative
+            excess velocity off Jupiter's orbital velocity (deg). The bend is
+            measured from this, so it fixes which returns are reachable; see
+            :func:`jovian_return_phasing_envelope`.
         return_perihelion: Perihelion of the retrograde return orbit (AU),
             never reached -- the leg ends at 1 AU.
         closing_speed_1au: Earth-relative speed at the 1 AU crossing (km/s).
@@ -3021,6 +3033,7 @@ class AssistChainReturn:
     flyby_count: int
     v_infinity_jupiter: u.Quantity
     jovian_bend_angle: u.Quantity
+    jovian_arrival_direction: u.Quantity
     return_perihelion: u.Quantity
     closing_speed_1au: u.Quantity
     collision_speed: u.Quantity
@@ -3142,6 +3155,7 @@ def _chain_to_result(
         flyby_count=len(steps) - 1,
         v_infinity_jupiter=terminal.v_infinity_jupiter * kms,
         jovian_bend_angle=np.degrees(terminal.bend_angle) * u.deg,
+        jovian_arrival_direction=np.degrees(terminal.arrival_direction) * u.deg,
         return_perihelion=(terminal.return_leg.perihelion * u.km).to(u.AU),
         closing_speed_1au=terminal.return_leg.closing_speed * kms,
         collision_speed=collision * kms,
@@ -3240,6 +3254,158 @@ def assist_chain_return(
         return None
     aim_angle, decisions, terminal = found
     return _chain_to_result(burn, v_infinity, aim_angle, decisions, terminal, params)
+
+
+@dataclass(frozen=True)
+class JovianReturnPhasingEnvelope:
+    """Which retrograde returns the chain's Jovian arrival can still reach.
+
+    The chain's search keeps only the earliest-arriving return
+    (``_jovian_terminal`` breaks ties on ``total_time``), which hides a knob:
+    the same Tisserand-fixed arrival can reach a continuous span of *arrival
+    times*, and retuning the bend to land Earth is free. Walking the bend from
+    one limit to the other traces a single connected curve from a slow outbound
+    return (the craft leaves Jupiter still climbing, coasts to aphelion and
+    falls back), through full reversal, to a fast inbound one.
+
+    The bend is **one** knob with **two** outputs, so ``v_b`` cannot be held
+    while the arrival time is swept -- they move together along that curve.
+    Phasing therefore picks the bend, and the bend *dictates* ``v_b``: a
+    lottery within ``collision_speed_min..max``, not a choice. It is benign
+    only because every ticket in that band is an acceptable growth loop. See
+    ADR 0006-unpowered-jupiter-and-free-return-phasing.
+
+    Attributes:
+        v_infinity: Jupiter-relative excess speed, Tisserand-fixed (km/s).
+        arrival_direction: Incoming excess-velocity direction (deg).
+        bend_limit: Largest unpowered bend available at the periapsis floor
+            (deg). Reachable outgoing directions are arrival_direction +/- this.
+        collision_speed_min: Lowest v_b phasing may force on you (km/s).
+        collision_speed_max: Highest v_b phasing may force on you (km/s); with
+            no time cap this is the Tisserand ceiling, hit at full reversal.
+        return_time_min: Shortest reachable return (yr).
+        return_time_max: Longest reachable return (yr).
+        phasing_time_spread: Reachable arrival-time span (d).
+        largest_gap: Widest step between consecutive sampled arrival times (d).
+            This is resolution-limited, *not* a physical hole: it falls as
+            1/``samples`` (~11.9 d at 968, ~0.7 d at 16000) because the curve is
+            connected. It is reported because a genuine hole would refuse to
+            shrink, and without that check a span quoted as max-minus-min over a
+            disconnected set would silently count the hole as authority -- the
+            error this function exists to prevent.
+        earth_phase_coverage: Heliocentric longitude Earth sweeps over the
+            span (deg).
+        wraps: earth_phase_coverage / 360 deg.
+        closes: Whether coverage reaches 360 deg, i.e. every launch phase
+            admits a phased Earth intercept with no propellant.
+    """
+
+    v_infinity: u.Quantity
+    arrival_direction: u.Quantity
+    bend_limit: u.Quantity
+    collision_speed_min: u.Quantity
+    collision_speed_max: u.Quantity
+    return_time_min: u.Quantity
+    return_time_max: u.Quantity
+    phasing_time_spread: u.Quantity
+    largest_gap: u.Quantity
+    earth_phase_coverage: u.Quantity
+    wraps: float
+    closes: bool
+
+
+def jovian_return_phasing_envelope(
+    chain: AssistChainReturn,
+    max_total_time: Optional[u.Quantity] = None,
+    samples: int = _ASSIST_JOVIAN_BEND_SAMPLES * 8,
+) -> JovianReturnPhasingEnvelope:
+    """Measure the free Earth-phasing authority of the chain's Jovian bend.
+
+    Sweeps every bend the periapsis floor allows about ``chain``'s actual
+    arrival direction -- so every state scored here is one the unpowered flyby
+    can really produce -- and reports the span of arrival times reachable, the
+    worst hole in it, and the v_b range that span drags along. Converting the
+    span at Earth's mean motion gives the phase coverage: at or above 360 deg
+    (``closes``), a phased Earth intercept exists at *every* launch phase, with
+    no propellant and no powered flyby.
+
+    ``largest_gap`` is what makes the span meaningful rather than decorative: a
+    span quoted as max-minus-min over a *disconnected* set would count holes as
+    authority. Report it alongside the coverage, always. It is resolution-
+    limited here (it falls as 1/``samples``), which is precisely the evidence
+    that the reachable set is connected and the span is really walkable.
+
+    Periapsis is not an extra knob here: it *is* the bend (``e = 1 +
+    r_p v_inf^2 / mu``, ``sin(delta/2) = 1/e``), so the sweep below is the
+    periapsis sweep. Nor does it lift ``collision_speed_max``, which is set by
+    the Tisserand-fixed ``v_infinity`` at full reversal.
+
+    Args:
+        chain: The chain whose Jovian arrival is being examined.
+        max_total_time: Optional cap on chain_time + return_time; returns
+            exceeding it are dropped. None applies no cap.
+        samples: Bend samples across the reachable arc.
+
+    Returns:
+        The :class:`JovianReturnPhasingEnvelope`.
+
+    Raises:
+        ValueError: If no retrograde return is reachable from this arrival.
+    """
+    params = _powered_flyby_params()
+    kms = u.km / u.s
+    w = float(chain.v_infinity_jupiter.to_value(kms))
+    phi = float(chain.jovian_arrival_direction.to_value(u.rad))
+    ecc = 1.0 + params.periapsis_floor * w * w / params.mu_jupiter
+    bend_limit = 2.0 * float(np.arcsin(1.0 / ecc))
+    chain_seconds = float(chain.chain_time.to_value(u.s))
+    cap = None if max_total_time is None else float(max_total_time.to_value(u.s))
+
+    speeds: List[float] = []
+    times: List[float] = []
+    for bend in np.linspace(-bend_limit, bend_limit, samples):
+        angle = phi + float(bend)
+        leg = _flyby_return_leg(
+            params.v_jupiter_orbit + w * float(np.cos(angle)),
+            w * float(np.sin(angle)),
+            params,
+        )
+        if leg is None:
+            continue
+        if cap is not None and chain_seconds + leg.tof > cap:
+            continue
+        speeds.append(leg.collision_speed)
+        times.append(leg.tof)
+    if not speeds:
+        raise ValueError("no retrograde return reachable from this Jovian arrival")
+
+    vb = np.array(speeds)
+    tof = np.sort(np.array(times))
+    spread_days = float(tof.max() - tof.min()) / 86400.0
+    # The span is only authority if it has no holes: a bend sweep that skipped
+    # a range of arrival times could not be walked onto an arbitrary Earth
+    # position, and max-minus-min would silently count the hole as coverage.
+    gap_days = float(np.diff(tof).max()) / 86400.0 if tof.size > 1 else 0.0
+    # Earth's mean motion from Kepler, like assist_chain_window_cadence -- the
+    # phase coverage is just how far Earth walks during the reachable spread.
+    earth_period_days = float(
+        (2.0 * np.pi * np.sqrt(EARTH_A.to(u.km) ** 3 / Sun.k)).to_value(u.day)
+    )
+    coverage = spread_days * 360.0 / earth_period_days
+    return JovianReturnPhasingEnvelope(
+        v_infinity=w * kms,
+        arrival_direction=np.degrees(phi) * u.deg,
+        bend_limit=np.degrees(bend_limit) * u.deg,
+        collision_speed_min=float(vb.min()) * kms,
+        collision_speed_max=float(vb.max()) * kms,
+        return_time_min=(float(tof.min()) * u.s).to(u.year),
+        return_time_max=(float(tof.max()) * u.s).to(u.year),
+        phasing_time_spread=spread_days * u.day,
+        largest_gap=gap_days * u.day,
+        earth_phase_coverage=coverage * u.deg,
+        wraps=coverage / 360.0,
+        closes=coverage >= 360.0,
+    )
 
 
 @dataclass(frozen=True)

@@ -44,6 +44,7 @@ from src.scenario import (
     earth_reintercept_scenarios,
     find_best_lunar_return,
     hohmann_v_infinity,
+    jovian_return_phasing_envelope,
     jupiter_flyby_vb_trade_curve,
     launch_capacity_time,
     lunar_return_transfer_dv,
@@ -473,6 +474,17 @@ def flyby_optimum():
     return powered_jovian_flyby_return()
 
 
+@pytest.fixture(scope="module")
+def chain_at_300(flyby_optimum):
+    """The 300 m/s assist chain, computed once (the beam search is slow)."""
+    chain = assist_chain_return(
+        departure_burn=0.300 * u.km / u.s,
+        target_collision_speed=flyby_optimum.collision_speed,
+    )
+    assert chain is not None
+    return chain
+
+
 def test_flyby_return_leg_reproduces_retrograde_hohmann(flyby_params):
     # The v_b convention pin: fed the retrograde Jupiter->Earth Hohmann state
     # (tangential retrograde at Jupiter's orbit radius, apoapsis speed of the
@@ -804,6 +816,71 @@ def test_assist_chain_return_at_300_mps(flyby_optimum, flyby_params):
     bend_used_deg = abs(result.jovian_bend_angle.to_value(u.deg))
     assert bend_used_deg <= bend_limit_deg
     assert bend_limit_deg - bend_used_deg > 10.0  # not scraping the limit
+
+
+def test_jovian_return_phasing_envelope_closes(chain_at_300):
+    # ADR 0006: retuning the unpowered Jovian bend walks the Earth arrival
+    # across more than a full Earth orbit, so every launch phase admits a
+    # phased intercept with no propellant and no powered flyby.
+    env = jovian_return_phasing_envelope(chain_at_300)
+    assert env.closes
+    assert env.wraps > 3.0  # ~3.09: coverage ~1113 deg
+    assert env.earth_phase_coverage > 360 * u.deg
+    # It still closes under the powered flyby's own 7 yr cap, and under a 5 yr
+    # one -- the cap trims the slow outbound branch but not past one wrap.
+    assert jovian_return_phasing_envelope(
+        chain_at_300, max_total_time=JUPITER_FLYBY_MAX_TOF
+    ).closes
+    capped = jovian_return_phasing_envelope(chain_at_300, max_total_time=5.0 * u.year)
+    assert capped.closes
+    assert capped.wraps > 1.0  # ~1.58
+    # The chain's own return is inside the reachable span, and the span is a
+    # superset of it -- the search just keeps the earliest arrival.
+    assert env.return_time_min <= chain_at_300.return_time <= env.return_time_max
+
+
+def test_jovian_return_phasing_span_is_connected(chain_at_300):
+    # The span is only authority if it has no holes. Quoting max-minus-min over
+    # a disconnected set would count an unreachable hole as coverage, so pin
+    # the evidence of connectivity: the largest step between sampled arrivals
+    # is resolution-limited and falls as 1/samples. A real hole would plateau.
+    gaps = [
+        jovian_return_phasing_envelope(chain_at_300, samples=n).largest_gap.to_value(
+            u.day
+        )
+        for n in (1000, 4000, 16000)
+    ]
+    assert gaps[0] > gaps[1] > gaps[2]
+    # Each 4x refinement should shrink the gap ~4x; allow slack for where on
+    # the curve the widest step lands.
+    for coarse, fine in zip(gaps, gaps[1:]):
+        assert 2.0 < coarse / fine < 8.0
+    assert gaps[-1] < 1.0  # sub-day at 16000 samples
+
+
+def test_jovian_return_phasing_cannot_reach_the_catalog_69_km_s(
+    chain_at_300, flyby_params
+):
+    # Phasing is free but v_b is not a choice: the bend that phases Earth
+    # dictates v_b, and its ceiling is full reversal of the Tisserand-fixed
+    # excess -- no timing or periapsis reaches the catalog's 69.27 km/s.
+    env = jovian_return_phasing_envelope(chain_at_300)
+    ceiling = env.collision_speed_max
+    assert ceiling < retrograde_jovian_hohmann_transfer()
+    assert is_nearly_equal(ceiling, 56.27 * u.km / u.s, percent=0.1)
+    # The ceiling IS the full-reversal state: excess exactly anti-parallel to
+    # Jupiter's motion, i.e. v_r = 0 and v_t = v_jupiter - v_inf.
+    w = env.v_infinity.to_value(u.km / u.s)
+    reversed_leg = _flyby_return_leg(
+        flyby_params.v_jupiter_orbit - w, 0.0, flyby_params
+    )
+    assert reversed_leg is not None
+    assert is_nearly_equal(
+        reversed_leg.collision_speed * u.km / u.s, ceiling, percent=0.01
+    )
+    # Every v_b phasing can force on you is an acceptable loop, which is the
+    # only reason the lottery is benign.
+    assert env.collision_speed_min > lunar_transfer_periapsis_speed()
 
 
 @pytest.mark.slow

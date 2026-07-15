@@ -193,6 +193,42 @@ upper bounds on the true minimum (the calibrated production beam closes at
 _Avoid_: reading `None` as a proof; global top-by-speed pruning (it made
 feasibility non-monotone in the burn — pruning is time-bucketed instead).
 
+**Return-branch knob**:
+The free Earth-phasing degree of freedom at Jupiter (`jovian_return_phasing_envelope()`,
+ADR `0006-unpowered-jupiter-and-free-return-phasing`). Retuning the unpowered bend walks
+the return between a fast **inbound** arrival (the craft is already falling when it
+reaches Jupiter, ~1.25 yr) and a slow **outbound** one (it is still climbing, so it
+coasts to aphelion and falls back, ~4.37 yr) — one connected curve through full
+reversal, spanning ~1130 d = ~1113° of Earth phase, 3.09 wraps. Above one wrap every
+launch phase admits a phased intercept, so **Earth re-intercept on the return leg is
+free** — no propellant, no powered flyby. Periapsis is not a second knob: it *is* the
+bend (`e = 1 + r_p·v∞²/μ`), and dropping the floor 4000→200 km buys +1.2°.
+_Avoid_: quoting the span while holding `v_b` fixed (that manufactures two disjoint
+clusters and an 821-day phantom hole — the bend is one knob with two outputs, so `v_b`
+and arrival time cannot be varied independently); quoting a span without its
+`largest_gap` (max-minus-min over a gapped set counts unreachable time as authority);
+reading this as solving the **phasing budget**'s problem — that is the inner ladder,
+which the bend acts downstream of and cannot touch.
+
+**Tisserand `v_b` ceiling**:
+The chain's hard limit on Earth-closing speed, ~56.27 km/s: an unpowered flyby cannot
+grow the ~15.369 km/s Jovian excess, so the most retrograde state reachable is full
+reversal (`v_t = v_Jupiter − v∞ = −2.31 km/s`). The catalog's three Jovian rows assume
+the retrograde-Hohmann 69.27 km/s, which needs 20.47 km/s of outgoing excess and is
+therefore **unreachable at any phase, periapsis or arrival time** — not merely
+disfavoured. Buying it costs a 2.62 km/s Jovian burn and drops end-to-end 5.72 → 3.93.
+_Avoid_: treating 69.27 as a maximum (it is the *minimum-energy* retrograde arrival —
+the only purely tangential one); expecting timing to raise it (timing sets position,
+energy sets speed, and they are separate currencies).
+
+**`v_b` lottery**:
+The price of free phasing: the bend that places Earth *dictates* the collision speed
+(somewhere in 50.14–56.27), rather than the mission choosing it. Benign only because
+every value in the band is an acceptable loop (end-to-end 5.7–6.3, doubling
+1.37–1.51 yr) — and note 51 km/s *beats* 56 on doubling time, because the extra `v_b`
+is free in propellant but costs trip time.
+_Avoid_: quoting the best-case `v_b` as if it were selectable.
+
 **Launch-window cadence**:
 How often the chain family can fly (`assist_chain_window_cadence()`, ADR
 `0005-launch-window-cadence`): windows open every Earth-Venus synodic period
@@ -216,6 +252,12 @@ need Lambert arcs against actual planet positions).
   the **scenario table**.
 - The **re-intercept cycle floor** — not the bare dive time — is the payload-doubling
   interval, so the millionfold scaling time is derived from it, not from a 6-month cycle.
+- The **return-branch knob** settles **Earth re-intercept** for the Jovian return leg
+  but not for the **pump ladder**: it acts at Jupiter, downstream of every inner-planet
+  flyby, so the **phasing budget** still carries the ladder's alignment cost.
+- The **return-branch knob** and the **Tisserand `v_b` ceiling** are the same bend read
+  two ways: sweeping it phases Earth, and its extreme (full reversal) caps `v_b`. The
+  coupling between them is the **`v_b` lottery**.
 
 ## Example dialogue
 

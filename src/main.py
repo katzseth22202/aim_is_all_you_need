@@ -34,6 +34,7 @@ from src.scenario import (
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
+    jovian_return_phasing_envelope,
     jupiter_flyby_vb_trade_curve,
     launch_capacity_time,
     lunar_return_transfer_dv,
@@ -437,6 +438,46 @@ def main() -> None:
             ],
             tablefmt="grid",
         )
+    )
+
+    # Free Earth phasing on the return leg (ADR 0006). The chain's search keeps
+    # only the earliest return, hiding the fact that retuning the Jovian bend
+    # walks the arrival time across years -- enough to place Earth anywhere.
+    phasing = jovian_return_phasing_envelope(chain_fast)
+    phasing_capped = jovian_return_phasing_envelope(
+        chain_fast, max_total_time=JUPITER_FLYBY_MAX_TOF
+    )
+    print_paper_point(
+        "Free Earth Phasing of the Jovian Return -- PLANNED for the paper "
+        "under Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
+        "ADR 0006",
+        "proposed claim: the return leg needs no powered flyby and no phasing "
+        "propellant -- retuning the unpowered Jovian bend walks the Earth "
+        "arrival across more than a full Earth orbit, so every launch phase "
+        "admits a phased intercept; the price is that the bend then dictates "
+        "v_b rather than the mission choosing it",
+        f"Tisserand-fixed arrival: v_inf {phasing.v_infinity:.3f} at "
+        f"{phasing.arrival_direction:.1f} off Jupiter's velocity; the periapsis "
+        f"floor allows +/-{phasing.bend_limit:.1f} of bend (periapsis IS the "
+        "bend knob, not a second one)",
+        f"reachable returns: {phasing.return_time_min:.2f} to "
+        f"{phasing.return_time_max:.2f}, a {phasing.phasing_time_spread:.0f} "
+        f"span = {phasing.earth_phase_coverage:.0f} of Earth phase "
+        f"({phasing.wraps:.2f} wraps); closes = {phasing.closes}",
+        f"the span is connected, not a max-minus-min illusion: largest step "
+        f"between sampled arrivals is {phasing.largest_gap:.1f} and falls as "
+        "1/samples (a real hole would refuse to shrink)",
+        f"under the {JUPITER_FLYBY_MAX_TOF} cap: "
+        f"{phasing_capped.earth_phase_coverage:.0f} of coverage "
+        f"({phasing_capped.wraps:.2f} wraps), closes = {phasing_capped.closes}",
+        f"the cost is a v_b lottery, not propellant: phasing picks the bend and "
+        f"the bend dictates v_b in {phasing.collision_speed_min:.2f} to "
+        f"{phasing.collision_speed_max:.2f} -- benign only because every value "
+        "in that band is an acceptable loop (end-to-end ~5.7-6.3)",
+        f"v_b cannot exceed {phasing.collision_speed_max:.2f} at any phase: "
+        "that is full reversal of the Tisserand-fixed excess. The catalog's "
+        "69.27 needs 20.47 km/s of outgoing excess against 15.37 available, so "
+        "no amount of timing or periapsis reaches it",
     )
 
     # Launch-window cadence of the chain family: synodic scaffolding, not an
