@@ -1,8 +1,22 @@
 # The V/E pump ladder stands; Cassini-style VVE only opens at ~1 km/s
 
-Status: accepted
+Status: superseded in part by ADR 0007
 
 Date: 2026-07-14
+
+> **Superseded in part (2026-07-15).** The *ranking* in this ADR does not survive
+> phasing. Under real planet positions, each sequence optimized at its own epoch,
+> the minimal E-V-E-J (4.5677 km/s) beats this ADR's E-V-E-V-V-E-J ladder
+> (5.1830) in methalox; under solar-electric nodes, Cassini VVE (end-to-end
+> 4.1313) beats it by 42%. The reason is stated in this ADR's own words: "this
+> repo's chain model keeps flybys strictly unpowered, so VVE only closes once the
+> departure burn alone carries the pump (~1 km/s)". The phased model charges node
+> burns **by construction**, so it contains exactly the ~470 m/s DSM this ADR
+> correctly identified as what made the real Cassini work — the premise for
+> excluding VVE is gone. **The physics here is untouched and still load-bearing**:
+> the Tisserand freeze on V->V legs, the single-Venus-pump ceilings, and the
+> "15.4 km/s is not too fast at Jupiter" bend-margin result all stand. See ADR
+> 0007.
 
 ## Context
 

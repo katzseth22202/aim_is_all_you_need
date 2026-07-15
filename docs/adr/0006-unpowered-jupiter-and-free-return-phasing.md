@@ -1,8 +1,22 @@
 # The Jovian flyby stays unpowered, and Earth-return phasing is free
 
-Status: accepted
+Status: accepted — decision 5's trigger has fired; see ADR 0007
 
 Date: 2026-07-15
+
+> **Note (2026-07-15).** Both decisions here **stand**: the Jovian flyby stays
+> unpowered, and *return* phasing is free. This ADR drew the right boundary —
+> "the remaining phasing question is the inner ladder, not the return" — and ADR
+> 0007 answered exactly that question, leaving the return untouched. Two updates:
+> (1) the figure "the chain ... reaches end-to-end 5.72, versus the powered
+> flyby's 2.02" is stale (now 1.6730 vs 2.0169); it was one of four independent
+> lines for the unpowered flyby and **the other three are unaffected**. (2)
+> Decision 5 dropped the solar-electric budget with the trigger "Revisit only if
+> *ladder* phasing proves to need it." **It does.** Ladder phasing costs 4.6 km/s,
+> methalox cannot pay it, and SEP is now the only live path — making this ADR's
+> decision 5 the most consequential open item in the program. One input moved in
+> SEP's favour: the phased ladder spends 5.632 yr in the inner system, not the
+> 1.04 yr assumed when estimating SEP at 1.3-2.0 km/s.
 
 ## Context
 

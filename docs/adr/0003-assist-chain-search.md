@@ -1,8 +1,19 @@
 # The assist chain solves for minimum departure burn with a feasibility-witness beam search
 
-Status: accepted
+Status: superseded in part by ADR 0007
 
 Date: 2026-07-14
+
+> **Superseded in part (2026-07-15).** This ADR's headline — "~0.29-0.30 km/s of
+> departure burn replaces the powered flyby's 4.45 km/s", end-to-end ~5.7 vs ~2.0
+> — depends on the phasing-free model and the 300 m/s
+> `ASSIST_CHAIN_PHASING_BUDGET` stand-in named below. ADR 0007 measured what that
+> stand-in stood for: the best phased chain costs **4.5677 km/s**, 15x the
+> estimate, and loses narrowly to the powered flyby (1.9734 vs 2.0169). **Do not
+> quote this ADR's mass numbers.** The search itself (beam, feasibility witness,
+> time-bucketed pruning) and the floor results (Venus-reach 279.4 m/s, Tisserand
+> lock, square-root escape) are unaffected and remain correct for the
+> phasing-free geometry, which is now a lower bound rather than an estimate.
 
 ## Context
 

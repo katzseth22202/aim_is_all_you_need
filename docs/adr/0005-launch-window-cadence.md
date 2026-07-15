@@ -1,8 +1,19 @@
 # Assist-chain launch windows recur at the Earth-Venus synodic cadence; flagged for the paper
 
-Status: accepted
+Status: superseded in part by ADR 0007
 
 Date: 2026-07-14
+
+> **Superseded in part (2026-07-15).** The **growth arithmetic** here — "end-to-end
+> ~5.7 per cycle, effective cycle 3.46-5.06 yr, doubling ~1.4-2.0 yr, millionfold
+> ~27-40 yr" — rests on two inputs that ADR 0007 moved: end-to-end 5.7228 ->
+> 1.6730 for this ladder, and the inner ladder alone takes 5.632 yr against a
+> 3.46 yr whole-chain figure. **Do not quote the doubling or millionfold times.**
+> The **cadence claim is untouched and was independently corroborated**: ADR
+> 0007's 34-point epoch sweep recovers the ~1.60 yr Earth-Venus synodic structure
+> predicted here, with cost falling again at 1.60-1.65 yr. This ADR's Lambert-arc
+> flag ("the natural next analysis layer") is what ADR 0007 carried out; the
+> remaining flag is a low-thrust solve.
 
 ## Context
 
