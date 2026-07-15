@@ -2655,7 +2655,7 @@ def _elliptic_time_from_periapsis(mu: float, a: float, ecc: float, nu: float) ->
 
 def _conic_radius_crossings(
     mu: float, r0: float, v_t0: float, v_r0: float, r1: float
-) -> List[Tuple[float, float, float, bool]]:
+) -> List[Tuple[float, float, float, bool, float]]:
     """Future crossings of radius ``r1`` from a heliocentric state at ``r0``.
 
     The state is (tangential, radial-outward) at radius ``r0`` with positive
@@ -2672,7 +2672,11 @@ def _conic_radius_crossings(
 
     Returns:
         Up to two tuples (time of flight s, tangential speed at r1, signed
-        radial speed at r1, outbound flag), skipping degenerate sub-day legs.
+        radial speed at r1, outbound flag, swept heliocentric longitude rad),
+        skipping degenerate sub-day legs. The swept angle is what a *phased*
+        chain needs: paired with the leg time it says where the craft arrives,
+        not merely when, so an arrival can be matched against where the target
+        body will actually be. Motion is prograde (h > 0), so it is positive.
     """
     energy = (v_t0 * v_t0 + v_r0 * v_r0) / 2.0 - mu / r0
     h = r0 * v_t0
@@ -2691,7 +2695,7 @@ def _conic_radius_crossings(
     v1_sq = 2.0 * (energy + mu / r1)
     v_t1 = h / r1
     v_r1 = float(np.sqrt(max(0.0, v1_sq - v_t1 * v_t1)))
-    crossings: List[Tuple[float, float, float, bool]] = []
+    crossings: List[Tuple[float, float, float, bool, float]] = []
     if ecc < 1.0:
         a = p / (1.0 - ecc * ecc)
         period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
@@ -2702,7 +2706,8 @@ def _conic_radius_crossings(
         ):
             dt = (_elliptic_time_from_periapsis(mu, a, ecc, nu_target) - t0) % period
             if dt > _ASSIST_MIN_LEG_TIME:
-                crossings.append((dt, v_t1, v_r_signed, outbound))
+                swept = (nu_target - nu0) % (2.0 * np.pi)
+                crossings.append((dt, v_t1, v_r_signed, outbound, swept))
     else:
         a_abs = p / (ecc * ecc - 1.0)
         t0 = float(np.sign(nu0)) * _hyperbolic_tof_seconds(mu, a_abs, ecc, abs(nu0))
@@ -2716,8 +2721,147 @@ def _conic_radius_crossings(
                 - t0
             )
             if dt > _ASSIST_MIN_LEG_TIME:
-                crossings.append((dt, v_t1, v_r_signed, outbound))
+                # A hyperbola never wraps, so the sweep is the bare difference;
+                # a positive dt guarantees nu_target is ahead of nu0.
+                swept = nu_target - nu0
+                crossings.append((dt, v_t1, v_r_signed, outbound, swept))
     return crossings
+
+
+def _mean_motion(body: _AssistBody) -> float:
+    """Mean motion of a chain body on its circular orbit (rad/s).
+
+    Args:
+        body: The chain body.
+
+    Returns:
+        Angular rate v_circ / r, positive (prograde).
+    """
+    return body.v_circ / body.orbit_radius
+
+
+def _wrap_pi(angle: float) -> float:
+    """Wrap an angle to (-pi, pi].
+
+    Args:
+        angle: Angle in radians.
+
+    Returns:
+        The equivalent angle in (-pi, pi].
+    """
+    return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+
+def _phased_leg_rotations(
+    body: _AssistBody,
+    body_longitude: float,
+    excess_t: float,
+    excess_r: float,
+    target: _AssistBody,
+    target_longitude: float,
+    outbound: bool,
+    params: _AssistChainParams,
+    samples: int = _ASSIST_ROTATION_SAMPLES,
+    rotation_limit: Optional[float] = None,
+) -> List[Tuple[float, float, float, float]]:
+    """Flyby rotations at ``body`` that arrive where ``target`` actually is.
+
+    This is what turns the phasing-free ladder into a phased one. The
+    phasing-free search samples the rotation freely and lets the target planet
+    be wherever the leg lands; here the rotation is *solved* so the leg lands on
+    the planet. Rotating by ``theta`` fixes both the swept longitude and the
+    flight time, so "arrive where the target will be" is one equation in one
+    unknown -- rooted with brentq over the bend-limited rotation, the same
+    scan-for-sign-change-then-root pattern as
+    :func:`apoapsis_raise_reintercept`.
+
+    Wrapped residuals jump by 2*pi where they cross the branch cut, which looks
+    exactly like a sign change; brackets spanning more than pi of residual are
+    rejected so those phantom roots are never rooted.
+
+    Args:
+        body: Body the flyby happens at.
+        body_longitude: Its heliocentric longitude at the flyby (rad).
+        excess_t: Tangential component of the body-relative excess (km/s).
+        excess_r: Radial-outward component of the body-relative excess (km/s).
+        target: Body the leg must arrive at.
+        target_longitude: Target's heliocentric longitude at the *same* instant
+            as ``body_longitude`` -- both are stated at the flyby, so the
+            absolute epoch never enters and the caller keeps that bookkeeping.
+        outbound: Which arrival branch to solve on.
+        params: The assist-chain parameter block.
+        samples: Rotations scanned for sign changes before rooting.
+        rotation_limit: Override for the reachable rotation half-range (rad).
+            Defaults to the body's unpowered bend limit. Pass ``pi`` for the
+            *departure*, where there is no flyby and the excess may be aimed
+            anywhere for free -- a bend limit there would be fictitious.
+
+    Returns:
+        One (rotation rad, leg time s, tangential speed at arrival km/s,
+        signed radial speed at arrival km/s) per solved rotation, possibly
+        empty. Several roots can coexist: the equation is transcendental.
+    """
+    w = float(np.hypot(excess_t, excess_r))
+    if w < 1e-9:
+        return []
+    phi = float(np.arctan2(excess_r, excess_t))
+    bend_limit = (
+        2.0 * float(np.arcsin(1.0 / (1.0 + body.min_periapsis * w * w / body.mu)))
+        if rotation_limit is None
+        else rotation_limit
+    )
+    n_target = _mean_motion(target)
+
+    def evaluate(theta: float) -> Optional[Tuple[float, float, float, float]]:
+        angle = phi + theta
+        v_t0 = body.v_circ + w * float(np.cos(angle))
+        v_r0 = w * float(np.sin(angle))
+        for leg_tof, v_t1, v_r1, out, swept in _conic_radius_crossings(
+            params.flyby.mu_sun,
+            body.orbit_radius,
+            v_t0,
+            v_r0,
+            target.orbit_radius,
+        ):
+            if out != outbound:
+                continue
+            # Both longitudes are stated at `epoch`, so the target advances by
+            # the leg time only -- advancing it from zero would double-count
+            # the epoch and manufacture a spurious window cadence.
+            arrival = body_longitude + swept
+            where_target_is = target_longitude + n_target * leg_tof
+            return (_wrap_pi(arrival - where_target_is), leg_tof, v_t1, v_r1)
+        return None
+
+    def residual(theta: float) -> float:
+        found = evaluate(theta)
+        return float("nan") if found is None else found[0]
+
+    grid = np.linspace(-bend_limit, bend_limit, samples)
+    values = [residual(float(t)) for t in grid]
+    solved: List[Tuple[float, float, float, float]] = []
+    for i in range(len(grid) - 1):
+        lo, hi = values[i], values[i + 1]
+        if not (np.isfinite(lo) and np.isfinite(hi)):
+            continue
+        if lo == 0.0:
+            root = float(grid[i])
+        elif lo * hi > 0.0:
+            continue
+        elif abs(lo - hi) > np.pi:
+            # Branch-cut jump, not a crossing: the residual wrapped rather than
+            # passed through zero.
+            continue
+        else:
+            try:
+                root = float(brentq(residual, grid[i], grid[i + 1], xtol=1e-12))
+            except (ValueError, RuntimeError):
+                continue
+        found = evaluate(root)
+        if found is None:
+            continue
+        solved.append((root, found[1], found[2], found[3]))
+    return solved
 
 
 @dataclass(frozen=True)
@@ -2769,7 +2913,7 @@ def _jovian_terminal(
     """
     flyby = params.flyby
     best: Optional[_ChainTerminal] = None
-    for leg_tof, v_t1, v_r1, outbound in _conic_radius_crossings(
+    for leg_tof, v_t1, v_r1, outbound, _ in _conic_radius_crossings(
         flyby.mu_sun, r0, v_t0, v_r0, flyby.r_jupiter_orbit
     ):
         rel_t = v_t1 - flyby.v_jupiter_orbit
@@ -2899,7 +3043,7 @@ def _assist_chain_search(
                 if depth >= params.max_flybys:
                     continue
                 for next_index, next_body in enumerate(params.bodies):
-                    for leg_tof, v_t1, v_r1, outbound in _conic_radius_crossings(
+                    for leg_tof, v_t1, v_r1, outbound, _ in _conic_radius_crossings(
                         params.flyby.mu_sun,
                         body.orbit_radius,
                         v_t0,
@@ -3118,7 +3262,7 @@ def _chain_to_result(
         ]
         if not candidates:
             raise ValueError("recorded assist-chain leg did not replay")
-        leg_tof, v_t1, v_r1, _ = candidates[0]
+        leg_tof, v_t1, v_r1, _, _ = candidates[0]
         elapsed += leg_tof
         steps.append(
             AssistChainStep(

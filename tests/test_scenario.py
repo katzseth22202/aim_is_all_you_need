@@ -32,8 +32,11 @@ from src.scenario import (
     _assist_chain_params,
     _conic_radius_crossings,
     _flyby_return_leg,
+    _mean_motion,
+    _phased_leg_rotations,
     _powered_flyby_leg,
     _powered_flyby_params,
+    _wrap_pi,
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
@@ -665,10 +668,17 @@ def test_conic_radius_crossings_reproduces_hohmann_leg(flyby_params):
     )
     assert jupiter_crossings
     v_apo = apoapsis_speed(transfer).to_value(u.km / u.s)
-    leg_time, v_t1, v_r1, _ = jupiter_crossings[0]
+    leg_time, v_t1, v_r1, _, swept = jupiter_crossings[0]
     assert is_nearly_equal((leg_time * u.s).to(u.year), 2.731 * u.year, percent=0.1)
     assert v_t1 == pytest.approx(v_apo, rel=1e-6)
     assert v_r1 == pytest.approx(0.0, abs=1e-3)
+    # A Hohmann runs perihelion to aphelion, so it sweeps exactly half a turn.
+    # This is the anchor for the swept angle a phased chain steers on: paired
+    # with the leg time it says *where* the craft arrives, not merely when.
+    # Tolerance is 1e-4 deg (0.36 arcsec), not tighter: recovering the true
+    # anomaly at an apsis inverts a cosine through arccos(-1), which is
+    # ill-conditioned there and lands ~1e-6 deg out.
+    assert np.degrees(swept) == pytest.approx(180.0, abs=1e-4)
     mars_crossings = _conic_radius_crossings(
         flyby_params.mu_sun,
         flyby_params.r_earth_orbit,
@@ -701,7 +711,7 @@ def test_venus_only_pump_ceiling_blocks_vve_at_300_mps(flyby_params) -> None:
         for aim in np.linspace(-np.pi, np.pi, 721):
             v_t = body_from.v_circ + excess * np.cos(aim)
             v_r = excess * np.sin(aim)
-            for _, v_t1, v_r1, _ in _conic_radius_crossings(
+            for _, v_t1, v_r1, _, _ in _conic_radius_crossings(
                 params.flyby.mu_sun,
                 body_from.orbit_radius,
                 float(v_t),
@@ -816,6 +826,90 @@ def test_assist_chain_return_at_300_mps(flyby_optimum, flyby_params):
     bend_used_deg = abs(result.jovian_bend_angle.to_value(u.deg))
     assert bend_used_deg <= bend_limit_deg
     assert bend_limit_deg - bend_used_deg > 10.0  # not scraping the limit
+
+
+def test_phased_leg_solves_onto_the_moving_target() -> None:
+    # The phased ladder's primitive: solve the flyby rotation so the leg lands
+    # where the planet actually is, rather than sampling the rotation and
+    # letting the planet be wherever the leg lands (the phasing-free model).
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    n_venus = _mean_motion(venus)
+    # A departure aims its excess for free -- no flyby, so no bend limit.
+    solutions = []
+    for outbound in (False, True):
+        solutions += _phased_leg_rotations(
+            earth,
+            0.0,
+            2.5875,
+            0.0,
+            venus,
+            np.radians(300.0),
+            outbound,
+            params,
+            samples=721,
+            rotation_limit=np.pi,
+        )
+    assert solutions
+    # Every solved rotation must actually put the craft on Venus: recompute the
+    # arrival longitude independently and check Venus is there at that time.
+    for rotation, leg_tof, _, _ in solutions:
+        assert abs(rotation) <= np.pi
+        assert leg_tof > 0.0
+        arrival_is = np.radians(300.0) + n_venus * leg_tof
+        v_t0 = earth.v_circ + 2.5875 * np.cos(rotation)
+        v_r0 = 2.5875 * np.sin(rotation)
+        swept = [
+            c[4]
+            for c in _conic_radius_crossings(
+                params.flyby.mu_sun, earth.orbit_radius, v_t0, v_r0, venus.orbit_radius
+            )
+            if abs(c[0] - leg_tof) < 1.0
+        ]
+        assert swept, "solved leg did not replay"
+        assert _wrap_pi(swept[0] - arrival_is) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_phased_leg_windows_recur_at_the_earth_venus_synodic() -> None:
+    # The check that separates a working phasing model from a plausible one:
+    # the launch-window cadence must *emerge*, never be supplied. Advancing the
+    # launch epoch by one Earth-Venus synodic period restores the same relative
+    # geometry (Venus gains exactly one lap on Earth), so the identical
+    # rotations must solve. An earlier draft advanced the target from t=0
+    # instead of from the flyby, double-counting the epoch and inventing a
+    # spurious 162 d cadence -- this pins the real one.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    n_earth, n_venus = _mean_motion(earth), _mean_motion(venus)
+    synodic = 2.0 * np.pi / abs(n_venus - n_earth)
+    assert is_nearly_equal((synodic * u.s).to(u.day), 583.9 * u.day, percent=0.1)
+
+    def solve_at(epoch: float):
+        out = []
+        for outbound in (False, True):
+            out += _phased_leg_rotations(
+                earth,
+                n_earth * epoch,
+                2.5875,
+                0.0,
+                venus,
+                n_venus * epoch,
+                outbound,
+                params,
+                samples=721,
+                rotation_limit=np.pi,
+            )
+        return sorted(r for r, _, _, _ in out)
+
+    inside_window = 496.0 * 86400.0
+    now = solve_at(inside_window)
+    assert now, "the measured E-V window near day 496 should admit a phased leg"
+    later = solve_at(inside_window + synodic)
+    assert len(later) == len(now)
+    assert later == pytest.approx(now, abs=1e-6)
+    # And the geometry is genuinely a window, not a permanent state: half a
+    # synodic period later the relative geometry is opposite and it shuts.
+    assert not solve_at(inside_window + synodic / 2.0)
 
 
 def test_jovian_return_phasing_envelope_closes(chain_at_300):
