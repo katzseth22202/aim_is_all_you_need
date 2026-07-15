@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 from astropy import units as u
 from boinor.bodies import Earth, Jupiter
+from boinor.core.iod import izzo
+from boinor.threebody.flybys import compute_flyby
 
 from src.astro_constants import (
     ASSIST_CHAIN_MAX_FLYBYS,
@@ -30,9 +32,11 @@ from src.scenario import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
     _assist_chain_params,
+    _body_state,
     _conic_radius_crossings,
     _flyby_return_leg,
     _mean_motion,
+    _phased_ladder_burn,
     _phased_leg_rotations,
     _powered_flyby_leg,
     _powered_flyby_params,
@@ -826,6 +830,145 @@ def test_assist_chain_return_at_300_mps(flyby_optimum, flyby_params):
     bend_used_deg = abs(result.jovian_bend_angle.to_value(u.deg))
     assert bend_used_deg <= bend_limit_deg
     assert bend_limit_deg - bend_used_deg > 10.0  # not scraping the limit
+
+
+def test_bend_limit_matches_boinor_flyby(flyby_params) -> None:
+    # The turning formula (e = 1 + r_p*w^2/mu, delta = 2*arcsin(1/e)) carries a
+    # lot of weight: _jovian_terminal bounds its bend with it, the phased leg
+    # solver bounds its root search with it, _flyby_mismatch_burn prices nodes
+    # with it, and ADR 0006's 56.27 km/s Tisserand ceiling and 122.5 deg bend
+    # limit both follow from it. Check it against an implementation we did not
+    # write, at the excesses the chain actually reaches.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    cases = [
+        (venus, 3.349),
+        (venus, 11.114),
+        (earth, 5.210),
+        (earth, 17.842),
+    ]
+    for body, excess in cases:
+        v_body = np.array([0.0, body.v_circ, 0.0]) * (u.km / u.s)
+        v_sc = np.array([excess, body.v_circ, 0.0]) * (u.km / u.s)
+        v_out, delta = compute_flyby(
+            v_sc, v_body, body.mu * u.km**3 / u.s**2, body.min_periapsis * u.km
+        )
+        mine = 2.0 * np.degrees(
+            np.arcsin(1.0 / (1.0 + body.min_periapsis * excess**2 / body.mu))
+        )
+        assert delta.to_value(u.deg) == pytest.approx(mine, abs=1e-9)
+        # And the flyby is unpowered: it rotates the excess without rescaling
+        # it. That is the Tisserand invariant the whole assist chain rests on.
+        excess_out = np.linalg.norm((v_out - v_body).to_value(u.km / u.s))
+        assert excess_out == pytest.approx(excess, abs=1e-9)
+    # The same formula at the Jovian arrival gives ADR 0006's bend limit.
+    jovian = 2.0 * np.degrees(
+        np.arcsin(
+            1.0
+            / (
+                1.0
+                + flyby_params.periapsis_floor * 15.3685**2 / flyby_params.mu_jupiter
+            )
+        )
+    )
+    v_body = np.array([0.0, flyby_params.v_jupiter_orbit, 0.0]) * (u.km / u.s)
+    v_sc = np.array([15.3685, flyby_params.v_jupiter_orbit, 0.0]) * (u.km / u.s)
+    _, delta = compute_flyby(
+        v_sc,
+        v_body,
+        flyby_params.mu_jupiter * u.km**3 / u.s**2,
+        flyby_params.periapsis_floor * u.km,
+    )
+    assert delta.to_value(u.deg) == pytest.approx(jovian, abs=1e-9)
+    assert jovian == pytest.approx(122.48, abs=0.01)
+
+
+def test_lambert_reproduces_the_conic_propagator(flyby_params) -> None:
+    # The phased ladder prices legs with Lambert while the phasing-free chain
+    # propagates them as conics. Both must describe the same arc, or the price
+    # is of a different trajectory than the one being priced. Generate a leg by
+    # propagation, then Lambert between its endpoints: the velocities must
+    # match. This also pins the swept angle and the (tangential, radial-out)
+    # to Cartesian convention that _body_state encodes.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    excess = 2.5875  # the 300 m/s chain's departure
+    v_t0, v_r0 = earth.v_circ - excess, 0.0  # aim -180: brake to fall inward
+    crossings = _conic_radius_crossings(
+        params.flyby.mu_sun, earth.orbit_radius, v_t0, v_r0, venus.orbit_radius
+    )
+    assert crossings
+    for leg_tof, v_t1, v_r1, _, swept in crossings:
+        r0, _ = _body_state(earth.orbit_radius, 0.0, earth.v_circ)
+        r1, _ = _body_state(venus.orbit_radius, swept, venus.v_circ)
+        depart = np.array([-v_t0 * np.sin(0.0), v_t0 * np.cos(0.0), 0.0]) + np.array(
+            [v_r0 * np.cos(0.0), v_r0 * np.sin(0.0), 0.0]
+        )
+        arrive = np.array(
+            [-v_t1 * np.sin(swept), v_t1 * np.cos(swept), 0.0]
+        ) + np.array([v_r1 * np.cos(swept), v_r1 * np.sin(swept), 0.0])
+        lambert_depart, lambert_arrive = izzo(
+            params.flyby.mu_sun, r0, r1, leg_tof, 0, True, True, 35, 1e-8
+        )
+        assert np.linalg.norm(lambert_depart - depart) < 1e-6
+        assert np.linalg.norm(lambert_arrive - arrive) < 1e-6
+
+
+def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
+    # The pricing model's calibration: hand it planets placed exactly where the
+    # phasing-free chain imagines them, and it must charge nothing beyond the
+    # departure -- that chain is perfectly phased for its own invented
+    # ephemeris, and every turn it uses is inside the bend limit. Any node cost
+    # here would mean the model charges for phasing that is already satisfied.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    excess = 2.5875
+    leg1 = [
+        c
+        for c in _conic_radius_crossings(
+            params.flyby.mu_sun,
+            earth.orbit_radius,
+            earth.v_circ - excess,
+            0.0,
+            venus.orbit_radius,
+        )
+        if not c[3]
+    ]
+    assert leg1
+    tof1, v_t1, v_r1, _, swept1 = leg1[0]
+    # Rotate at Venus by the real chain's recorded bend, then run on to Earth.
+    ex_t, ex_r = v_t1 - venus.v_circ, v_r1
+    w2 = float(np.hypot(ex_t, ex_r))
+    angle = float(np.arctan2(ex_r, ex_t)) + np.radians(44.08122687)
+    leg2 = [
+        c
+        for c in _conic_radius_crossings(
+            params.flyby.mu_sun,
+            venus.orbit_radius,
+            venus.v_circ + w2 * np.cos(angle),
+            w2 * np.sin(angle),
+            earth.orbit_radius,
+        )
+        if c[3]
+    ]
+    assert leg2
+    tof2, _, _, _, swept2 = leg2[0]
+    # Place each planet exactly at its leg's arrival point.
+    longitudes = [
+        0.0,
+        swept1 - _mean_motion(venus) * tof1,
+        (swept1 + swept2) - _mean_motion(earth) * (tof1 + tof2),
+    ]
+    priced = _phased_ladder_burn(
+        0.0, [tof1, tof2], (earth, venus, earth), longitudes, params
+    )
+    assert priced is not None
+    departure_burn, node_total, per_node, _ = priced
+    # The departure is the real chain's 300 m/s, recovered through Lambert.
+    assert departure_burn == pytest.approx(0.300, abs=1e-4)
+    # And the flyby needs no help at all.
+    assert node_total < 1e-6
+    assert all(burn < 1e-6 for burn in per_node)
 
 
 def test_phased_leg_solves_onto_the_moving_target() -> None:

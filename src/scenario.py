@@ -25,13 +25,14 @@ lower-level calculations to provide comprehensive mission analysis.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from astropy import units as u
 from boinor.bodies import Body, Earth, Jupiter, Mars, Moon, Saturn, Sun, Venus
+from boinor.core.iod import izzo
 from boinor.twobody import Orbit
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, differential_evolution
@@ -2862,6 +2863,157 @@ def _phased_leg_rotations(
             continue
         solved.append((root, found[1], found[2], found[3]))
     return solved
+
+
+_PHASED_LADDER_FAILED = 1e3  # km/s; above any real ladder cost
+
+
+def _phased_ladder_burn(
+    epoch: float,
+    leg_times: Sequence[float],
+    ladder: Tuple[_AssistBody, ...],
+    longitudes0: Sequence[float],
+    params: _AssistChainParams,
+) -> Optional[Tuple[float, float, List[float], float]]:
+    """Burn to fly ``ladder`` from ``epoch`` against real planet positions.
+
+    The phasing-free model puts each planet wherever the trajectory needs it;
+    this puts the planets where they actually are and charges for the
+    difference. Each leg becomes a Lambert arc between the two bodies at their
+    true positions, and each node is charged
+    :func:`_flyby_mismatch_burn` for whatever the unpowered flyby cannot supply.
+    That total is what ``ASSIST_CHAIN_PHASING_BUDGET`` is a stand-in for.
+
+    Args:
+        epoch: Launch time, seconds from the longitudes0 reference.
+        leg_times: Duration of each leg (s), one per ladder hop.
+        ladder: Bodies in order, departure body first; the Jovian leg is not
+            included (this prices the inner ladder only).
+        longitudes0: Heliocentric longitude of each ladder body at time zero
+            (rad), parallel to ``ladder``.
+        params: The assist-chain parameter block.
+
+    Returns:
+        (departure burn km/s, node burn total km/s, per-node burns, Jovian-leg
+        arrival excess km/s), or None if any leg's Lambert fails.
+    """
+    mu = params.flyby.mu_sun
+    times = [float(t) for t in leg_times]
+    node_burns: List[float] = []
+    excess_in: Optional[npt.NDArray[np.float64]] = None
+    departure_burn = 0.0
+    clock = epoch
+    for index in range(len(ladder) - 1):
+        body, target = ladder[index], ladder[index + 1]
+        tof = times[index]
+        if tof <= _ASSIST_MIN_LEG_TIME:
+            return None
+        lon_here = longitudes0[index] + _mean_motion(body) * clock
+        lon_there = longitudes0[index + 1] + _mean_motion(target) * (clock + tof)
+        r0, v_body = _body_state(body.orbit_radius, lon_here, body.v_circ)
+        r1, v_target = _body_state(target.orbit_radius, lon_there, target.v_circ)
+        if float(np.linalg.norm(np.cross(r0, r1))) < 1e-3 * body.orbit_radius:
+            # Collinear endpoints leave the transfer plane undefined.
+            return None
+        try:
+            v_depart, v_arrive = izzo(mu, r0, r1, tof, 0, True, True, 35, 1e-8)
+        except (ValueError, RuntimeError):
+            return None
+        excess_out = v_depart - v_body
+        if excess_in is None:
+            # Departure: no flyby to turn anything, so the whole excess is
+            # bought with the Oberth burn at 200 km.
+            speed = float(np.linalg.norm(excess_out))
+            departure_burn = (
+                float(np.sqrt(params.flyby.v_esc_leo**2 + speed * speed))
+                - params.flyby.v_esc_leo
+            )
+        else:
+            node_burns.append(_flyby_mismatch_burn(excess_in, excess_out, body))
+        excess_in = v_arrive - v_target
+        clock += tof
+    return (
+        departure_burn,
+        float(sum(node_burns)),
+        node_burns,
+        float(np.linalg.norm(excess_in)) if excess_in is not None else 0.0,
+    )
+
+
+def _body_state(
+    radius: float, longitude: float, v_circ: float
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Cartesian position and velocity of a body on its circular orbit.
+
+    The chain's own model is planar and circular, so the third component is
+    always zero; Lambert wants 3-vectors regardless.
+
+    Args:
+        radius: Heliocentric orbit radius (km).
+        longitude: Heliocentric longitude (rad).
+        v_circ: Circular speed (km/s).
+
+    Returns:
+        (position km, velocity km/s) as 3-vectors.
+    """
+    c, s = float(np.cos(longitude)), float(np.sin(longitude))
+    position = np.array([radius * c, radius * s, 0.0])
+    velocity = np.array([-v_circ * s, v_circ * c, 0.0])
+    return position, velocity
+
+
+def _flyby_mismatch_burn(
+    excess_in: npt.NDArray[np.float64],
+    excess_out: npt.NDArray[np.float64],
+    body: _AssistBody,
+) -> float:
+    """Burn needed at a flyby that cannot supply the turn unaided (km/s).
+
+    An unpowered flyby rotates the excess velocity but never rescales it, and
+    can only rotate it so far. Phasing the *next* leg generally demands both a
+    different magnitude and a turn beyond the bend limit, and the gap is what a
+    deep-space maneuver has to pay for.
+
+    The bend limit is evaluated at the incoming speed. Charging the shortfall
+    this way is the standard MGA node model: turn as far as the flyby allows
+    for free, then buy the rest. It is an estimate, not an optimum -- burning
+    and bending together (the burn changes the speed, which changes the limit)
+    can beat it -- so treat the result as an upper bound on the node's cost.
+
+    Args:
+        excess_in: Incoming body-relative excess velocity (km/s, 3-vector).
+        excess_out: Excess velocity the next leg needs (km/s, 3-vector).
+        body: The flyby body.
+
+    Returns:
+        Burn magnitude, zero when the flyby can do the whole job unaided.
+    """
+    speed_in = float(np.linalg.norm(excess_in))
+    speed_out = float(np.linalg.norm(excess_out))
+    if speed_in < 1e-9 or speed_out < 1e-9:
+        return abs(speed_out - speed_in)
+    ecc = 1.0 + body.min_periapsis * speed_in * speed_in / body.mu
+    bend_limit = 2.0 * float(np.arcsin(min(1.0, 1.0 / ecc)))
+    cos_turn = float(
+        np.clip(np.dot(excess_in, excess_out) / (speed_in * speed_out), -1.0, 1.0)
+    )
+    turn = float(np.arccos(cos_turn))
+    if turn <= bend_limit:
+        # The flyby can point the excess where it must go; only the speed is
+        # wrong, and a colinear burn is the cheapest way to fix that.
+        return abs(speed_out - speed_in)
+    # Bend as far as allowed, then close the remaining angle by burning.
+    residual_turn = turn - bend_limit
+    return float(
+        np.sqrt(
+            max(
+                0.0,
+                speed_in * speed_in
+                + speed_out * speed_out
+                - 2.0 * speed_in * speed_out * np.cos(residual_turn),
+            )
+        )
+    )
 
 
 @dataclass(frozen=True)
