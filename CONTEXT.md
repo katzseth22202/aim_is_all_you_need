@@ -140,6 +140,48 @@ Hard constraint: outbound Earth→Jupiter plus return Jupiter→1 AU time of fli
 ≤ 7 yr (time inside Jupiter's sphere of influence is negligible). Excludes extreme
 apoapsis-raise trajectories. Baseline Hohmann-out/Hohmann-back is ~5.5 yr.
 
+### The growth loop and its clock
+
+The exponential launch loop the Jovian return exists to close, scored in payload
+per *year* rather than per pass (ADR `0008-doubling-time-retires-veega`).
+
+**Closed cycle**:
+The returning PuffSat's collision pushes the mass to just under Earth escape — a
+20-day orbit at 200 km periapsis (`PUFFSAT_CYCLE_ORBIT_PERIOD`) — which falls back
+to periapsis and departs from there. So `v_rf` (the push target) and the departure
+burn's starting speed are **the same number**, 10.9503 km/s
+(`puffsat_cycle_periapsis_speed()`). _Avoid_: treating the push target and the
+departure state as independent — the orbit the PuffSat drives the mass into *is*
+the orbit the next cycle departs from.
+
+**Doubling time**:
+`cycle x ln2 / ln(net growth)`, where net growth is `M(v_b) x exp(-dv/v_e)` and
+`cycle` is departure-to-departure (`puffsat_cycle_growth()`). _Avoid_: scoring the
+loop on delta-v or on per-cycle mass ratio — a cheaper, slower chain can save
+1.50 km/s, gain 43% payload per pass, and still lose on doubling because its cycle
+nearly doubled. Minimum delta-v is closer to an anti-proxy for growth, because the
+cheapest arcs are the slowest.
+
+**Growth rate**:
+`ln(growth)/cycle`, in e-foldings per year. The *search* objective; doubling time
+is the *reported* one. Doubling has a pole (it diverges as growth -> 1+), so an
+optimizer sees an infinitely tall spike at the edge of the feasible set; the rate
+passes smoothly through zero and goes negative for a shrinking cycle. _Avoid_:
+filtering `growth <= 1` points out as infeasible — a losing chain is not
+infeasible, it is the gradient.
+
+**Windowed cycle**:
+`ceil((trip + coast)/window) * window` — the next launch window at or after the
+return, not the trip. A step function, so inside a step extra trip time is FREE
+and buys a slower, cheaper arc. _Avoid_: quoting trip time as the cycle.
+
+**Disqualification bound**:
+`rate = [ln M(v_b) - dv/v_e]/cycle`, and `dv >= 0`, so the numerator is capped at
+`ln M(v_b)` — which is doubly-logarithmic in `v_b` and barely moves (1.912 at 52
+km/s, 3.347 at 200). Any cycle beyond ~9.2 yr therefore loses to the direct flyby
+**at zero delta-v**. Algebra, not a search result; use it to disqualify a sequence
+before optimizing it.
+
 ### Unpowered assist chain
 
 The companion question to the powered flyby: can Venus/Earth/Mars gravity assists
@@ -294,6 +336,16 @@ need Lambert arcs against actual planet positions).
   the **re-intercept cycle floor** (~0.86 yr, derived from the **whip-around**) is the
   doubling interval, giving ~17 yr. `main.py` uses the derived floor and the 6-month
   figure is retired. See `docs/adr/0001-earth-reintercept-cycle.md`.
+- **An unpowered Jovian flyby needs arrival `v_inf` > 13.058 km/s, full stop.** The
+  retrograde return requires the post-flyby heliocentric tangential speed to go
+  negative — `v_jupiter + w_out·cos(angle) < 0` — and no bend angle achieves that unless
+  `w_out` exceeds Jupiter's own orbital speed. You cannot rotate a 6 km/s excess into
+  cancelling 13.058 km/s of Jupiter's motion; the flyby rotates the excess but never
+  rescales it. So this is a **necessary condition**, not a cost: below it the unpowered
+  return does not exist at any perijove. ADR 0002's direct flyby clears it comfortably
+  (arrives at `w_in` ≈ 15.1 and spends **zero** Jovian burn). It is also exactly why a
+  cold-arriving chain *must* buy a Jupiter burn — the burn's real job is lifting `w_out`
+  over 13.058, not fine-tuning `v_b`.
 - **The per-cycle growth budget is bounded, so trip time can disqualify an architecture
   outright.** The growth loop's rate is `[ln M(v_b) - dv/v_e] / cycle`. Because `dv >= 0`
   the numerator can never exceed `ln M(v_b)` — and `M = 2f/ln(v_b/(v_b - v_rf))` is
@@ -362,9 +414,22 @@ need Lambert arcs against actual planet positions).
   landscape is multi-modal and the leg-time bound is load-bearing** — so ADR 0007's
   "converged to four decimals" attests convergence *within its own unrecorded bounds*,
   not a physical optimum. Record bounds with results.
-- **Minimum-total-dv is a poorly-posed objective for the chain.** It buys cheapness with
-  trip time and is regularized only by `ASSIST_CHAIN_MAX_TRIP_TIME` (10 yr): relaxing
-  the leg bound from 2.5 to 3.0 yr drops the best E-V-E-J from ~4.50 to ~3.55 km/s by
-  stretching one leg to 2.86 yr, pushing the trip from 3.94 to 6.19 yr. Since the growth
-  loop scores on **doubling time** (cycle x ln2 / ln(mass ratio)), a longer, cheaper
-  chain can lose. Rank on doubling time, or state the time bound as part of the result.
+- ~~**Minimum-total-dv is a poorly-posed objective for the chain.**~~ **Resolved** by ADR
+  `0008-doubling-time-retires-veega`: the growth loop is scored on doubling time, and
+  min-dv is retired as its objective. The diagnosis was exactly right — relaxing the leg
+  bound from 2.5 to 3.0 yr drops the best E-V-E-J from ~4.50 to ~3.55 km/s by stretching
+  one leg to 2.86 yr, pushing the trip from 3.94 to 6.19 yr — and the phased re-score
+  confirms the consequence: E-V-E-J beats the direct flyby on delta-v (3.047 vs 4.5435)
+  and loses on doubling (4.27 vs 3.33 yr).
+- **Return-leg Earth phasing is still unmodelled.** `_flyby_return_leg()` never checks
+  where Earth is at the 1 AU crossing; it scores the closing speed of a geometry that
+  may arrive at empty space. This flatters the direct flyby and the chains alike, so it
+  does not threaten ADR 0008's ranking, but it is the largest remaining model hole and
+  no absolute doubling time is quotable until it closes.
+- **An all-failed optimizer table is not a result.** It is ambiguous between an empty
+  feasible set (physics) and a search that never found it (artifact), and the two look
+  identical. Random-sample the box first: if blind sampling finds feasible points at a
+  rate the optimizer should trivially beat, the harness is broken. This is not
+  hypothetical — the first phased run reported "NO PHASED SOLUTION" for all five
+  sequences while 2–11% of random points flew a complete chain (ADR 0008, "How this was
+  nearly recorded backwards").
