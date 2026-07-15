@@ -217,9 +217,15 @@ reversal (`v_t = v_Jupiter − v∞ = −2.31 km/s`). The catalog's three Jovian
 the retrograde-Hohmann 69.27 km/s, which needs 20.47 km/s of outgoing excess and is
 therefore **unreachable at any phase, periapsis or arrival time** — not merely
 disfavoured. Buying it costs a 2.62 km/s Jovian burn and drops end-to-end 5.72 → 3.93.
+The ceiling is a function of *this chain's* arrival excess, not a universal constant:
+it is `v_Jupiter + v∞`, so a hotter Jovian arrival lifts it. The direct powered flyby
+reaches `v_b` 60 and even 65 with a **zero** Jovian burn, by departing harder
+(5.34 / 5.99 km/s) and arriving with more excess. 56.27 bounds the *unpowered chain*,
+not the architecture.
 _Avoid_: treating 69.27 as a maximum (it is the *minimum-energy* retrograde arrival —
 the only purely tangential one); expecting timing to raise it (timing sets position,
-energy sets speed, and they are separate currencies).
+energy sets speed, and they are separate currencies); quoting 56.27 as a limit on any
+trajectory that did not inherit the chain's 15.369 km/s arrival.
 
 **`v_b` lottery**:
 The price of free phasing: the bend that places Earth *dictates* the collision speed
@@ -227,7 +233,15 @@ The price of free phasing: the bend that places Earth *dictates* the collision s
 every value in the band is an acceptable loop (end-to-end 5.7–6.3, doubling
 1.37–1.51 yr) — and note 51 km/s *beats* 56 on doubling time, because the extra `v_b`
 is free in propellant but costs trip time.
-_Avoid_: quoting the best-case `v_b` as if it were selectable.
+The lottery is a consequence of the flyby being **unpowered**, not a law. It is a
+knob-counting result: one knob (perijove radius *is* the bend) against two demands
+(`v_b` and arrival time) is over-determined. A **powered Jovian flyby** has two knobs —
+perijove radius *and* periapsis burn — so it meets both demands and **breaks the
+lottery**, at the price of propellant. Any mission that pins `v_b` and also requires
+**Earth re-intercept** must therefore burn at Jupiter.
+_Avoid_: quoting the best-case `v_b` as if it were selectable; treating the lottery as
+unbreakable (it is a statement about unpowered flybys); reading a zero Jovian burn from
+an optimizer that never enforced Earth re-intercept as evidence the burn is unnecessary.
 
 **Launch-window cadence**:
 How often the chain family can fly (`assist_chain_window_cadence()`, ADR
@@ -280,3 +294,77 @@ need Lambert arcs against actual planet positions).
   the **re-intercept cycle floor** (~0.86 yr, derived from the **whip-around**) is the
   doubling interval, giving ~17 yr. `main.py` uses the derived floor and the 6-month
   figure is retired. See `docs/adr/0001-earth-reintercept-cycle.md`.
+- **The per-cycle growth budget is bounded, so trip time can disqualify an architecture
+  outright.** The growth loop's rate is `[ln M(v_b) - dv/v_e] / cycle`. Because `dv >= 0`
+  the numerator can never exceed `ln M(v_b)` — and `M = 2f/ln(v_b/(v_b - v_rf))` is
+  *itself* logarithmic in `v_b`, so `ln M` is doubly-logarithmic and crawls: 1.912 at
+  `v_b` 52, 2.001 at 56.27, 2.072 at 60, and only 3.347 at `v_b` **200**. No architecture
+  earns its way out through a hotter return. Delta-v savings are capped (recovering at
+  most the `dv/v_e` term) while cycle time is unbounded in the denominator. Against the
+  direct flyby's 0.2259 e-foldings/yr this gives a **hard bound: any cycle over ~8.85 yr
+  loses even at zero delta-v**. This is algebra, not a search result — it survives any
+  re-optimization.
+- **Launch-window cadence is not in the model, and it cuts against the short trip.**
+  Cycle is currently set to *trip*, but the next departure must wait for a window. The
+  direct loop's window is the **Earth-Jupiter synodic, 1.0920 yr** (Jupiter moves only
+  30.33 deg/yr, so Earth nearly laps it annually); the chain needs Venus *and* Jupiter,
+  and exact E-V-J re-alignments fall at 23.98 / 59.14 / 83.12 yr. Easy windows help less
+  than they appear: quantizing naively, the direct flyby idles 0.522 yr on a 2.754 yr
+  trip (**19%**) while Cassini idles 0.727 on 7.265 (**10%**), and the doubling gap
+  **collapses from 10% to 2%** (3.651 vs 3.727). A *short* trip is penalised
+  proportionally more by window quantization. The resolution is presumably to let the
+  optimizer tune the trip to land on a window (a slower, cheaper arc with zero idle),
+  which is unbuilt. Unresolved, and load-bearing for any direct-vs-chain ranking.
+- **The mass ratio mixes two altitudes.** `payload_mass_ratio(v_rf, v_b)` takes `v_b`
+  folded through Earth's well with `v_esc_surface` — escape at the **surface**, 11.1799
+  km/s — while `v_rf` is a speed at **200 km** (10.9503 km/s for the cycle orbit, escape
+  there 11.0086). So the collision is scored at the surface and the push target 200 km
+  up. Worth 0.036 km/s on `v_b` (53.3675 surface vs 53.3319 at 200 km, 0.07%), i.e.
+  immaterial to every result so far — but it is a frame mismatch, not a modelling
+  choice, and nothing should be built on it. Unresolved (minor).
+- **The fast Jovian arc is not a transfer to Jupiter.** The direct flyby's 2.699 yr
+  round trip looks impossible against the 2.731 yr *one-way* Hohmann, and the resolution
+  is that Hohmann is the minimum-energy case and this is nothing like it: departing at
+  `v_inf` 11.425 (Hohmann needs 8.793) puts the craft on an **a = 11.67 AU, e = 0.914,
+  aphelion 22.3 AU** ellipse at 41.209 km/s against 42.122 km/s solar escape. Jupiter at
+  5.2 AU is crossed in the first quarter of that arc, still moving fast — 1.220 yr out,
+  1.478 yr back. Reasoning about these legs with Hohmann intuitions will be wrong by 2x.
+- **A return leg's perihelion is virtual.** `_flyby_return_leg()` ends at the first
+  *inbound* 1 AU crossing, so the reported perihelion (0.023 AU for the direct flyby —
+  ~5 solar radii) is never flown. It is a shape parameter meaning "this return is nearly
+  radial", which is what maximises closing speed. Not a solar-dive thermal problem.
+- **"Interception" is still overloaded.** The paper's near-term LEO terminal-guidance
+  sense, the **Earth re-intercept** requirement (a *position*), and the **collision
+  velocity** `v_b` (a *speed*) all get called "interception" in conversation — e.g.
+  "phasing for at least 60 km/s interception" is really two constraints. Keep them
+  apart; and note "60 km/s" is itself ambiguous by ~1 km/s, since `v_b` = 60 means a
+  closing speed of 58.95 while a closing speed of 60 means `v_b` = 61.03.
+  `target_collision_speed` is the `v_b` convention.
+- **Nothing in the model knows where Jupiter is.** `_jovian_terminal()` takes only
+  `(v_t0, v_r0, r0, elapsed, params)` and calls `_conic_radius_crossings()`, which finds
+  crossings of Jupiter's orbit *radius* and assumes Jupiter is there; `longitudes0` in
+  `_phased_ladder_burn()` is parallel to `ladder`, which only ever holds Venus/Earth/Mars.
+  So ADR 0007's "E-V-E-**J**" phased Venus and Earth but let **Jupiter be anywhere** —
+  its 4.5677 km/s is a *lower* bound with respect to Jupiter phasing. Unresolved.
+- **`_flyby_return_leg()` never checks where Earth is.** It scores `closing_speed` at the
+  1 AU crossing, which is the error **Earth re-intercept** exists to name. Both the
+  powered flyby's numbers (ADR 0002) and the chain's (ADR 0003/0007) inherit this; they
+  lean on the **return-branch knob** making phasing free, which holds only while `v_b`
+  floats. Any study that pins `v_b` must re-check it. Unresolved.
+- ~~**The collinearity guard in `_phased_ladder_burn()` is dimensionally inconsistent**~~
+  Resolved: it now divides by both radii, so it tests `sin(sep) < 1e-6` as intended.
+- **ADR 0007's harness is gone and its numbers are not reproducible.** The ADR records
+  results (E-V-E-J at 4.5677, epoch 0.80, legs 0.414/0.866) but not the search space
+  that produced them, and the scratch script no longer exists. A rebuilt harness on the
+  same primitives lands in a *different basin of similar cost* (~4.50 at epoch ~0.83,
+  but with departure and node burns inverted: 3.20/1.30 against ADR 0007's 0.93/3.63)
+  and, once legs may exceed ~2.5 yr, finds materially cheaper chains still. **The cost
+  landscape is multi-modal and the leg-time bound is load-bearing** — so ADR 0007's
+  "converged to four decimals" attests convergence *within its own unrecorded bounds*,
+  not a physical optimum. Record bounds with results.
+- **Minimum-total-dv is a poorly-posed objective for the chain.** It buys cheapness with
+  trip time and is regularized only by `ASSIST_CHAIN_MAX_TRIP_TIME` (10 yr): relaxing
+  the leg bound from 2.5 to 3.0 yr drops the best E-V-E-J from ~4.50 to ~3.55 km/s by
+  stretching one leg to 2.86 yr, pushing the trip from 3.94 to 6.19 yr. Since the growth
+  loop scores on **doubling time** (cycle x ln2 / ln(mass ratio)), a longer, cheaper
+  chain can lose. Rank on doubling time, or state the time bound as part of the result.
