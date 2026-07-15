@@ -139,6 +139,18 @@ METHALOX_SEA_LEVEL_ISP = 310 * u.s
 METHALOX_VACUUM_ISP = 380 * u.s
 # Argon solar-electric (SEP) Isp for the retrograde apoapsis burn (Leg 2).
 ARGON_SEP_ISP = 2000 * u.s
+# Period of the bound Earth orbit the returning PuffSat's collision leaves the
+# mass in, closing the growth loop: the collision pushes the mass to just under
+# escape, it coasts to apoapsis and falls back to the 200 km periapsis, and the
+# next cycle's Oberth burn fires there. Bound rather than escaping, so the mass
+# is not lost; near-escape, so the collision extracts nearly all it can.
+#
+# The value is close to arbitrary. Periapsis speed runs 10.8610 km/s at 5 days to
+# 10.9806 at 60 -- a 120 m/s spread on a v_rf of ~10.95 -- because the mass ratio
+# 2f/ln((v_b - v_ri)/(v_b - v_rf)) is nearly blind to v_rf while v_b >> v_rf. It
+# sets the coast that pads the cycle, not the growth. 20 days puts apoapsis at
+# ~615,900 km, about 1.6 lunar distances.
+PUFFSAT_CYCLE_ORBIT_PERIOD = 20 * u.day
 # Retrograde SEP delta-v spent at apoapsis (Leg 2). Capped at the design's full
 # 4 km/s SEP budget; the phasing-exact optimum spends it in full (raising Delta-v2
 # does not shrink the phasing-locked orbit, only deepens the closing speed).

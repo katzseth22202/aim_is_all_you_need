@@ -15,6 +15,7 @@ from src.astro_constants import (
     EARTH_A,
     JUPITER_A,
     JUPITER_FLYBY_MAX_TOF,
+    LEO_ALTITUDE,
     LOW_JUPITER_ALTITUDE,
     MARS_A,
     SATURN_A,
@@ -22,6 +23,7 @@ from src.astro_constants import (
 )
 from src.orbit_utils import (
     apoapsis_speed,
+    escape_velocity,
     hyperbolic_eccentricity,
     orbit_from_rp_ra,
     periapsis_speed,
@@ -34,12 +36,15 @@ from src.scenario import (
     _assist_chain_params,
     _body_state,
     _conic_radius_crossings,
+    _flyby_mismatch_burn,
     _flyby_return_leg,
     _mean_motion,
     _phased_ladder_burn,
     _phased_leg_rotations,
     _powered_flyby_leg,
     _powered_flyby_params,
+    _powered_jovian_terminal,
+    _powered_node_burn,
     _wrap_pi,
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
@@ -63,6 +68,8 @@ from src.scenario import (
     parker_injection_burns,
     periapsis_reaim_cost_per_degree,
     powered_jovian_flyby_return,
+    puffsat_cycle_growth,
+    puffsat_cycle_periapsis_speed,
     scenarios_to_dataframe,
     single_impulse_resonant_dive,
     solar_dive_periapsis_speed,
@@ -963,12 +970,57 @@ def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
         0.0, [tof1, tof2], (earth, venus, earth), longitudes, params
     )
     assert priced is not None
-    departure_burn, node_total, per_node, _ = priced
     # The departure is the real chain's 300 m/s, recovered through Lambert.
-    assert departure_burn == pytest.approx(0.300, abs=1e-4)
+    assert priced.departure_burn == pytest.approx(0.300, abs=1e-4)
     # And the flyby needs no help at all.
-    assert node_total < 1e-6
-    assert all(burn < 1e-6 for burn in per_node)
+    assert priced.node_total < 1e-6
+    assert all(burn < 1e-6 for burn in priced.node_burns)
+
+
+def test_powered_and_retired_nodes_agree_on_a_pure_rotation() -> None:
+    # The two node models disagree about what a speed change costs, but a node
+    # that only *rotates* the excess within the bend limit is free under both.
+    # Any daylight here would mean one of them charges for geometry the flyby
+    # supplies for nothing, which would make the ADR 0007 re-price unreadable.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, _, _ = params.bodies
+    excess_in = np.array([4.0, 0.0, 0.0])
+    for turn_deg in (0.0, 10.0, 30.0):
+        turn = np.radians(turn_deg)
+        excess_out = 4.0 * np.array([np.cos(turn), np.sin(turn), 0.0])
+        powered, _ = _powered_node_burn(excess_in, excess_out, venus)
+        retired = _flyby_mismatch_burn(excess_in, excess_out, venus)
+        assert powered < 1e-9
+        assert retired < 1e-9
+
+
+def test_powered_node_burn_gets_no_oberth_discount_for_a_zero_turn() -> None:
+    # A node that needs no turn has no reason to go anywhere near the planet:
+    # the bend is strictly positive at every finite periapsis, so zero turn is
+    # only approached as r_p -> infinity, where the Oberth discount vanishes and
+    # the speed change costs its full value at infinity. Charging burn(floor)
+    # here would award the *deepest* discount to the turn that earned none --
+    # a free 2x that an optimizer will drive the whole chain into.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    for body in (venus, earth):
+        excess_in = np.array([5.0, 0.0, 0.0])
+        excess_out = np.array([7.0, 0.0, 0.0])
+        powered, periapsis = _powered_node_burn(excess_in, excess_out, body)
+        # The whole 2 km/s, not the ~1 km/s a grazing pass would cost.
+        assert powered == pytest.approx(2.0, abs=1e-6)
+        assert periapsis > 1e6 * body.min_periapsis
+    # And the discount must arrive smoothly as the turn grows, not in a jump:
+    # more turn forces a lower periapsis, which deepens the well.
+    previous = 2.0
+    for turn_deg in (10.0, 20.0, 40.0, 60.0):
+        turn = np.radians(turn_deg)
+        excess_out = 7.0 * np.array([np.cos(turn), np.sin(turn), 0.0])
+        burn, periapsis = _powered_node_burn(
+            np.array([5.0, 0.0, 0.0]), excess_out, venus
+        )
+        assert burn < previous
+        previous = burn
 
 
 def test_phased_leg_solves_onto_the_moving_target() -> None:
@@ -1138,3 +1190,153 @@ def test_minimum_departure_burn_assist_chain(flyby_optimum):
     assert scan.minimum.total_time <= ASSIST_CHAIN_MAX_TRIP_TIME
     assert scan.minimum.collision_speed >= scan.target_collision_speed * 0.9999
     assert scan.minimum.departure_burn < flyby_optimum.departure_burn / 10.0
+
+
+def test_puffsat_cycle_periapsis_speed_is_just_under_escape() -> None:
+    # The collision must leave the mass BOUND -- push it to escape and the next
+    # cycle's payload drifts away instead of falling back to the burn point.
+    # So the cycle orbit's periapsis speed sits just under escape at 200 km.
+    v_esc = escape_velocity(Earth, LEO_ALTITUDE)
+    v_rf = puffsat_cycle_periapsis_speed()
+    assert v_rf < v_esc
+    assert is_nearly_equal(v_rf, 10.9503 * u.km / u.s, percent=0.01)
+    assert (v_esc - v_rf) < 0.06 * u.km / u.s
+    # The period is a nearly free choice: 5 to 60 days spans ~120 m/s, because
+    # the mass ratio is blind to v_rf while v_b >> v_rf. Nothing downstream
+    # should hinge on the 20-day value.
+    speeds = [
+        puffsat_cycle_periapsis_speed(period=days * u.day) for days in (5, 20, 60)
+    ]
+    assert all(s < v_esc for s in speeds)
+    spread = max(speeds) - min(speeds)
+    assert spread < 0.13 * u.km / u.s
+    # Longer period -> higher apoapsis -> closer to escape, monotonically.
+    assert speeds[0] < speeds[1] < speeds[2]
+
+
+def test_puffsat_cycle_growth_trades_delta_v_against_cycle_time() -> None:
+    # The point of scoring on doubling time: a chain that is cheaper in delta-v
+    # can still be the worse machine if it takes longer to fly. Pin that the
+    # comparison actually inverts, so nobody "optimizes" back to min-dv.
+    cheap_slow = puffsat_cycle_growth(
+        total_dv=1.5 * u.km / u.s,
+        collision_speed=51.134 * u.km / u.s,
+        trip_time=12.0 * u.year,
+    )
+    dear_fast = puffsat_cycle_growth(
+        total_dv=5.3392 * u.km / u.s,
+        collision_speed=60.0 * u.km / u.s,
+        trip_time=3.26 * u.year,
+    )
+    # The cheap chain grows far more per cycle ...
+    assert cheap_slow.net_growth > dear_fast.net_growth
+    # ... and still doubles slower, because the cycle is what gets paid.
+    assert cheap_slow.doubling_time > dear_fast.doubling_time
+
+    # The direct powered flyby's own numbers, as the reference point.
+    assert dear_fast.mass_ratio == pytest.approx(7.9400, rel=1e-3)
+    assert dear_fast.delivered_fraction == pytest.approx(0.23866, rel=1e-3)
+    assert dear_fast.net_growth == pytest.approx(1.8949, rel=1e-3)
+    # Cycle is the trip plus the 20-day coast back to periapsis.
+    assert dear_fast.cycle_time.to_value(u.year) == pytest.approx(3.3148, rel=1e-3)
+    assert dear_fast.doubling_time.to_value(u.year) == pytest.approx(3.595, rel=1e-3)
+
+
+def test_puffsat_cycle_growth_reports_no_doubling_when_the_cycle_shrinks() -> None:
+    # A cycle that loses more to propellant than the collision returns never
+    # doubles. Report that as infinite time rather than a negative one, which is
+    # what cycle * ln2 / ln(growth) yields for growth < 1 and would sort as the
+    # *best* answer in a minimizer.
+    shrinking = puffsat_cycle_growth(
+        total_dv=12.0 * u.km / u.s,
+        collision_speed=51.134 * u.km / u.s,
+        trip_time=5.0 * u.year,
+    )
+    assert shrinking.net_growth < 1.0
+    assert np.isinf(shrinking.doubling_time.to_value(u.year))
+
+
+def test_puffsat_cycle_growth_rejects_a_collision_below_the_push_target() -> None:
+    # v_b <= v_rf makes ln((v_b - v_ri)/(v_b - v_rf)) undefined or negative --
+    # the PuffSat simply cannot drive the mass to the cycle orbit. Fail loudly
+    # rather than return a nonsense ratio.
+    with pytest.raises(ValueError, match="does not exceed the push target"):
+        puffsat_cycle_growth(
+            total_dv=1.0 * u.km / u.s,
+            collision_speed=5.0 * u.km / u.s,
+            trip_time=3.0 * u.year,
+        )
+
+
+def test_powered_jovian_flyby_burn_changes_the_turn_not_just_the_speed() -> None:
+    # The property that makes a powered flyby two knobs instead of one: the burn
+    # fires at perijove, so the OUTGOING hyperbola has its own eccentricity and
+    # the total bend is asin(1/e_in) + asin(1/e_out). Speeding up raises e_out
+    # and so COSTS bend; slowing down buys it. Charging the burn against the
+    # incoming eccentricity twice -- 2*asin(1/e_in), as the retired node model
+    # did -- overstates what the flyby can point at.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    flyby = params.flyby
+    r_p = flyby.periapsis_floor
+    w_in = 8.0
+    mu_j = flyby.mu_jupiter
+    ecc_in = 1.0 + r_p * w_in**2 / mu_j
+    unpowered_turn = 2.0 * np.arcsin(1.0 / ecc_in)
+
+    def turn_for(burn: float) -> float:
+        v_peri_in = np.sqrt(w_in**2 + 2.0 * mu_j / r_p)
+        w_out = np.sqrt((v_peri_in + burn) ** 2 - 2.0 * mu_j / r_p)
+        ecc_out = 1.0 + r_p * w_out**2 / mu_j
+        return float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+
+    # Zero burn recovers the unpowered bend exactly.
+    assert turn_for(0.0) == pytest.approx(unpowered_turn, rel=1e-12)
+    # Speeding up costs bend, monotonically -- the turn is NOT independent of dv.
+    speeding = [turn_for(b) for b in (0.0, 1.0, 2.0, 4.0)]
+    assert speeding == sorted(speeding, reverse=True)
+    assert speeding[-1] < speeding[0]
+    # Slowing down buys bend back -- but only just. Perijove speed clears
+    # Jupiter escape (57.94 km/s at the floor) by 0.55 km/s at this w_in, so a
+    # retro burn past that CAPTURES the craft rather than bending it. "Slow down
+    # for more turn" is barely available at Jupiter, which is why the useful
+    # powered flyby here speeds up and pays for it in bend.
+    assert turn_for(-0.3) > unpowered_turn
+    v_esc_jupiter = float(np.sqrt(2.0 * mu_j / r_p))
+    v_peri_in = float(np.sqrt(w_in**2 + 2.0 * mu_j / r_p))
+    assert v_peri_in - v_esc_jupiter < 0.6
+    assert np.isnan(turn_for(-1.0))
+
+
+def test_powered_jovian_terminal_breaks_the_vb_lottery() -> None:
+    # An unpowered Jupiter has ONE knob: perijove radius IS the bend. Demanding
+    # both a v_b and an arrival time over-determines it. A powered flyby has two
+    # (r_p, dv), so it can hold v_b while the geometry varies. Show the second
+    # knob doing real work: at a FIXED perijove, the burn moves v_b.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    earth = params.bodies[params.earth_index]
+    v_t0, v_r0 = earth.v_circ + 10.0, 0.0
+    r_p = params.flyby.periapsis_floor
+
+    def reach(burn: float):
+        return _powered_jovian_terminal(
+            v_t0, v_r0, earth.orbit_radius, 0.0, r_p, burn, 1.0, params
+        )
+
+    # The lottery: unpowered, this arrival cannot make the target v_b AT ALL.
+    # One knob (perijove radius is the bend) against two demands.
+    assert reach(0.0) is None
+    # Powered, the same arrival makes it comfortably -- the burn is the second
+    # knob, and it is what buys the return, not a marginal saving.
+    hot = reach(4.0)
+    hotter = reach(6.0)
+    assert hot is not None and hotter is not None
+    assert hot.return_leg.collision_speed == pytest.approx(55.872, rel=1e-3)
+    assert hotter.return_leg.collision_speed == pytest.approx(69.424, rel=1e-3)
+    # Perijove Oberth is why: ~7 km/s of v_b per km/s of burn.
+    leverage = (
+        hotter.return_leg.collision_speed - hot.return_leg.collision_speed
+    ) / 2.0
+    assert leverage > 5.0
+    # Speeding up costs bend, so the turn must shrink as the burn grows.
+    assert hotter.turn_angle < hot.turn_angle
+    assert hotter.v_infinity_out > hot.v_infinity_out > hot.v_infinity_in

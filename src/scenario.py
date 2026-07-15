@@ -63,6 +63,7 @@ from src.astro_constants import (
     PERIAPSIS_SOLAR_BURN,
     PERIAPSIS_SOLAR_V,
     PHOEBE_A,
+    PUFFSAT_CYCLE_ORBIT_PERIOD,
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
@@ -1762,7 +1763,15 @@ class _FlybyParams:
         r_jupiter_orbit: Jupiter heliocentric orbit radius (km).
         v_earth_orbit: Earth circular heliocentric speed (km/s).
         v_jupiter_orbit: Jupiter circular heliocentric speed (km/s).
-        v_esc_leo: Earth escape speed at the 200 km burn altitude (km/s).
+        v_esc_leo: Earth escape speed at the 200 km burn altitude (km/s). Sets
+            the Oberth leverage: leaving with excess ``w`` needs periapsis speed
+            ``hypot(w, v_esc_leo)``.
+        v_depart_from: Speed the mass already carries at that periapsis when the
+            departure burn lights, so the burn is
+            ``hypot(w, v_esc_leo) - v_depart_from``. Equals ``v_esc_leo`` under
+            the legacy C3 = 0 convention, or the cycle orbit's periapsis speed
+            when the growth loop is closed (see
+            :func:`puffsat_cycle_periapsis_speed`).
         v_esc_surface: Earth surface escape speed -- the collision-speed
             convention of retrograde_jovian_hohmann_transfer (km/s).
         periapsis_floor: Minimum Jovian flyby periapsis radius, center-based (km).
@@ -1778,6 +1787,7 @@ class _FlybyParams:
     v_earth_orbit: float
     v_jupiter_orbit: float
     v_esc_leo: float
+    v_depart_from: float
     v_esc_surface: float
     periapsis_floor: float
     exhaust_speed: float
@@ -1785,9 +1795,115 @@ class _FlybyParams:
     max_tof: float
 
 
+def puffsat_cycle_periapsis_speed(
+    period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+    altitude: u.Quantity = LEO_ALTITUDE,
+) -> u.Quantity:
+    """Periapsis speed of the bound orbit the PuffSat collision leaves behind.
+
+    The growth loop closes on itself here. A returning PuffSat pushes the mass to
+    just under Earth escape, which puts it on a bound ellipse of the given period
+    with periapsis at ``altitude``; the mass coasts to apoapsis, falls back, and
+    the next cycle's Oberth burn fires at that periapsis. So this one speed is
+    both the collision's push target (``v_rf`` of ``eq:PuffSat_ratio``) and the
+    speed the next departure burn starts from -- they are the same state, and
+    modelling them as one number is what makes the cycle self-consistent.
+
+    Args:
+        period: Orbital period of the post-collision ellipse (astropy Quantity).
+        altitude: Periapsis altitude above Earth's surface (astropy Quantity).
+
+    Returns:
+        The periapsis speed (astropy Quantity, km/s). ~10.9503 km/s at the
+        default 20 days, 58.3 m/s below the 11.0086 km/s escape speed there.
+    """
+    mu = Earth.k.to(u.km**3 / u.s**2)
+    r_p = (Earth.R + altitude).to(u.km)
+    semi_major_axis = np.cbrt(mu * period.to(u.s) ** 2 / (4.0 * np.pi**2))
+    return np.sqrt(mu * (2.0 / r_p - 1.0 / semi_major_axis)).to(u.km / u.s)
+
+
+@dataclass(frozen=True)
+class CycleGrowth:
+    """Growth economics of one closed Earth-to-Earth PuffSat cycle.
+
+    Attributes:
+        mass_ratio: New payload pushed to ``v_rf`` per unit returning PuffSat
+            mass, ``eq:PuffSat_ratio`` at the achieved collision speed.
+        delivered_fraction: Mass fraction surviving every burn of the chain.
+        net_growth: mass_ratio x delivered_fraction, the per-cycle multiplier.
+        cycle_time: Departure to the next departure (astropy Quantity, years),
+            including the coast back to periapsis.
+        doubling_time: Time to double the payload (astropy Quantity, years);
+            infinite when the cycle does not grow.
+    """
+
+    mass_ratio: float
+    delivered_fraction: float
+    net_growth: float
+    cycle_time: u.Quantity
+    doubling_time: u.Quantity
+
+
+def puffsat_cycle_growth(
+    total_dv: u.Quantity,
+    collision_speed: u.Quantity,
+    trip_time: u.Quantity,
+    cycle_period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+    specific_impulse: u.Quantity = METHALOX_VACUUM_ISP,
+) -> CycleGrowth:
+    """Score a chain on doubling time, the growth loop's real objective.
+
+    Total delta-v is the wrong thing to minimize on its own: it buys cheapness
+    with trip time, and the loop is paid in payload per *year*. A chain that
+    halves its delta-v while doubling its cycle is a worse machine. This trades
+    the two properly, via ``cycle x ln2 / ln(net growth)``.
+
+    The cycle is closed: the collision pushes the mass to ``v_rf``, the periapsis
+    speed of the ``cycle_period`` orbit, and the next departure burn starts from
+    that same speed one coast later (see :func:`puffsat_cycle_periapsis_speed`).
+
+    Args:
+        total_dv: Summed delta-v of every burn in the chain (astropy Quantity).
+        collision_speed: Achieved v_b of the returning PuffSat (astropy Quantity).
+        trip_time: Departure to the 1 AU return crossing (astropy Quantity).
+        cycle_period: Period of the post-collision orbit (astropy Quantity).
+        specific_impulse: Isp charged to every burn (astropy Quantity).
+
+    Returns:
+        The :class:`CycleGrowth`. ``doubling_time`` is ``inf`` years when
+        ``net_growth <= 1``, i.e. the cycle shrinks and never doubles.
+    """
+    v_rf = puffsat_cycle_periapsis_speed(period=cycle_period)
+    if collision_speed <= v_rf:
+        raise ValueError(
+            f"collision speed {collision_speed} does not exceed the push target "
+            f"{v_rf}; the PuffSat cannot drive the mass to the cycle orbit"
+        )
+    mass_ratio = float(payload_mass_ratio(v_rf=v_rf, v_b=collision_speed))
+    exhaust = exhaust_velocity_from_isp(specific_impulse)
+    delivered = float(np.exp(-(total_dv / exhaust).to_value(u.dimensionless_unscaled)))
+    net_growth = mass_ratio * delivered
+    # The mass coasts one full period from the collision at periapsis, out to
+    # apoapsis and back, before the next burn can fire.
+    cycle_time = (trip_time + cycle_period).to(u.year)
+    if net_growth <= 1.0:
+        doubling_time = np.inf * u.year
+    else:
+        doubling_time = cycle_time * float(np.log(2.0) / np.log(net_growth))
+    return CycleGrowth(
+        mass_ratio=mass_ratio,
+        delivered_fraction=delivered,
+        net_growth=net_growth,
+        cycle_time=cycle_time,
+        doubling_time=doubling_time,
+    )
+
+
 def _powered_flyby_params(
     max_total_tof: u.Quantity = JUPITER_FLYBY_MAX_TOF,
     periapsis_floor_altitude: u.Quantity = LOW_JUPITER_ALTITUDE,
+    cycle_periapsis_speed: Optional[u.Quantity] = None,
 ) -> _FlybyParams:
     """Build the float parameter block for the powered-flyby search.
 
@@ -1795,6 +1911,12 @@ def _powered_flyby_params(
         max_total_tof: Cap on outbound + return time of flight (astropy Quantity).
         periapsis_floor_altitude: Minimum flyby altitude above Jupiter's 1-bar
             level (astropy Quantity).
+        cycle_periapsis_speed: Speed the departure burn starts from, and the
+            collision's push target -- see :func:`puffsat_cycle_periapsis_speed`.
+            When None the legacy convention is kept: depart from escape at 200 km
+            (C3 = 0) and score the mass ratio against the lunar-transfer periapsis
+            speed. Those are two different states, so the legacy pair is not a
+            closed cycle; pass the cycle speed to close it.
 
     Returns:
         The :class:`_FlybyParams` with everything converted to km / s / km/s.
@@ -1802,6 +1924,13 @@ def _powered_flyby_params(
     mu_sun = float(Sun.k.to_value(u.km**3 / u.s**2))
     r_earth_orbit = float(EARTH_A.to_value(u.km))
     r_jupiter_orbit = float(JUPITER_A.to_value(u.km))
+    v_esc_leo = float(escape_velocity(Earth, LEO_ALTITUDE).to_value(u.km / u.s))
+    if cycle_periapsis_speed is None:
+        v_depart_from = v_esc_leo
+        v_rf = float(lunar_transfer_periapsis_speed().to_value(u.km / u.s))
+    else:
+        v_depart_from = float(cycle_periapsis_speed.to_value(u.km / u.s))
+        v_rf = v_depart_from
     return _FlybyParams(
         mu_sun=mu_sun,
         mu_jupiter=float(Jupiter.k.to_value(u.km**3 / u.s**2)),
@@ -1809,13 +1938,14 @@ def _powered_flyby_params(
         r_jupiter_orbit=r_jupiter_orbit,
         v_earth_orbit=float(np.sqrt(mu_sun / r_earth_orbit)),
         v_jupiter_orbit=float(np.sqrt(mu_sun / r_jupiter_orbit)),
-        v_esc_leo=float(escape_velocity(Earth, LEO_ALTITUDE).to_value(u.km / u.s)),
+        v_esc_leo=v_esc_leo,
+        v_depart_from=v_depart_from,
         v_esc_surface=float(escape_velocity(Earth).to_value(u.km / u.s)),
         periapsis_floor=float((Jupiter.R + periapsis_floor_altitude).to_value(u.km)),
         exhaust_speed=float(
             exhaust_velocity_from_isp(METHALOX_VACUUM_ISP).to_value(u.km / u.s)
         ),
-        v_rf=float(lunar_transfer_periapsis_speed().to_value(u.km / u.s)),
+        v_rf=v_rf,
         max_tof=float(max_total_tof.to_value(u.s)),
     )
 
@@ -2050,7 +2180,7 @@ def _powered_flyby_leg(
     if periapsis_radius < params.periapsis_floor * (1.0 - 1e-12):
         return None
     departure_burn = float(
-        np.hypot(v_infinity_earth, params.v_esc_leo) - params.v_esc_leo
+        np.hypot(v_infinity_earth, params.v_esc_leo) - params.v_depart_from
     )
 
     # Outbound heliocentric transfer from the free-aimed departure state.
@@ -2594,6 +2724,7 @@ def _assist_chain_params(
     target_collision_speed: float,
     max_trip_time: u.Quantity = ASSIST_CHAIN_MAX_TRIP_TIME,
     max_flybys: int = ASSIST_CHAIN_MAX_FLYBYS,
+    cycle_periapsis_speed: Optional[u.Quantity] = None,
 ) -> _AssistChainParams:
     """Build the float parameter block for the assist-chain search.
 
@@ -2601,11 +2732,16 @@ def _assist_chain_params(
         target_collision_speed: Minimum acceptable collision speed v_b (km/s).
         max_trip_time: Cap on total trip time (astropy Quantity).
         max_flybys: Cap on the number of inner-planet flybys.
+        cycle_periapsis_speed: Speed the departure burn starts from; see
+            :func:`_powered_flyby_params`. None keeps the legacy C3 = 0
+            convention.
 
     Returns:
         The :class:`_AssistChainParams` with everything in km / s / km/s.
     """
-    flyby = _powered_flyby_params(max_total_tof=max_trip_time)
+    flyby = _powered_flyby_params(
+        max_total_tof=max_trip_time, cycle_periapsis_speed=cycle_periapsis_speed
+    )
     altitude = float(LOW_ASSIST_FLYBY_ALTITUDE.to_value(u.km))
     bodies: List[_AssistBody] = []
     for symbol, body, semi_major_axis in (
@@ -2868,21 +3004,48 @@ def _phased_leg_rotations(
 _PHASED_LADDER_FAILED = 1e3  # km/s; above any real ladder cost
 
 
+@dataclass(frozen=True)
+class _LadderPricing:
+    """What it costs to fly an inner ladder against real planet positions.
+
+    Attributes:
+        departure_burn: Oberth burn at 200 km buying the first leg's excess
+            (km/s).
+        node_total: Sum of the flyby node burns (km/s).
+        node_burns: Per-node burns in ladder order, one per intermediate body
+            (km/s).
+        arrival_excess: Speed of the planet-relative excess at the final ladder
+            body, where the Jovian leg begins (km/s).
+        arrival_excess_vector: That excess as a heliocentric 3-vector (km/s).
+        arrival_time: Seconds from the longitudes0 reference at the final body.
+        arrival_longitude: Heliocentric longitude of the final body then (rad).
+    """
+
+    departure_burn: float
+    node_total: float
+    node_burns: List[float]
+    arrival_excess: float
+    arrival_excess_vector: npt.NDArray[np.float64]
+    arrival_time: float
+    arrival_longitude: float
+
+
 def _phased_ladder_burn(
     epoch: float,
     leg_times: Sequence[float],
     ladder: Tuple[_AssistBody, ...],
     longitudes0: Sequence[float],
     params: _AssistChainParams,
-) -> Optional[Tuple[float, float, List[float], float]]:
+    powered_nodes: bool = False,
+) -> Optional[_LadderPricing]:
     """Burn to fly ``ladder`` from ``epoch`` against real planet positions.
 
     The phasing-free model puts each planet wherever the trajectory needs it;
     this puts the planets where they actually are and charges for the
     difference. Each leg becomes a Lambert arc between the two bodies at their
-    true positions, and each node is charged
-    :func:`_flyby_mismatch_burn` for whatever the unpowered flyby cannot supply.
-    That total is what ``ASSIST_CHAIN_PHASING_BUDGET`` is a stand-in for.
+    true positions, and each node is charged for whatever the flyby cannot
+    supply. That total is what ``ASSIST_CHAIN_PHASING_BUDGET`` is a stand-in
+    for.
 
     Args:
         epoch: Launch time, seconds from the longitudes0 reference.
@@ -2892,10 +3055,13 @@ def _phased_ladder_burn(
         longitudes0: Heliocentric longitude of each ladder body at time zero
             (rad), parallel to ``ladder``.
         params: The assist-chain parameter block.
+        powered_nodes: Charge each node with :func:`_powered_node_burn`, the
+            honest split-hyperbola model, instead of ADR 0007's retired
+            :func:`_flyby_mismatch_burn`. Defaults to False, which reproduces
+            ADR 0007's numbers.
 
     Returns:
-        (departure burn km/s, node burn total km/s, per-node burns, Jovian-leg
-        arrival excess km/s), or None if any leg's Lambert fails.
+        The :class:`_LadderPricing`, or None if any leg's Lambert fails.
     """
     mu = params.flyby.mu_sun
     times = [float(t) for t in leg_times]
@@ -2903,6 +3069,7 @@ def _phased_ladder_burn(
     excess_in: Optional[npt.NDArray[np.float64]] = None
     departure_burn = 0.0
     clock = epoch
+    lon_there = 0.0
     for index in range(len(ladder) - 1):
         body, target = ladder[index], ladder[index + 1]
         tof = times[index]
@@ -2912,7 +3079,8 @@ def _phased_ladder_burn(
         lon_there = longitudes0[index + 1] + _mean_motion(target) * (clock + tof)
         r0, v_body = _body_state(body.orbit_radius, lon_here, body.v_circ)
         r1, v_target = _body_state(target.orbit_radius, lon_there, target.v_circ)
-        if float(np.linalg.norm(np.cross(r0, r1))) < 1e-3 * body.orbit_radius:
+        separation = float(np.linalg.norm(np.cross(r0, r1)))
+        if separation < 1e-6 * body.orbit_radius * target.orbit_radius:
             # Collinear endpoints leave the transfer plane undefined.
             return None
         try:
@@ -2922,21 +3090,30 @@ def _phased_ladder_burn(
         excess_out = v_depart - v_body
         if excess_in is None:
             # Departure: no flyby to turn anything, so the whole excess is
-            # bought with the Oberth burn at 200 km.
+            # bought with the Oberth burn at 200 km, starting from whatever the
+            # mass already carries there (escape, or the cycle orbit's periapsis
+            # speed once the growth loop is closed).
             speed = float(np.linalg.norm(excess_out))
             departure_burn = (
                 float(np.sqrt(params.flyby.v_esc_leo**2 + speed * speed))
-                - params.flyby.v_esc_leo
+                - params.flyby.v_depart_from
             )
+        elif powered_nodes:
+            node_burns.append(_powered_node_burn(excess_in, excess_out, body)[0])
         else:
             node_burns.append(_flyby_mismatch_burn(excess_in, excess_out, body))
         excess_in = v_arrive - v_target
         clock += tof
-    return (
-        departure_burn,
-        float(sum(node_burns)),
-        node_burns,
-        float(np.linalg.norm(excess_in)) if excess_in is not None else 0.0,
+    if excess_in is None:
+        return None
+    return _LadderPricing(
+        departure_burn=departure_burn,
+        node_total=float(sum(node_burns)),
+        node_burns=node_burns,
+        arrival_excess=float(np.linalg.norm(excess_in)),
+        arrival_excess_vector=excess_in,
+        arrival_time=clock,
+        arrival_longitude=lon_there,
     )
 
 
@@ -2962,12 +3139,110 @@ def _body_state(
     return position, velocity
 
 
+def _powered_node_burn(
+    excess_in: npt.NDArray[np.float64],
+    excess_out: npt.NDArray[np.float64],
+    body: _AssistBody,
+) -> Tuple[float, float]:
+    """Burn at a *powered* gravity assist supplying the required turn (km/s).
+
+    The honest node model, replacing :func:`_flyby_mismatch_burn`. An impulsive
+    tangential burn at periapsis joins an inbound hyperbola of eccentricity
+    ``e_in`` to an outbound one of ``e_out``, so the total bend is
+    ``asin(1/e_in) + asin(1/e_out)`` -- the same split-hyperbola geometry
+    :func:`_powered_flyby_leg` uses at Jupiter. The unpowered formula
+    ``sin(delta/2) = 1/e`` does **not** apply across a burn.
+
+    Periapsis radius and burn magnitude are two knobs against two demands (the
+    outgoing excess *speed* and the *turn*), so the node is solved, not
+    estimated. Both eccentricities rise with ``r_p``, so the bend falls
+    monotonically in it and the solve is a 1-D root find: the turn alone fixes
+    the geometry, and the burn follows from it.
+
+    The consequence is that **a node that must turn hard is cheap**: a bigger
+    turn forces a lower periapsis, which deepens the well and so deepens the
+    Oberth discount on the speed change. Cost is therefore *non-monotonic* in
+    the turn. A 5 -> 7 km/s node at Venus costs the full 2.0 km/s at zero turn
+    (nothing to bend around, so no Oberth), falls to ~1.17 km/s by 60 degrees,
+    and jumps to ~3.10 km/s at 90 degrees, past the 72.9-degree bend limit.
+    Against :func:`_flyby_mismatch_burn` the comparison cuts both ways: this is
+    cheaper in the middle of the range, equal at zero turn, and dearer past the
+    limit, because the retired model grants ``2*asin(1/e_in)`` of bend -- both
+    halves at the *incoming* eccentricity -- and so overstates the limit itself
+    (84.4 vs 72.9 degrees for that node).
+
+    Args:
+        excess_in: Incoming body-relative excess velocity (km/s, 3-vector).
+        excess_out: Excess velocity the next leg needs (km/s, 3-vector).
+        body: The flyby body.
+
+    Returns:
+        (burn magnitude km/s, periapsis radius km). When even the periapsis
+        floor cannot supply the turn, the flyby bends as far as it can and the
+        residual angle is bought with a deep-space kick, which makes the result
+        an upper bound in that regime only.
+    """
+    speed_in = float(np.linalg.norm(excess_in))
+    speed_out = float(np.linalg.norm(excess_out))
+    if speed_in < 1e-9 or speed_out < 1e-9:
+        return abs(speed_out - speed_in), body.min_periapsis
+
+    def bend(periapsis: float) -> float:
+        ecc_in = 1.0 + periapsis * speed_in * speed_in / body.mu
+        ecc_out = 1.0 + periapsis * speed_out * speed_out / body.mu
+        return float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+
+    def burn(periapsis: float) -> float:
+        v_in = float(np.sqrt(speed_in * speed_in + 2.0 * body.mu / periapsis))
+        v_out = float(np.sqrt(speed_out * speed_out + 2.0 * body.mu / periapsis))
+        return abs(v_out - v_in)
+
+    cos_turn = float(
+        np.clip(np.dot(excess_in, excess_out) / (speed_in * speed_out), -1.0, 1.0)
+    )
+    turn = float(np.arccos(cos_turn))
+    floor = body.min_periapsis
+    bend_max = bend(floor)
+    if turn > bend_max:
+        # Even a grazing pass cannot point the excess where it must go. Bend as
+        # far as the floor allows, fix the speed there (with Oberth), then buy
+        # the leftover angle with a deep-space kick.
+        residual = turn - bend_max
+        kick = 2.0 * speed_out * float(np.sin(0.5 * residual))
+        return burn(floor) + kick, floor
+    # Bend falls monotonically in periapsis radius; bracket upward and root it.
+    high = floor
+    for _ in range(200):
+        if bend(high) <= turn:
+            break
+        high *= 2.0
+    else:
+        # The bend is strictly positive at every finite periapsis, so a turn at
+        # or near zero exhausts the bracket. There is no flyby geometry that
+        # bends this little: the pass is irrelevant and the speed change is
+        # bought out at infinity, with no Oberth discount. Falling back to
+        # burn(floor) here would hand the caller the *deepest* discount for the
+        # turn that has earned none of it.
+        return abs(speed_out - speed_in), high
+    if high == floor:
+        return burn(floor), floor
+    periapsis = float(brentq(lambda r: bend(r) - turn, floor, high, xtol=1e-6))
+    return burn(periapsis), periapsis
+
+
 def _flyby_mismatch_burn(
     excess_in: npt.NDArray[np.float64],
     excess_out: npt.NDArray[np.float64],
     body: _AssistBody,
 ) -> float:
     """Burn needed at a flyby that cannot supply the turn unaided (km/s).
+
+    The **retired** node model, kept to reproduce ADR 0007's numbers and to
+    document the overcharge. It charges the excess-velocity change *at
+    infinity*, so it collects no Oberth leverage, and it bounds the bend with
+    the unpowered ``sin(delta/2) = 1/e`` -- which CONTEXT.md warns does not hold
+    across a burn. Prefer :func:`_powered_node_burn`.
+
 
     An unpowered flyby rotates the excess velocity but never rescales it, and
     can only rotate it so far. Phasing the *next* leg generally demands both a
@@ -3040,6 +3315,122 @@ class _ChainTerminal:
     v_infinity_jupiter: float
     return_leg: _ReturnLeg
     total_time: float
+
+
+@dataclass(frozen=True)
+class _PoweredJovianTerminal:
+    """A *powered* Jovian flyby and the retrograde return it produces.
+
+    Attributes:
+        leg_tof: Last chain body to Jupiter's orbit radius (s).
+        flyby_burn: Impulsive burn at perijove (km/s).
+        periapsis_radius: Perijove radius, center-based (km).
+        v_infinity_in: Jupiter-relative excess speed before the burn (km/s).
+        v_infinity_out: Jupiter-relative excess speed after the burn (km/s).
+        turn_angle: Total split-hyperbola bend, asin(1/e_in) + asin(1/e_out)
+            (rad) -- note this is a function of the *burn*, not of geometry
+            alone.
+        return_leg: The scored retrograde return.
+        total_time: Departure to first retrograde 1 AU crossing (s).
+    """
+
+    leg_tof: float
+    flyby_burn: float
+    periapsis_radius: float
+    v_infinity_in: float
+    v_infinity_out: float
+    turn_angle: float
+    return_leg: _ReturnLeg
+    total_time: float
+
+
+def _powered_jovian_terminal(
+    v_t0: float,
+    v_r0: float,
+    r0: float,
+    elapsed: float,
+    periapsis_radius: float,
+    flyby_burn: float,
+    bend_sign: float,
+    params: _AssistChainParams,
+) -> Optional[_PoweredJovianTerminal]:
+    """Retrograde return from a *powered* Jovian flyby.
+
+    :func:`_jovian_terminal` flies Jupiter unpowered, where perijove radius *is*
+    the bend: one knob against two demands (the return's ``v_b`` and its timing),
+    which is over-determined -- the "v_b lottery". Powering the flyby adds a
+    second knob and breaks it, at the price of propellant. That is why the burn
+    is load-bearing here rather than an optional extra.
+
+    The burn changes the *turn*, not only the speed. It fires at perijove, so the
+    outgoing hyperbola has its own eccentricity ``e_out`` computed from the
+    post-burn excess, and the total bend is ``asin(1/e_in) + asin(1/e_out)``.
+    Speeding up (``e_out > e_in``) therefore *costs* bend, and slowing down buys
+    it. The unpowered ``sin(delta/2) = 1/e`` does not apply across a burn.
+
+    Args:
+        v_t0: Tangential heliocentric speed at r0 (km/s).
+        v_r0: Radial-outward heliocentric speed at r0 (km/s).
+        r0: Current heliocentric radius (km).
+        elapsed: Chain time already spent (s).
+        periapsis_radius: Perijove radius, center-based (km).
+        flyby_burn: Impulsive perijove burn, >= 0 (km/s).
+        bend_sign: +1 rotates the excess from tangential toward radial-outward,
+            -1 the other way (which side Jupiter is passed on).
+        params: The assist-chain parameter block.
+
+    Returns:
+        The earliest-arriving :class:`_PoweredJovianTerminal` whose return meets
+        the v_b target, or None if none does.
+    """
+    flyby = params.flyby
+    if periapsis_radius < flyby.periapsis_floor * (1.0 - 1e-12) or flyby_burn < 0.0:
+        return None
+    mu_j = flyby.mu_jupiter
+    best: Optional[_PoweredJovianTerminal] = None
+    for leg_tof, v_t1, v_r1, _, _ in _conic_radius_crossings(
+        flyby.mu_sun, r0, v_t0, v_r0, flyby.r_jupiter_orbit
+    ):
+        rel_t = v_t1 - flyby.v_jupiter_orbit
+        w_in = float(np.hypot(rel_t, v_r1))
+        if w_in < 1e-6:
+            continue
+        ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
+        v_peri_in = float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius))
+        v_peri_out = v_peri_in + flyby_burn
+        w_out_sq = v_peri_out * v_peri_out - 2.0 * mu_j / periapsis_radius
+        if w_out_sq <= 0.0:
+            continue
+        w_out = float(np.sqrt(w_out_sq))
+        ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
+        turn = float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+        angle = float(np.arctan2(v_r1, rel_t)) + bend_sign * turn
+        return_leg = _flyby_return_leg(
+            flyby.v_jupiter_orbit + w_out * float(np.cos(angle)),
+            w_out * float(np.sin(angle)),
+            flyby,
+        )
+        if return_leg is None:
+            continue
+        if return_leg.collision_speed < params.target_collision_speed:
+            continue
+        if return_leg.collision_speed <= flyby.v_rf:
+            continue
+        total_time = elapsed + leg_tof + return_leg.tof
+        if total_time > params.max_trip_time:
+            continue
+        if best is None or total_time < best.total_time:
+            best = _PoweredJovianTerminal(
+                leg_tof=leg_tof,
+                flyby_burn=flyby_burn,
+                periapsis_radius=periapsis_radius,
+                v_infinity_in=w_in,
+                v_infinity_out=w_out,
+                turn_angle=turn,
+                return_leg=return_leg,
+                total_time=total_time,
+            )
+    return best
 
 
 def _jovian_terminal(
