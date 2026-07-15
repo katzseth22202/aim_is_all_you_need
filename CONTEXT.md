@@ -421,11 +421,13 @@ need Lambert arcs against actual planet positions).
   one leg to 2.86 yr, pushing the trip from 3.94 to 6.19 yr — and the phased re-score
   confirms the consequence: E-V-E-J beats the direct flyby on delta-v (3.047 vs 4.5435)
   and loses on doubling (4.27 vs 3.33 yr).
-- **Return-leg Earth phasing is still unmodelled.** `_flyby_return_leg()` never checks
-  where Earth is at the 1 AU crossing; it scores the closing speed of a geometry that
-  may arrive at empty space. This flatters the direct flyby and the chains alike, so it
-  does not threaten ADR 0008's ranking, but it is the largest remaining model hole and
-  no absolute doubling time is quotable until it closes.
+- ~~**Return-leg Earth phasing is still unmodelled.**~~ **Resolved** by
+  `_ReturnLeg.sweep_angle` / `_earth_phase_mismatch()` (ADR 0008). It cost the direct
+  flyby **8.9%** — the quotable figure is **3.6320 yr**, not 3.3347 — and it is paid in
+  trajectory *shape*, not time: the trip stays pinned at the launch window (departure
+  4.5435 → 5.3751 km/s, `v_b` 51.46 → 59.77). The chains are still scored without it,
+  which flatters them deliberately: a constraint can only raise an optimum, so every
+  chain is bounded below by its unphased 4.2690 and the ranking holds *a fortiori*.
 - **An all-failed optimizer table is not a result.** It is ambiguous between an empty
   feasible set (physics) and a search that never found it (artifact), and the two look
   identical. Random-sample the box first: if blind sampling finds feasible points at a

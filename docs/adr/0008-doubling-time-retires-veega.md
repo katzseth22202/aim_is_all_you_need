@@ -135,6 +135,50 @@ one leaning hardest on the invalid assumption. Its 1.25-1.91 yr of required
 thrusting inside 1 AU (ADR 0006's 1.25-1.92 km/s/yr) is plausible for a 5.57 yr
 trip but unverified.
 
+### The real number: Earth phased on the return
+
+The bar above does not charge return-leg Earth phasing — `_flyby_return_leg`
+scores the closing speed of a geometry that may arrive at empty space. For a
+growth loop that is not a detail: **the collision IS the cycle**, so a crossing
+Earth misses does not score badly, it fails to close the loop. The grill's terms
+make it binding rather than fixable — PuffSats deploy far out and coast
+ballistically with no DSM below 3 AU, so the phase must be flown correctly from
+Jupiter, not trimmed on approach.
+
+`_ReturnLeg.sweep_angle` and `_earth_phase_mismatch` close it. Note what is *not*
+new: Jupiter phasing is **vacuous** for the direct flyby, because `jupiter_lon0`
+is free — whatever arc is flown, Jupiter can be placed at its arrival point. Its
+only cost is waiting for the geometry to recur, already charged as the 1.0920 yr
+window. So the delta below isolates exactly the cost of Earth phasing.
+
+| | departure | Jupiter burn | total dv | `v_b` | growth | trip | cycle | **doubling** |
+|---|---|---|---|---|---|---|---|---|
+| bar (Earth NOT phased) | 4.5435 | 0.0000 | 4.5435 | 51.46 | 1.9757 | 3.221 | 3.276 | 3.3347 yr |
+| **REAL (Earth phased)** | 5.3751 | 0.0000 | **5.3751** | **59.77** | 1.8686 | 3.221 | 3.276 | **3.6320 yr** |
+
+**Return phasing costs the direct flyby 8.9%**, at a mismatch driven to 3.6e-15
+rad — the constraint is met exactly, not approximately.
+
+It does not cost *time*: the trip is unchanged at 3.221 yr, because the window
+pins it (window - coast = 3.2212) and the optimizer spends every second of it in
+both cases. The constraint is paid in **shape**. Departure rises 4.5435 -> 5.3751
+km/s to make the return land where Earth actually is, and the reshaped return
+happens to arrive hotter, `v_b` 51.46 -> 59.77. That trade is a *net loss*, which
+is why the optimizer avoided it when it was free to: the mass-ratio gain (x1.182)
+is outweighed by the propellant (x0.800), for x0.946 on growth.
+
+There is an irony worth recording. The grill demanded `v_b` >= 60 km/s, and the
+free optimizer refused it, landing at 49-54 because the delta-v never repays the
+mass ratio. Return phasing lands at **59.77 anyway** — not because a hot return
+is desirable, but because the geometry that hits Earth is hot. The grill's number
+was right for the wrong reason.
+
+**The ranking now rests on a theorem, not a further search.** The chains' 4.2690
+has *not* paid this cost, and a constraint can only raise an optimum, so every
+chain's real doubling time is **at least** 4.2690. Since 3.6320 < 4.2690, the
+direct flyby wins even against a chain still enjoying a hole it no longer has.
+Phasing the chains' returns could only widen the gap, so it is not worth running.
+
 ### A bound that needs no search
 
 `rate = [ln M(v_b) - dv/v_e] / cycle`. Since `dv >= 0`, the numerator is at most
@@ -204,8 +248,13 @@ five obey; before the fix all five reported nothing.
   up, and it is why one free epoch parameter suffices to phase it (charged as
   window quantization, not delta-v) while a chain over-constrains its epoch and
   must pay DSMs.
-- **Both models still ignore return-leg Earth phasing** (`_flyby_return_leg`
-  never checks where Earth is). This flatters the bar and the chains alike and is
-  the next model hole.
+- **The direct flyby's quotable doubling time is 3.6320 yr, not 3.3347.** The bar
+  is retained above only as the like-for-like comparison against chains scored
+  without return phasing. Any number that reaches the paper should be the phased
+  one.
+- **Return-leg Earth phasing is now modelled** (`_ReturnLeg.sweep_angle`,
+  `_earth_phase_mismatch`), and is charged for the direct flyby. The chains are
+  still scored without it, which flatters them — deliberately, since it makes the
+  ranking hold *a fortiori* and removes the need to re-run them.
 - `PUFFSAT_CYCLE_ORBIT_PERIOD = 20 d` is nearly arbitrary: periapsis speed moves
   only 10.8610 -> 10.9806 km/s across 5-60 d. The result does not hang on it.

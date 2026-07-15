@@ -2021,12 +2021,19 @@ class _ReturnLeg:
         closing_speed: Earth-relative speed at the 1 AU crossing (km/s).
         collision_speed: Closing speed folded through Earth's gravity well to the
             surface-escape convention of retrograde_jovian_hohmann_transfer (km/s).
+        sweep_angle: Heliocentric longitude swept from the flyby to the 1 AU
+            crossing (rad, always positive). The return is *retrograde*, so
+            longitude decreases: the crossing happens at
+            ``jupiter_longitude - sweep_angle``. This is what makes it possible to
+            ask whether Earth is actually at the crossing; the leg itself does not
+            check -- see `_earth_phase_mismatch`.
     """
 
     perihelion: float
     tof: float
     closing_speed: float
     collision_speed: float
+    sweep_angle: float
 
 
 def _flyby_return_leg(
@@ -2072,6 +2079,10 @@ def _flyby_return_leg(
     nu_earth = _true_anomaly_at_radius_rad(p, ecc, r_e)
     if nu_jupiter is None or nu_earth is None:
         return None
+    # The swept angle is derived in the same branches as the time of flight, from
+    # the same true anomalies, so the two cannot disagree about which arc is
+    # being flown. In the mirrored prograde twin an outbound state sits at true
+    # anomaly +nu and an inbound one at 2*pi - nu.
     if ecc > 1.0:
         # Hyperbolic return: only an already-inbound state ever re-crosses 1 AU.
         if v_r > 0.0:
@@ -2079,6 +2090,7 @@ def _flyby_return_leg(
         a_abs = p / (ecc * ecc - 1.0)
         tof = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_jupiter)
         tof -= _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_earth)
+        sweep = nu_jupiter - nu_earth
     else:
         a = p / (1.0 - ecc * ecc)
         period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
@@ -2087,8 +2099,10 @@ def _flyby_return_leg(
         if v_r > 0.0:
             # Out to aphelion first, then back in through 1 AU.
             tof = (period - t_earth) - t_jupiter
+            sweep = (2.0 * np.pi - nu_earth) - nu_jupiter
         else:
             tof = t_jupiter - t_earth
+            sweep = nu_jupiter - nu_earth
     if tof <= 0.0:
         return None
     v1_sq = 2.0 * (energy + mu / r_e)
@@ -2099,8 +2113,52 @@ def _flyby_return_leg(
     closing = float(np.hypot(v_t1 + params.v_earth_orbit, np.sqrt(v_r1_sq)))
     collision = float(np.hypot(closing, params.v_esc_surface))
     return _ReturnLeg(
-        perihelion=perihelion, tof=tof, closing_speed=closing, collision_speed=collision
+        perihelion=perihelion,
+        tof=tof,
+        closing_speed=closing,
+        collision_speed=collision,
+        sweep_angle=float(sweep),
     )
+
+
+def _earth_phase_mismatch(
+    leg: _ReturnLeg,
+    jupiter_longitude: float,
+    flyby_time: float,
+    earth_longitude_0: float,
+    params: _FlybyParams,
+) -> float:
+    """Signed angle between the 1 AU crossing and where Earth actually is (rad).
+
+    The return leg scores the closing speed of a geometry that may arrive at
+    empty space: nothing in :func:`_flyby_return_leg` checks Earth's position. For
+    a *growth loop* that is not a detail -- the collision with Earth's mass IS the
+    cycle, so a crossing Earth misses does not merely score badly, it does not
+    close the loop at all.
+
+    The grill's terms make this binding rather than fixable: PuffSats are deployed
+    far out and coast ballistically, with no deep-space maneuver permitted below
+    3 AU, so a phase error cannot be trimmed out on approach. It has to be flown
+    correctly from Jupiter.
+
+    Args:
+        leg: The scored return leg (supplies ``sweep_angle`` and ``tof``).
+        jupiter_longitude: Jupiter's heliocentric longitude at the flyby (rad).
+        flyby_time: Time of the flyby, measured from the same t=0 as
+            ``earth_longitude_0`` (s).
+        earth_longitude_0: Earth's heliocentric longitude at t=0 (rad).
+        params: The float parameter block.
+
+    Returns:
+        The mismatch wrapped to [-pi, pi). Zero means Earth is exactly at the
+        crossing; the loop closes only where this vanishes.
+    """
+    arrival_time = flyby_time + leg.tof
+    # The return is retrograde, so the crossing sits *behind* Jupiter in longitude.
+    crossing = jupiter_longitude - leg.sweep_angle
+    n_earth = params.v_earth_orbit / params.r_earth_orbit
+    earth = earth_longitude_0 + n_earth * arrival_time
+    return float((crossing - earth + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 @dataclass(frozen=True)

@@ -36,6 +36,7 @@ from src.scenario import (
     _assist_chain_params,
     _body_state,
     _conic_radius_crossings,
+    _earth_phase_mismatch,
     _flyby_mismatch_burn,
     _flyby_return_leg,
     _jupiter_assist_body,
@@ -1416,3 +1417,104 @@ def test_phased_jovian_flyby_bends_a_known_arrival_into_a_return() -> None:
     assert (
         _phased_jovian_flyby(excess_in, lon, r_p, -(margin + 0.5), 1.0, params) is None
     )
+
+
+def test_return_leg_sweep_angle_approaches_a_hohmann_half_turn() -> None:
+    # The retrograde Jupiter->Earth Hohmann is the one return whose geometry is
+    # known in closed form: it leaves Jupiter's radius at aphelion and arrives at
+    # 1 AU at perihelion, so it sweeps exactly half a turn in half a period.
+    #
+    # The exact Hohmann cannot be evaluated here, and that is a property of the
+    # problem rather than a defect: its perihelion lands 4 ulp ABOVE 1 AU (0.12 mm
+    # on 1.5e8 km), so the leg correctly reports no crossing. The tangent case has
+    # measure zero. Approach the limit from inside instead, which pins the branch,
+    # the sign convention AND continuity into the closed-form answer.
+    params = _powered_flyby_params(max_total_tof=10 * u.year)
+    mu = params.mu_sun
+    r_j, r_e = params.r_jupiter_orbit, params.r_earth_orbit
+
+    def leg_with_perihelion(q: float) -> object:
+        # Aphelion at Jupiter's radius, perihelion at q, flown retrograde. An
+        # aphelion state is purely tangential by definition, so v_r = 0.
+        a = 0.5 * (r_j + q)
+        v_aph = float(np.sqrt(mu * (2.0 / r_j - 1.0 / a)))
+        return _flyby_return_leg(-v_aph, 0.0, params)
+
+    sweeps = []
+    for shortfall in (1e-4, 1e-6, 1e-8):
+        leg = leg_with_perihelion(r_e * (1.0 - shortfall))
+        assert leg is not None
+        # Crossing 1 AU strictly before perihelion, so strictly under a half turn.
+        assert leg.sweep_angle < np.pi
+        sweeps.append(leg.sweep_angle)
+    # Monotone, and converging on the half turn.
+    assert sweeps[0] < sweeps[1] < sweeps[2]
+    assert sweeps[2] == pytest.approx(np.pi, abs=1e-3)
+
+    # At the closest approach to the limit, tof must match half the transfer
+    # ellipse's period -- the independent check that sweep and tof describe the
+    # SAME arc, since they are derived in the same branch from the same anomalies.
+    q = r_e * (1.0 - 1e-8)
+    leg = leg_with_perihelion(q)
+    assert leg is not None
+    a = 0.5 * (r_j + q)
+    period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
+    # Strictly under half a period, and for the same reason the sweep is strictly
+    # under a half turn: 1 AU is crossed just BEFORE perihelion. Converging to the
+    # half-period limit from below is the check; landing exactly on it would mean
+    # the branch had silently run past perihelion.
+    assert leg.tof < 0.5 * period
+    assert leg.tof == pytest.approx(0.5 * period, rel=1e-4)
+    assert leg.perihelion == pytest.approx(q, rel=1e-9)
+
+
+def test_return_leg_sweeps_further_when_it_climbs_before_falling() -> None:
+    # An outbound state (v_r > 0) must go out to aphelion before coming back in,
+    # so it sweeps MORE than the same-energy inbound state, and takes longer. The
+    # two branches are separately derived in _flyby_return_leg; this pins that
+    # they stay ordered.
+    params = _powered_flyby_params(max_total_tof=10 * u.year)
+    inbound = _flyby_return_leg(-6.0, -2.0, params)
+    outbound = _flyby_return_leg(-6.0, 2.0, params)
+    assert inbound is not None and outbound is not None
+    assert outbound.sweep_angle > inbound.sweep_angle
+    assert outbound.tof > inbound.tof
+    # Same speed and radius, so same energy -> same conic, hence same perihelion
+    # and the same arrival speed. Only the arc flown differs.
+    assert outbound.perihelion == pytest.approx(inbound.perihelion, rel=1e-9)
+    assert outbound.collision_speed == pytest.approx(inbound.collision_speed, rel=1e-9)
+    # Every sweep is a real angle in (0, 2*pi).
+    for leg in (inbound, outbound):
+        assert 0.0 < leg.sweep_angle < 2.0 * np.pi
+
+
+def test_earth_phase_mismatch_vanishes_exactly_where_earth_is() -> None:
+    # The mismatch is the constraint the whole "real doubling time" question
+    # turns on, so it must be zero ONLY when Earth is truly at the crossing.
+    params = _powered_flyby_params(max_total_tof=10 * u.year)
+    leg = _flyby_return_leg(-6.0, -2.0, params)
+    assert leg is not None
+    n_earth = params.v_earth_orbit / params.r_earth_orbit
+    jupiter_lon, flyby_time = 1.3, 0.0
+
+    # Place Earth at t=0 exactly where the crossing will be at arrival, running
+    # Earth's motion backwards over the flight. By construction the mismatch is 0.
+    crossing = jupiter_lon - leg.sweep_angle
+    earth_0 = crossing - n_earth * (flyby_time + leg.tof)
+    assert _earth_phase_mismatch(
+        leg, jupiter_lon, flyby_time, earth_0, params
+    ) == pytest.approx(0.0, abs=1e-12)
+
+    # Nudge Earth and the mismatch tracks it one-for-one...
+    assert _earth_phase_mismatch(
+        leg, jupiter_lon, flyby_time, earth_0 + 0.25, params
+    ) == pytest.approx(-0.25, abs=1e-12)
+    # ... and is wrapped, so a half-turn error never reports as a near miss.
+    assert _earth_phase_mismatch(
+        leg, jupiter_lon, flyby_time, earth_0 + np.pi, params
+    ) == pytest.approx(-np.pi, abs=1e-9)
+    # A whole-turn offset IS the same place: Earth is a body on a ring, not a
+    # point on a line.
+    assert _earth_phase_mismatch(
+        leg, jupiter_lon, flyby_time, earth_0 + 2.0 * np.pi, params
+    ) == pytest.approx(0.0, abs=1e-9)
