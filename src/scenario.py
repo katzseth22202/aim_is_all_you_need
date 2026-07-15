@@ -3317,6 +3317,105 @@ class _ChainTerminal:
     total_time: float
 
 
+def _jupiter_assist_body(params: _AssistChainParams) -> _AssistBody:
+    """Jupiter as a ladder body, so the Jovian leg can be phased like any other.
+
+    ``_jovian_terminal`` and ``_powered_jovian_terminal`` reach Jupiter through
+    ``_conic_radius_crossings``, which finds crossings of Jupiter's orbit
+    *radius* and assumes Jupiter is there. That is the model's largest hole: it
+    phases Venus and Earth while letting Jupiter be anywhere, so every chain
+    result built on it is a lower bound.
+
+    Handing Jupiter to :func:`_phased_ladder_burn` as an ordinary body closes it.
+    The Jovian leg becomes a Lambert arc to where Jupiter actually is, and the
+    last Earth flyby stops being a free rotation: it must supply the excess that
+    arc demands, and is charged when it cannot.
+
+    Args:
+        params: The assist-chain parameter block (for the Sun's mu and Jupiter's
+            periapsis floor).
+
+    Returns:
+        The :class:`_AssistBody` for Jupiter.
+    """
+    orbit_radius = float(JUPITER_A.to_value(u.km))
+    return _AssistBody(
+        symbol="J",
+        name=str(Jupiter.name),
+        orbit_radius=orbit_radius,
+        mu=float(Jupiter.k.to_value(u.km**3 / u.s**2)),
+        min_periapsis=params.flyby.periapsis_floor,
+        v_circ=float(np.sqrt(params.flyby.mu_sun / orbit_radius)),
+    )
+
+
+def _phased_jovian_flyby(
+    excess_in: npt.NDArray[np.float64],
+    jupiter_longitude: float,
+    periapsis_radius: float,
+    flyby_burn: float,
+    bend_sign: float,
+    params: _AssistChainParams,
+) -> Optional[_ReturnLeg]:
+    """Powered Jovian flyby from a *phased* arrival, into the retrograde return.
+
+    The counterpart to :func:`_jupiter_assist_body`: once the Jovian leg is a
+    Lambert arc onto Jupiter's true position, the arrival excess is a vector in
+    the heliocentric frame and Jupiter's longitude is known, so the flyby needs
+    no radius-crossing search. It only bends and rescales that excess.
+
+    The burn moves the turn as well as the speed -- ``e_out`` comes from the
+    post-burn excess, so the bend is ``asin(1/e_in) + asin(1/e_out)`` and
+    speeding up costs bend.
+
+    Args:
+        excess_in: Jupiter-relative arrival excess (km/s, heliocentric 3-vector).
+        jupiter_longitude: Jupiter's heliocentric longitude at arrival (rad).
+        periapsis_radius: Perijove radius, center-based (km).
+        flyby_burn: Impulsive perijove burn, >= 0 (km/s).
+        bend_sign: Which side Jupiter is passed on (+1 or -1).
+        params: The assist-chain parameter block.
+
+    Returns:
+        The scored :class:`_ReturnLeg`, or None if the flyby is infeasible (below
+        the perijove floor, captured by the burn, or no retrograde 1 AU return).
+    """
+    flyby = params.flyby
+    if periapsis_radius < flyby.periapsis_floor * (1.0 - 1e-12) or flyby_burn < 0.0:
+        return None
+    w_in = float(np.linalg.norm(excess_in))
+    if w_in < 1e-6:
+        return None
+    mu_j = flyby.mu_jupiter
+    ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
+    v_peri_out = (
+        float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius)) + flyby_burn
+    )
+    w_out_sq = v_peri_out * v_peri_out - 2.0 * mu_j / periapsis_radius
+    if w_out_sq <= 0.0:
+        # A retro burn past the escape margin captures the craft.
+        return None
+    w_out = float(np.sqrt(w_out_sq))
+    ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
+    turn = bend_sign * float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+    cos_t, sin_t = float(np.cos(turn)), float(np.sin(turn))
+    scale = w_out / w_in
+    excess_out = scale * np.array(
+        [
+            excess_in[0] * cos_t - excess_in[1] * sin_t,
+            excess_in[0] * sin_t + excess_in[1] * cos_t,
+            0.0,
+        ]
+    )
+    lon = jupiter_longitude
+    t_hat = np.array([-np.sin(lon), np.cos(lon), 0.0])
+    r_hat = np.array([np.cos(lon), np.sin(lon), 0.0])
+    v_helio = flyby.v_jupiter_orbit * t_hat + excess_out
+    return _flyby_return_leg(
+        float(np.dot(v_helio, t_hat)), float(np.dot(v_helio, r_hat)), flyby
+    )
+
+
 @dataclass(frozen=True)
 class _PoweredJovianTerminal:
     """A *powered* Jovian flyby and the retrograde return it produces.

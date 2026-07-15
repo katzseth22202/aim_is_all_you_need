@@ -38,7 +38,9 @@ from src.scenario import (
     _conic_radius_crossings,
     _flyby_mismatch_burn,
     _flyby_return_leg,
+    _jupiter_assist_body,
     _mean_motion,
+    _phased_jovian_flyby,
     _phased_ladder_burn,
     _phased_leg_rotations,
     _powered_flyby_leg,
@@ -1340,3 +1342,77 @@ def test_powered_jovian_terminal_breaks_the_vb_lottery() -> None:
     # Speeding up costs bend, so the turn must shrink as the burn grows.
     assert hotter.turn_angle < hot.turn_angle
     assert hotter.v_infinity_out > hot.v_infinity_out > hot.v_infinity_in
+
+
+def test_phased_ladder_lands_the_jovian_leg_on_jupiter_itself() -> None:
+    # The model's largest hole: _jovian_terminal reaches Jupiter through
+    # _conic_radius_crossings, which finds crossings of Jupiter's orbit RADIUS
+    # and assumes Jupiter is there. Handing Jupiter to _phased_ladder_burn as an
+    # ordinary body closes it -- the Jovian leg becomes a Lambert arc onto
+    # Jupiter's true position. Verify Jupiter is actually THERE on arrival.
+    params = _assist_chain_params(target_collision_speed=51.134)
+    venus, earth, _ = params.bodies
+    jupiter = _jupiter_assist_body(params)
+    assert jupiter.symbol == "J"
+    assert jupiter.min_periapsis == params.flyby.periapsis_floor
+
+    year = 365.25 * 86400.0
+    ladder = (earth, venus, earth, jupiter)
+    # Jupiter placed so it IS where a 2.0 yr final leg arrives.
+    longitudes0 = [0.0, 1.0, 2.0, 2.7]
+    legs = [0.4 * year, 0.9 * year, 2.0 * year]
+    priced = _phased_ladder_burn(0.0, legs, ladder, longitudes0, params, True)
+    assert priced is not None
+
+    # Jupiter's longitude at arrival, computed independently of the pricing.
+    arrival = sum(legs)
+    expected_lon = longitudes0[3] + _mean_motion(jupiter) * arrival
+    assert priced.arrival_longitude == pytest.approx(expected_lon, rel=1e-12)
+    # And the arrival excess is Jupiter-relative, so it must be modest -- if the
+    # leg were merely crossing 5.2 AU with Jupiter elsewhere, this would be the
+    # raw heliocentric speed instead.
+    assert 0.0 < priced.arrival_excess < 40.0
+    # The last Earth is now a charged node, not a free rotation: two nodes for a
+    # four-body ladder (Venus and the returning Earth).
+    assert len(priced.node_burns) == 2
+
+
+def test_phased_jovian_flyby_bends_a_known_arrival_into_a_return() -> None:
+    # With the leg phased, the flyby needs no radius search: it bends and
+    # rescales a known arrival excess. A zero burn must leave the excess SPEED
+    # untouched (an unpowered flyby only rotates), and the burn must raise it.
+    params = _assist_chain_params(target_collision_speed=20.0)
+    r_p = params.flyby.periapsis_floor
+    lon = 0.7
+    # A retrograde return requires the post-flyby heliocentric tangential speed
+    # to go NEGATIVE, i.e. v_jupiter + w_out*cos(angle) < 0. No bend angle can
+    # do that unless w_out exceeds Jupiter's own orbital speed -- you cannot
+    # rotate a 6 km/s excess into cancelling 13.058 km/s of Jupiter's motion.
+    # So arrival v_inf > 13.058 km/s is a NECESSARY condition for an unpowered
+    # Jovian flyby, and the only way round it is to burn.
+    assert params.flyby.v_jupiter_orbit == pytest.approx(13.058, abs=0.01)
+    cold = np.array([-5.0, 4.0, 0.0])  # w = 6.40, far under the threshold
+    assert float(np.linalg.norm(cold)) < params.flyby.v_jupiter_orbit
+    assert _phased_jovian_flyby(cold, lon, r_p, 0.0, 1.0, params) is None
+    # ... but a burn lifts w_out over the threshold and the return appears.
+    assert _phased_jovian_flyby(cold, lon, r_p, 3.0, 1.0, params) is not None
+
+    # A hot enough arrival returns unpowered, as ADR 0002's direct flyby does
+    # (it reaches Jupiter at w_in ~ 15.1 km/s and spends no Jovian burn).
+    excess_in = np.array([-14.0, 6.0, 0.0])
+    assert float(np.linalg.norm(excess_in)) > params.flyby.v_jupiter_orbit
+    unpowered = _phased_jovian_flyby(excess_in, lon, r_p, 0.0, 1.0, params)
+    powered = _phased_jovian_flyby(excess_in, lon, r_p, 3.0, 1.0, params)
+    assert unpowered is not None and powered is not None
+    # Powering the flyby buys a hotter return.
+    assert powered.collision_speed > unpowered.collision_speed
+    # Below the perijove floor is refused outright.
+    assert _phased_jovian_flyby(excess_in, lon, r_p * 0.5, 0.0, 1.0, params) is None
+    # A retro burn past the escape margin captures rather than bends.
+    w_in = float(np.linalg.norm(excess_in))
+    margin = np.sqrt(w_in**2 + 2 * params.flyby.mu_jupiter / r_p) - np.sqrt(
+        2 * params.flyby.mu_jupiter / r_p
+    )
+    assert (
+        _phased_jovian_flyby(excess_in, lon, r_p, -(margin + 0.5), 1.0, params) is None
+    )
