@@ -99,6 +99,8 @@ When running an interview/grill session in this repo:
 
 `todos/` exists for Claude's scratch files, plans, notes, and todo lists. The directory is gitignored (`todos/*` is excluded, only `.gitkeep` is tracked), so write freely there without worrying about accidental commits. Use it for anything that would clutter the repo otherwise — intermediate analyses, draft notes, working scratchpads.
 
+**Never commit anything that depends on `todos/` or other gitignored state.** Checked-in files (src, tests, ADRs, CONTEXT.md) must stand alone: no imports from `todos/`, no load-bearing references to scratch files, and no unrecorded provenance — if a committed result came from a scratch search or derivation, record the inputs that produced it (bounds, settings, seeds) in the committed file or ADR itself, not just a pointer to the scratch. Before committing, check that the change would still make sense if `todos/` were emptied; historical mentions of scratch files are fine only when explicitly marked gitignored/disposable. (Precedent: ADR 0007's numbers became unreproducible when its scratch harness vanished; ADR 0009 / `src/nozzle_analysis.py` records its search box for exactly this reason.)
+
 ## Testing
 
 Tests live in `tests/` with one file per source module. `tests/test_helpers.py` has shared utilities including floating-point comparison helpers for physics quantities. Use `pytest markers` `slow` and `integration` when appropriate (defined in `pyproject.toml`).
