@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run all export-env
+.PHONY: help install clean test mypy format check-format run nozzle all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -30,6 +30,9 @@ check-format:  ## Check if code is formatted correctly
 
 run:  ## Run the main script
 	python -m src.main
+
+nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'all')
+	python -m src.nozzle_analysis
 
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp

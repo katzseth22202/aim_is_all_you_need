@@ -132,8 +132,12 @@ The Earth-departure burn's propellant cost depends only on the hyperbolic-excess
 velocity is free (it just rotates the escape hyperbola). The outbound leg therefore
 has two knobs — excess speed and aim angle — at a single propellant price, and the
 optimizer searches both rather than assuming a tangential departure.
+In the **closed cycle** the "just rotates the hyperbola" justification is subtly
+wrong: the parking orbit's orientation is dictated by the **push axis**, ~148° from
+the required aim, so free aim is *bought* by the **apoapsis reversal** (~0.23 km/s,
+currently uncharged — see flagged ambiguities).
 _Avoid_: assuming departure must be along Earth's velocity; charging propellant for
-the aim angle.
+the aim angle; treating free-aim as costless in the closed cycle.
 
 **Seven-year cap**:
 Hard constraint: outbound Earth→Jupiter plus return Jupiter→1 AU time of flight
@@ -150,9 +154,37 @@ The returning PuffSat's collision pushes the mass to just under Earth escape —
 20-day orbit at 200 km periapsis (`PUFFSAT_CYCLE_ORBIT_PERIOD`) — which falls back
 to periapsis and departs from there. So `v_rf` (the push target) and the departure
 burn's starting speed are **the same number**, 10.9503 km/s
-(`puffsat_cycle_periapsis_speed()`). _Avoid_: treating the push target and the
-departure state as independent — the orbit the PuffSat drives the mass into *is*
-the orbit the next cycle departs from.
+(`puffsat_cycle_periapsis_speed()`). The parking orbit is load-bearing twice over:
+it is the phasing buffer *and* the aim reversal (the push is along the **push
+axis**, retrograde; the departure must be prograde; only a bound orbit lets the
+**apoapsis reversal** convert one into the other). _Avoid_: treating the push
+target and the departure state as independent — the orbit the PuffSat drives the
+mass into *is* the orbit the next cycle departs from; calling the parking orbit
+"just a phasing buffer" (pushing past escape departs immediately, aimed at the
+Sun).
+
+**Push axis**:
+The direction a PuffSat collision can push the payload: along the arriving
+PuffSats' Earth-frame velocity, full stop — a collision cannot steer. High `v_b`
+*requires* a retrograde heliocentric return, so the push axis is always
+retrograde-and-sunward (−145.7° from prograde at the Earth-phased optimum, vs the
++2.3° the Jupiter departure needs; the two Earth hyperbolas can bend only ~18° of
+the 148° gap, and no push magnitude along the axis reaches Jupiter at nonzero
+delivered mass — `src/nozzle_analysis.py`, `make nozzle`). Consequence: a collision-driven
+departure toward Jupiter is **head-on or nothing** — the "overtaking pusher plate"
+departure is a 1-D artifact.
+_Avoid_: assuming a collision inherits **free-aim departure**; scoring
+push-past-escape schemes without checking where the push points.
+
+**Apoapsis reversal**:
+The cheap re-aim the parking orbit buys: at the near-escape apoapsis the payload
+moves ~117 m/s (20 d orbit), so a ≤ 2×v_apo burn (~234 m/s; ~112 m/s at 60 d)
+rotates the periapsis velocity by up to 180°, turning the retrograde push into a
+prograde departure at unchanged periapsis speed. This is what makes **free-aim
+departure** true-in-effect for the closed cycle — at a small, currently uncharged
+methalox cost.
+_Avoid_: charging a full plane-change at periapsis speeds for the re-aim; leaving
+the reversal out of the growth accounting (it is ×0.94 on growth at 20 d).
 
 **Doubling time**:
 `cycle x ln2 / ln(net growth)`, where net growth is `M(v_b) x exp(-dv/v_e)` and
@@ -314,6 +346,9 @@ need Lambert arcs against actual planet positions).
 - The **return-branch knob** and the **Tisserand `v_b` ceiling** are the same bend read
   two ways: sweeping it phases Earth, and its extreme (full reversal) caps `v_b`. The
   coupling between them is the **`v_b` lottery**.
+- The **push axis** and **free-aim departure** are reconciled only by the
+  **apoapsis reversal**, which only a bound parking orbit provides — so the
+  **closed cycle**'s sub-escape push target is forced by aim, not by propulsion.
 
 ## Example dialogue
 
@@ -428,6 +463,13 @@ need Lambert arcs against actual planet positions).
   4.5435 → 5.3751 km/s, `v_b` 51.46 → 59.77). The chains are still scored without it,
   which flatters them deliberately: a constraint can only raise an optimum, so every
   chain is bounded below by its unphased 4.2690 and the ranking holds *a fortiori*.
+- **ADR 0008's quotable 3.6320 yr omits the apoapsis-reversal charge.** The closed
+  cycle's departure aim is bought by the **apoapsis reversal** (~234 m/s methalox at
+  the 20 d parking orbit, ~112 m/s at 60 d), which no ADR charges. At 20 d it is
+  growth ×0.9392, moving the real doubling to ~4.04 yr (+11%); a 60 d orbit halves
+  the charge but forces the trip under 3.11 yr to keep the 3-window cycle, so the
+  right period is a re-optimization, not a lookup. The ranking vs the chains is
+  unaffected (they'd pay it too); the *published* number is what moves. Unresolved.
 - **An all-failed optimizer table is not a result.** It is ambiguous between an empty
   feasible set (physics) and a search that never found it (artifact), and the two look
   identical. Random-sample the box first: if blind sampling finds feasible points at a
