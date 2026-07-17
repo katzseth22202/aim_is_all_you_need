@@ -10,6 +10,18 @@ import pandas as pd
 from astropy import units as u
 from tabulate import tabulate
 
+from src.apoapsis_raise_reintercept import (
+    apoapsis_raise_economics,
+    apoapsis_raise_finite_burn,
+    apoapsis_raise_reintercept,
+)
+from src.assist_chain import (
+    assist_chain_return,
+    assist_chain_window_cadence,
+    jovian_return_phasing_envelope,
+    minimum_departure_burn_assist_chain,
+    venus_reach_departure_floor,
+)
 from src.astro_constants import (
     ASSIST_CHAIN_MAX_TRIP_TIME,
     CERES_A,
@@ -22,34 +34,27 @@ from src.astro_constants import (
     SATURN_A,
     VENUS_A,
 )
-from src.propulsion import payload_mass_ratio
-from src.scenario import (
-    apoapsis_raise_economics,
-    apoapsis_raise_finite_burn,
-    apoapsis_raise_reintercept,
-    assist_chain_return,
-    assist_chain_window_cadence,
+from src.heliocentric_reintercept import (
     earth_reintercept_cycle_floor,
+    launch_capacity_time,
+    millionfold_scaling_time,
+    single_impulse_resonant_dive,
+    solar_dive_reintercept_gap,
+)
+from src.jovian_flyby import jupiter_flyby_vb_trade_curve, powered_jovian_flyby_return
+from src.propulsion import payload_mass_ratio
+from src.scenario_catalog import (
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
-    jovian_return_phasing_envelope,
-    jupiter_flyby_vb_trade_curve,
-    launch_capacity_time,
     lunar_return_transfer_dv,
-    millionfold_scaling_time,
-    minimum_departure_burn_assist_chain,
     paper_scenarios,
     parker_injection_burns,
-    powered_jovian_flyby_return,
     scenarios_to_dataframe,
-    single_impulse_resonant_dive,
-    solar_dive_reintercept_gap,
     solar_fusion_velocity,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
-    venus_reach_departure_floor,
 )
 
 

@@ -33,8 +33,9 @@ from scipy.optimize import brentq, least_squares
 
 from src import conic_kernel
 from src.astro_constants import PUFFSAT_CYCLE_ORBIT_PERIOD
+from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.propulsion import payload_mass_ratio
-from src.scenario import (
+from src.retrograde_return_legs import (
     _assist_chain_params,
     _AssistChainParams,
     _body_state,
@@ -43,7 +44,6 @@ from src.scenario import (
     _mean_motion,
     _phased_jovian_flyby,
     _phased_ladder_burn,
-    puffsat_cycle_periapsis_speed,
 )
 
 _YEAR_S = 365.25 * 86400.0

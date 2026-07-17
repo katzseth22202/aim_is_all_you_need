@@ -42,9 +42,9 @@ _Avoid_: lunar scenario, lunar row.
 
 The "Sorry, I Don't Need ISRU" cycle sends a payload to a low solar periapsis, boosts it
 with PuffSat collisions, and returns it across `1 AU`. The vocabulary below is what the
-verification functions in `scenario.py` (`solar_dive_*`, `two_impulse_phasing_loop`,
-`single_impulse_resonant_dive`, `earth_reintercept_cycle_floor`, `millionfold_scaling_time`)
-name.
+verification functions in `heliocentric_reintercept.py` (`solar_dive_*`,
+`two_impulse_phasing_loop`, `single_impulse_resonant_dive`,
+`earth_reintercept_cycle_floor`, `millionfold_scaling_time`) name.
 
 **Earth re-intercept**:
 The requirement that the boosted return arrive *where Earth actually is*, not merely cross
@@ -115,6 +115,23 @@ time-of-flight and true-anomaly functions delegate to it rather than duplicating
 algebra, so it sits *below* `orbit_utils.py` in the module hierarchy (CLAUDE.md).
 _Avoid_: re-inlining the eccentricity or bend formulas at a new call site — the whole
 point of the kernel is that this algebra has exactly one home.
+
+**Retrograde-return legs**:
+The float-valued substrate one layer up from the **conic kernel**, shared by this
+section's flyby search, the **unpowered assist chain** below, and
+`nozzle_analysis.py` — `src/retrograde_return_legs.py`: the leg-by-leg
+body/radius/velocity/time-of-flight state each path assembles differently
+(`_ReturnLeg`, `_FlybyLeg`, `_AssistBody`, `_body_state`, `_flyby_return_leg`,
+`_powered_flyby_leg`, `_phased_jovian_flyby`, `_phased_ladder_burn`,
+`_earth_phase_mismatch`, among others). Named after what it computes, echoing
+the codebase's own vocabulary (`_ReturnLeg`, `_FlybyLeg`, `AssistChainStep`).
+`jovian_flyby.py` and `assist_chain.py` are siblings built on this one
+foundation rather than either depending on the other; `nozzle_analysis.py` is a
+third caller reusing the same primitives to score an alternative departure.
+_Avoid_: re-deriving any of this leg/state algebra at a new call site, or
+treating it as private to whichever of `jovian_flyby.py` / `assist_chain.py`
+happens to call it first — the underscore prefix marks internal-to-the-substrate,
+not internal-to-one-module.
 
 **Powered Jovian flyby**:
 A gravity assist with an impulsive periapsis burn. The burn splits the flyby into

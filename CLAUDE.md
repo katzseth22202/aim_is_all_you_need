@@ -49,36 +49,65 @@ conda activate puffsat_math_env
 
 ## Architecture
 
-The source modules form a strict dependency hierarchy — each layer imports only from layers below it:
+`scenario.py` was split into six analysis modules (2026-07), one per CONTEXT.md
+"Scenarios" section, plus a shared substrate. Almost all of it is still a strict
+hierarchy — each layer imports only from layers below it:
 
 ```
-astro_constants.py   ← physical constants and mission parameters (no src imports)
+astro_constants.py           ← physical constants and mission parameters (no src imports)
       ↓
-conic_kernel.py      ← float two-body conic geometry (TOF, bend angles, radius crossings)
+conic_kernel.py               ← float two-body conic geometry (TOF, bend angles, radius crossings)
       ↓
-orbit_utils.py       ← orbital mechanics primitives (boinor/astropy wrappers)
+orbit_utils.py                ← orbital mechanics primitives (boinor/astropy wrappers)
       ↓
-propulsion.py        ← rocket equation, Hohmann transfers, mass ratio calculations
+propulsion.py                 ← rocket equation, Hohmann transfers, mass ratio calculations
       ↓
-scenario.py          ← PuffSatScenario dataclass, paper_scenarios(), find_best_lunar_return()
+heliocentric_reintercept.py   ← solar-dive re-intercept leg; owns launch_capacity_time()
       ↓
-main.py              ← entry point, prints scenario tables and analysis
+apoapsis_raise_reintercept.py ← apoapsis-raise re-intercept leg
+      ↓
+scenario_catalog.py           ← PuffSatScenario, paper_scenarios(), find_best_lunar_return()
+      ↓
+retrograde_return_legs.py     ← float substrate: leg/body/state primitives shared below
+      ↓
+jovian_flyby.py                assist_chain.py imports from jovian_flyby.py too
+      ↓
+assist_chain.py
+      ↓
+main.py / nozzle_analysis.py  ← both import from every module above
 ```
+
+One edge runs opposite the diagram: `retrograde_return_legs.py` imports
+`lunar_transfer_periapsis_speed()` from `scenario_catalog.py` (the push target
+the flyby/chain searches score against). This doesn't create a cycle —
+`scenario_catalog.py` never imports back from `retrograde_return_legs.py` or
+anything above it — but it means the "substrate" isn't literally at the bottom
+of the import graph. Don't try to flatten this without checking the graph stays
+acyclic; it's a known, load-bearing exception, not a leftover to clean up.
 
 `conic_kernel.py` trades `astropy.units.Quantity` for plain floats (km, s, km/s, rad):
 it is the shared substrate under optimizer hot loops (the powered Jovian flyby and
-assist-chain searches in `scenario.py`, and `nozzle_analysis.py`), and
-`orbit_utils.py`'s Quantity-valued time-of-flight/true-anomaly functions delegate to
-it rather than duplicating the algebra. See CONTEXT.md, "Conic kernel".
+assist-chain searches, and `nozzle_analysis.py`), and `orbit_utils.py`'s
+Quantity-valued time-of-flight/true-anomaly functions delegate to it rather than
+duplicating the algebra. See CONTEXT.md, "Conic kernel".
+
+`retrograde_return_legs.py` is a second, higher-level substrate in the same
+spirit (see CONTEXT.md, "Retrograde-return legs"): it holds the leg-by-leg
+body/radius/velocity/TOF state both the powered flyby and the unpowered chain
+assemble, plus the primitives `nozzle_analysis.py` reuses directly. Its private
+names are a real cross-module seam, not test-only scaffolding — two production
+modules (`jovian_flyby.py`, `assist_chain.py`) and `nozzle_analysis.py` all
+import from it. Re-inlining any of that state or algebra at a new call site
+defeats the point of the split.
 
 **Key types used throughout:**
 - `astropy.units.Quantity` — all physical values carry units; never use bare floats for physics
 - `boinor.twobody.Orbit` — represents orbital state; constructed via `orbit_from_rp_ra()` or `Orbit.circular()`
 - `numpy.typing.NDArray` — typed arrays for vectorized calculations
 
-**`PuffSatScenario`** (frozen dataclass in `scenario.py`) holds `v_rf` (final velocity), `v_b` (PuffSat collision velocity), `v_ri` (initial velocity), and `desc`. The `paper_scenarios()` static method runs all scenarios from the paper and returns a pandas DataFrame.
+**`PuffSatScenario`** (frozen dataclass in `scenario_catalog.py`) holds `v_rf` (final velocity), `v_b` (PuffSat collision velocity), `v_ri` (initial velocity), and `desc`. The `paper_scenarios()` function runs all scenarios from the paper and returns a pandas DataFrame.
 
-**`BurnInfo`** (frozen dataclass in `scenario.py`) is the return type of `find_best_lunar_return()`, containing the optimal burn magnitude, combined mass ratio, and incoming velocity.
+**`BurnInfo`** (frozen dataclass in `scenario_catalog.py`) is the return type of `find_best_lunar_return()`, containing the optimal burn magnitude, combined mass ratio, and incoming velocity.
 
 ## Type Checking
 
