@@ -197,7 +197,7 @@ def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
             venus.orbit_radius,
             min_leg_time=_ASSIST_MIN_LEG_TIME,
         )
-        if not c[3]
+        if not c.outbound
     ]
     assert leg1
     tof1, v_t1, v_r1, _, swept1 = leg1[0]
@@ -215,7 +215,7 @@ def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
             earth.orbit_radius,
             min_leg_time=_ASSIST_MIN_LEG_TIME,
         )
-        if c[3]
+        if c.outbound
     ]
     assert leg2
     tof2, _, _, _, swept2 = leg2[0]
@@ -314,7 +314,7 @@ def test_phased_leg_solves_onto_the_moving_target() -> None:
         v_t0 = earth.v_circ + 2.5875 * np.cos(rotation)
         v_r0 = 2.5875 * np.sin(rotation)
         swept = [
-            c[4]
+            c.swept
             for c in conic_kernel.conic_radius_crossings(
                 params.flyby.mu_sun,
                 earth.orbit_radius,
@@ -323,7 +323,7 @@ def test_phased_leg_solves_onto_the_moving_target() -> None:
                 venus.orbit_radius,
                 min_leg_time=_ASSIST_MIN_LEG_TIME,
             )
-            if abs(c[0] - leg_tof) < 1.0
+            if abs(c.tof - leg_tof) < 1.0
         ]
         assert swept, "solved leg did not replay"
         assert conic_kernel.wrap_pi(swept[0] - arrival_is) == pytest.approx(

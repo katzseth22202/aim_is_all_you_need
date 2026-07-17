@@ -7,6 +7,7 @@ from boinor.bodies import Earth
 
 from src import conic_kernel
 from src.assist_chain import (
+    _HeliocentricState,
     _powered_jovian_terminal,
     assist_chain_return,
     assist_chain_window_cadence,
@@ -271,7 +272,11 @@ def test_powered_jovian_terminal_breaks_the_vb_lottery() -> None:
 
     def reach(burn: float):
         return _powered_jovian_terminal(
-            v_t0, v_r0, earth.orbit_radius, 0.0, r_p, burn, 1.0, params
+            _HeliocentricState(v_t0, v_r0, earth.orbit_radius, 0.0),
+            r_p,
+            burn,
+            1.0,
+            params,
         )
 
     # The lottery: unpowered, this arrival cannot make the target v_b AT ALL.

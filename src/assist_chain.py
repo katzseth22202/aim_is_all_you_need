@@ -24,7 +24,7 @@ probe.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 from astropy import units as u
@@ -62,6 +62,22 @@ _ASSIST_DEDUP_SPEED_BIN = 0.05  # km/s; velocity grid for state deduplication
 _ASSIST_DEDUP_TIME_BIN_YEARS = 0.05  # yr; time grid for state deduplication
 _ASSIST_JOVIAN_LEG_RESERVE_YEARS = 0.3  # yr kept free for the Jovian leg
 _SECONDS_PER_YEAR = float((1.0 * u.year).to_value(u.s))
+
+
+class _HeliocentricState(NamedTuple):
+    """Heliocentric velocity state the Jovian-terminal search evaluates from.
+
+    Attributes:
+        v_tangential: Tangential heliocentric speed (km/s).
+        v_radial: Radial-outward heliocentric speed (km/s).
+        radius: Current heliocentric radius (km).
+        elapsed: Chain time already spent reaching this state (s).
+    """
+
+    v_tangential: float
+    v_radial: float
+    radius: float
+    elapsed: float
 
 
 @dataclass(frozen=True)
@@ -118,10 +134,7 @@ class _PoweredJovianTerminal:
 
 
 def _powered_jovian_terminal(
-    v_t0: float,
-    v_r0: float,
-    r0: float,
-    elapsed: float,
+    state: _HeliocentricState,
     periapsis_radius: float,
     flyby_burn: float,
     bend_sign: float,
@@ -142,10 +155,7 @@ def _powered_jovian_terminal(
     it. The unpowered ``sin(delta/2) = 1/e`` does not apply across a burn.
 
     Args:
-        v_t0: Tangential heliocentric speed at r0 (km/s).
-        v_r0: Radial-outward heliocentric speed at r0 (km/s).
-        r0: Current heliocentric radius (km).
-        elapsed: Chain time already spent (s).
+        state: Heliocentric velocity state to search from.
         periapsis_radius: Perijove radius, center-based (km).
         flyby_burn: Impulsive perijove burn, >= 0 (km/s).
         bend_sign: +1 rotates the excess from tangential toward radial-outward,
@@ -163,9 +173,9 @@ def _powered_jovian_terminal(
     best: Optional[_PoweredJovianTerminal] = None
     for leg_tof, v_t1, v_r1, _, _ in conic_kernel.conic_radius_crossings(
         flyby.mu_sun,
-        r0,
-        v_t0,
-        v_r0,
+        state.radius,
+        state.v_tangential,
+        state.v_radial,
         flyby.r_jupiter_orbit,
         min_leg_time=_ASSIST_MIN_LEG_TIME,
     ):
@@ -194,7 +204,7 @@ def _powered_jovian_terminal(
             continue
         if return_leg.collision_speed <= flyby.v_rf:
             continue
-        total_time = elapsed + leg_tof + return_leg.tof
+        total_time = state.elapsed + leg_tof + return_leg.tof
         if total_time > params.max_trip_time:
             continue
         if best is None or total_time < best.total_time:
@@ -212,21 +222,17 @@ def _powered_jovian_terminal(
 
 
 def _jovian_terminal(
-    v_t0: float, v_r0: float, r0: float, elapsed: float, params: _AssistChainParams
+    state: _HeliocentricState, params: _AssistChainParams
 ) -> Optional[_ChainTerminal]:
     """Best unpowered Jovian bend into a qualifying retrograde return.
 
-    From a heliocentric state at radius ``r0`` (after ``elapsed`` seconds of
-    chain), follows each crossing of Jupiter's orbit radius, scans the
-    unpowered bend of the Jupiter-relative excess velocity within the
-    periapsis-floor limit, and keeps the earliest-arriving return whose
-    collision speed meets the target.
+    From a heliocentric state, follows each crossing of Jupiter's orbit
+    radius, scans the unpowered bend of the Jupiter-relative excess velocity
+    within the periapsis-floor limit, and keeps the earliest-arriving return
+    whose collision speed meets the target.
 
     Args:
-        v_t0: Tangential heliocentric speed at r0 (km/s).
-        v_r0: Radial-outward heliocentric speed at r0 (km/s).
-        r0: Current heliocentric radius (km).
-        elapsed: Chain time already spent (s).
+        state: Heliocentric velocity state to search from.
         params: The assist-chain parameter block.
 
     Returns:
@@ -236,9 +242,9 @@ def _jovian_terminal(
     best: Optional[_ChainTerminal] = None
     for leg_tof, v_t1, v_r1, outbound, _ in conic_kernel.conic_radius_crossings(
         flyby.mu_sun,
-        r0,
-        v_t0,
-        v_r0,
+        state.radius,
+        state.v_tangential,
+        state.v_radial,
         flyby.r_jupiter_orbit,
         min_leg_time=_ASSIST_MIN_LEG_TIME,
     ):
@@ -265,7 +271,7 @@ def _jovian_terminal(
                 continue
             if return_leg.collision_speed <= flyby.v_rf:
                 continue
-            total_time = elapsed + leg_tof + return_leg.tof
+            total_time = state.elapsed + leg_tof + return_leg.tof
             if total_time > params.max_trip_time:
                 continue
             if best is None or total_time < best.total_time:
@@ -301,9 +307,27 @@ class _ChainDecision:
     outbound_arrival: bool
 
 
-# A beam state: (body index, excess tangential, excess radial, elapsed s,
-# departure aim angle rad, decisions so far).
-_ChainState = Tuple[int, float, float, float, float, Tuple[_ChainDecision, ...]]
+class _ChainState(NamedTuple):
+    """One state of the assist-chain beam search.
+
+    Attributes:
+        body_index: Index into ``params.bodies`` of the body this state is at.
+        excess_tangential: Tangential component of the body-relative excess
+            velocity (km/s).
+        excess_radial: Radial-outward component of the body-relative excess
+            velocity (km/s).
+        elapsed: Chain time already spent reaching this state (s).
+        departure_aim: Free-aim angle of the departure that started this
+            branch (rad); carried unchanged through every state on the branch.
+        decisions: The recorded chain decisions so far, terminal rotation last.
+    """
+
+    body_index: int
+    excess_tangential: float
+    excess_radial: float
+    elapsed: float
+    departure_aim: float
+    decisions: Tuple[_ChainDecision, ...]
 
 
 def _assist_chain_search(
@@ -326,7 +350,7 @@ def _assist_chain_search(
     """
     best: Optional[Tuple[float, Tuple[_ChainDecision, ...], _ChainTerminal]] = None
     states: List[_ChainState] = [
-        (
+        _ChainState(
             params.earth_index,
             v_infinity_earth * float(np.cos(aim)),
             v_infinity_earth * float(np.sin(aim)),
@@ -360,7 +384,8 @@ def _assist_chain_search(
                 v_t0 = body.v_circ + w * float(np.cos(angle))
                 v_r0 = w * float(np.sin(angle))
                 terminal = _jovian_terminal(
-                    v_t0, v_r0, body.orbit_radius, elapsed, params
+                    _HeliocentricState(v_t0, v_r0, body.orbit_radius, elapsed),
+                    params,
                 )
                 if terminal is not None and (
                     best is None or terminal.total_time < best[2].total_time
@@ -389,7 +414,7 @@ def _assist_chain_search(
                         new_elapsed = elapsed + leg_tof
                         if new_elapsed > time_floor:
                             continue
-                        state: _ChainState = (
+                        state = _ChainState(
                             next_index,
                             v_t1 - next_body.v_circ,
                             v_r1,
@@ -404,15 +429,15 @@ def _assist_chain_search(
                         )
                         key = (
                             next_index,
-                            round(state[1] / _ASSIST_DEDUP_SPEED_BIN),
-                            round(state[2] / _ASSIST_DEDUP_SPEED_BIN),
+                            round(state.excess_tangential / _ASSIST_DEDUP_SPEED_BIN),
+                            round(state.excess_radial / _ASSIST_DEDUP_SPEED_BIN),
                             round(
                                 new_elapsed
                                 / _SECONDS_PER_YEAR
                                 / _ASSIST_DEDUP_TIME_BIN_YEARS
                             ),
                         )
-                        if key not in expanded or new_elapsed < expanded[key][3]:
+                        if key not in expanded or new_elapsed < expanded[key].elapsed:
                             expanded[key] = state
         # Time-bucketed pruning: per (body, time bucket) keep the top states by
         # excess speed, with an overall per-body cap allocated to earlier
@@ -420,15 +445,16 @@ def _assist_chain_search(
         buckets: Dict[Tuple[int, int], List[_ChainState]] = {}
         for state in expanded.values():
             bucket_key = (
-                state[0],
-                int(state[3] / _SECONDS_PER_YEAR / _ASSIST_BUCKET_WIDTH_YEARS),
+                state.body_index,
+                int(state.elapsed / _SECONDS_PER_YEAR / _ASSIST_BUCKET_WIDTH_YEARS),
             )
             buckets.setdefault(bucket_key, []).append(state)
         kept_per_body: Dict[int, int] = {}
         states = []
         for bucket_key in sorted(buckets, key=lambda k: k[1]):
             ranked = sorted(
-                buckets[bucket_key], key=lambda s: -float(np.hypot(s[1], s[2]))
+                buckets[bucket_key],
+                key=lambda s: -float(np.hypot(s.excess_tangential, s.excess_radial)),
             )[:_ASSIST_BEAM_PER_BUCKET]
             already = kept_per_body.get(bucket_key[0], 0)
             taken = ranked[: max(0, _ASSIST_BEAM_CAP_PER_BODY - already)]
@@ -595,7 +621,7 @@ def _chain_to_result(
                 next_body.orbit_radius,
                 min_leg_time=_ASSIST_MIN_LEG_TIME,
             )
-            if crossing[3] == decision.outbound_arrival
+            if crossing.outbound == decision.outbound_arrival
         ]
         if not candidates:
             raise ValueError("recorded assist-chain leg did not replay")
