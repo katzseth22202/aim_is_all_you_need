@@ -28,8 +28,10 @@ import numpy as np
 import numpy.typing as npt
 from astropy import units as u
 from boinor.bodies import Earth
+from boinor.core.iod import izzo
 from scipy.optimize import brentq, least_squares
 
+from src import conic_kernel
 from src.astro_constants import PUFFSAT_CYCLE_ORBIT_PERIOD
 from src.propulsion import payload_mass_ratio
 from src.scenario import (
@@ -41,7 +43,6 @@ from src.scenario import (
     _mean_motion,
     _phased_jovian_flyby,
     _phased_ladder_burn,
-    izzo,
     puffsat_cycle_periapsis_speed,
 )
 
@@ -290,11 +291,11 @@ def aim_geometry(geometry: PhasedGeometry) -> AimGeometry:
     perijove = fl.periapsis_floor * float(10.0**PHASED_LOG_PERIJOVE)
     w_in_vec = priced.arrival_excess_vector
     w_in = float(np.linalg.norm(w_in_vec))
-    ecc_in = 1.0 + perijove * w_in * w_in / fl.mu_jupiter
     v_peri = float(np.sqrt(w_in * w_in + 2.0 * fl.mu_jupiter / perijove))
     w_out = float(np.sqrt(v_peri**2 - 2.0 * fl.mu_jupiter / perijove))
-    ecc_out = 1.0 + perijove * w_out * w_out / fl.mu_jupiter
-    turn = PHASED_BEND_SIGN * float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+    ecc_in = conic_kernel.hyperbolic_eccentricity(fl.mu_jupiter, perijove, w_in)
+    ecc_out = conic_kernel.hyperbolic_eccentricity(fl.mu_jupiter, perijove, w_out)
+    turn = PHASED_BEND_SIGN * conic_kernel.powered_bend_angle(ecc_in, ecc_out)
     ct, st = float(np.cos(turn)), float(np.sin(turn))
     scale = w_out / w_in
     w_out_vec = scale * np.array(
@@ -308,12 +309,13 @@ def aim_geometry(geometry: PhasedGeometry) -> AimGeometry:
 
     # Mirrored prograde twin down to 1 AU, as in _flyby_return_leg.
     v_t_m = -v_t_out
-    energy = (v_t_m**2 + v_r_out**2) / 2.0 - fl.mu_sun / fl.r_jupiter_orbit
-    h = fl.r_jupiter_orbit * v_t_m
-    v_t1 = h / fl.r_earth_orbit
-    v_r1 = -float(
-        np.sqrt(max(0.0, 2.0 * (energy + fl.mu_sun / fl.r_earth_orbit) - v_t1**2))
+    state = conic_kernel.conic_state_at_radius(
+        fl.mu_sun, fl.r_jupiter_orbit, v_t_m, v_r_out
     )
+    v_t1, v_r1_mag = conic_kernel.speed_components_at_radius(
+        state, fl.mu_sun, fl.r_earth_orbit
+    )
+    v_r1 = -v_r1_mag
     arr_t, arr_r = -v_t1 - fl.v_earth_orbit, v_r1
 
     dep_t, dep_r = geometry.departure_excess
@@ -323,11 +325,11 @@ def aim_geometry(geometry: PhasedGeometry) -> AimGeometry:
 
     r_leo = 2.0 * _MU_EARTH / fl.v_esc_leo**2
     w_arr = float(np.hypot(arr_t, arr_r))
-    e_arr = 1.0 + r_leo * w_arr**2 / _MU_EARTH
-    bend_arr = float(np.degrees(np.arcsin(1.0 / e_arr)))
+    e_arr = conic_kernel.hyperbolic_eccentricity(_MU_EARTH, r_leo, w_arr)
+    bend_arr = float(np.degrees(conic_kernel.half_turn_angle(e_arr)))
     w_dep = float(np.hypot(dep_t, dep_r))
-    e_dep = 1.0 + r_leo * w_dep**2 / _MU_EARTH
-    bend_dep = float(np.degrees(np.arccos(-1.0 / e_dep) - np.pi / 2.0))
+    e_dep = conic_kernel.hyperbolic_eccentricity(_MU_EARTH, r_leo, w_dep)
+    bend_dep = float(np.degrees(conic_kernel.half_turn_angle(e_dep)))
 
     # Aphelion of a departure along the push axis at the excess cap (the
     # overtaking stream can never push the payload past v_b).
@@ -340,9 +342,9 @@ def aim_geometry(geometry: PhasedGeometry) -> AimGeometry:
     if cap_energy >= 0.0:
         aph_au = float("inf")
     else:
-        a = -fl.mu_sun / (2.0 * cap_energy)
+        a = conic_kernel.semimajor_axis_from_energy(fl.mu_sun, cap_energy)
         h1 = fl.r_earth_orbit * vt
-        ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * cap_energy * h1 * h1 / fl.mu_sun**2)))
+        ecc = conic_kernel.eccentricity_from_energy_and_h(fl.mu_sun, cap_energy, h1)
         aph_au = a * (1.0 + ecc) / fl.r_earth_orbit
     return AimGeometry(
         required_aim_deg=required,

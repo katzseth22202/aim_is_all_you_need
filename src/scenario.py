@@ -37,6 +37,7 @@ from boinor.twobody import Orbit
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, differential_evolution
 
+from src import conic_kernel
 from src.astro_constants import (
     APOAPSIS_RAISE_APHELION_BRACKET,
     APOAPSIS_RAISE_SEP_BURN_DURATION,
@@ -1708,9 +1709,11 @@ def apoapsis_raise_finite_burn(
     # Truncated perihelion from the arrival state vector (energy + angular momentum).
     speed_squared = vx * vx + vy * vy
     specific_energy = speed_squared / 2.0 - mu / radius
-    semimajor = -mu / (2.0 * specific_energy)
+    semimajor = conic_kernel.semimajor_axis_from_energy(mu, specific_energy)
     angular_momentum = x * vy - y * vx
-    ecc = np.sqrt(1.0 + 2.0 * specific_energy * angular_momentum**2 / mu**2)
+    ecc = conic_kernel.eccentricity_from_energy_and_h(
+        mu, specific_energy, angular_momentum
+    )
     perihelion_km = float(semimajor * (1.0 - ecc))
 
     swept = (np.degrees(np.arctan2(y, x)) - 180.0) % 360.0
@@ -1950,67 +1953,6 @@ def _powered_flyby_params(
     )
 
 
-def _elliptic_tof_seconds(mu: float, a: float, ecc: float, nu: float) -> float:
-    """Time from periapsis to true anomaly ``nu`` (rad, [0, pi]) on an ellipse.
-
-    Float twin of :func:`orbit_utils.elliptic_time_of_flight` for the optimizer's
-    hot loop.
-
-    Args:
-        mu: Gravitational parameter (km^3/s^2).
-        a: Semi-major axis (km).
-        ecc: Eccentricity, 0 <= ecc < 1.
-        nu: True anomaly from periapsis (rad, in [0, pi]).
-
-    Returns:
-        The time of flight (s).
-    """
-    eccentric_anomaly = 2.0 * np.arctan2(
-        np.sqrt(1.0 - ecc) * np.sin(nu / 2.0),
-        np.sqrt(1.0 + ecc) * np.cos(nu / 2.0),
-    )
-    mean_anomaly = eccentric_anomaly - ecc * np.sin(eccentric_anomaly)
-    return float(mean_anomaly / np.sqrt(mu / a**3))
-
-
-def _hyperbolic_tof_seconds(mu: float, a_abs: float, ecc: float, nu: float) -> float:
-    """Time from periapsis to true anomaly ``nu`` (rad, [0, pi)) on a hyperbola.
-
-    Float twin of :func:`orbit_utils.hyperbolic_time_of_flight` for the
-    optimizer's hot loop.
-
-    Args:
-        mu: Gravitational parameter (km^3/s^2).
-        a_abs: Absolute semi-major axis |a| (km).
-        ecc: Eccentricity, ecc > 1.
-        nu: True anomaly from periapsis (rad), within the reachable branch.
-
-    Returns:
-        The time of flight (s).
-    """
-    cosh_f = (ecc + np.cos(nu)) / (1.0 + ecc * np.cos(nu))
-    hyperbolic_anomaly = float(np.arccosh(max(cosh_f, 1.0)))
-    mean_anomaly = ecc * np.sinh(hyperbolic_anomaly) - hyperbolic_anomaly
-    return float(mean_anomaly / np.sqrt(mu / a_abs**3))
-
-
-def _true_anomaly_at_radius_rad(p: float, ecc: float, r: float) -> Optional[float]:
-    """Principal true anomaly (rad, [0, pi]) where a conic reaches radius ``r``.
-
-    Args:
-        p: Semi-latus rectum (km).
-        ecc: Eccentricity (> 0).
-        r: Radius to reach (km).
-
-    Returns:
-        The true anomaly in [0, pi], or None if the radius is unreachable.
-    """
-    cos_nu = (p / r - 1.0) / ecc
-    if abs(cos_nu) > 1.0 + 1e-9:
-        return None
-    return float(np.arccos(np.clip(cos_nu, -1.0, 1.0)))
-
-
 @dataclass(frozen=True)
 class _ReturnLeg:
     """Float summary of the retrograde Jupiter-to-1 AU return leg.
@@ -2066,17 +2008,15 @@ def _flyby_return_leg(
     # Mirrored prograde twin: same radii and times, positive angular momentum.
     v_t = -v_tangential
     v_r = v_radial
-    energy = (v_t * v_t + v_r * v_r) / 2.0 - mu / r_j
-    h = r_j * v_t
-    p = h * h / mu
-    ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
+    state = conic_kernel.conic_state_at_radius(mu, r_j, v_t, v_r)
+    ecc = state.ecc
     if abs(ecc - 1.0) < 1e-9 or ecc < 1e-9:
         return None
-    perihelion = p / (1.0 + ecc)
+    perihelion = conic_kernel.periapsis_radius_of_conic(state.p, ecc)
     if perihelion > r_e:
         return None
-    nu_jupiter = _true_anomaly_at_radius_rad(p, ecc, r_j)
-    nu_earth = _true_anomaly_at_radius_rad(p, ecc, r_e)
+    nu_jupiter = conic_kernel.true_anomaly_at_radius_rad(state.p, ecc, r_j)
+    nu_earth = conic_kernel.true_anomaly_at_radius_rad(state.p, ecc, r_e)
     if nu_jupiter is None or nu_earth is None:
         return None
     # The swept angle is derived in the same branches as the time of flight, from
@@ -2087,15 +2027,15 @@ def _flyby_return_leg(
         # Hyperbolic return: only an already-inbound state ever re-crosses 1 AU.
         if v_r > 0.0:
             return None
-        a_abs = p / (ecc * ecc - 1.0)
-        tof = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_jupiter)
-        tof -= _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_earth)
+        a_abs = state.p / (ecc * ecc - 1.0)
+        tof = conic_kernel.hyperbolic_tof_seconds(mu, a_abs, ecc, nu_jupiter)
+        tof -= conic_kernel.hyperbolic_tof_seconds(mu, a_abs, ecc, nu_earth)
         sweep = nu_jupiter - nu_earth
     else:
-        a = p / (1.0 - ecc * ecc)
+        a = state.p / (1.0 - ecc * ecc)
         period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
-        t_jupiter = _elliptic_tof_seconds(mu, a, ecc, nu_jupiter)
-        t_earth = _elliptic_tof_seconds(mu, a, ecc, nu_earth)
+        t_jupiter = conic_kernel.elliptic_tof_seconds(mu, a, ecc, nu_jupiter)
+        t_earth = conic_kernel.elliptic_tof_seconds(mu, a, ecc, nu_earth)
         if v_r > 0.0:
             # Out to aphelion first, then back in through 1 AU.
             tof = (period - t_earth) - t_jupiter
@@ -2105,12 +2045,10 @@ def _flyby_return_leg(
             sweep = nu_jupiter - nu_earth
     if tof <= 0.0:
         return None
-    v1_sq = 2.0 * (energy + mu / r_e)
-    v_t1 = h / r_e
-    v_r1_sq = max(0.0, v1_sq - v_t1 * v_t1)
+    v_t1, v_r1 = conic_kernel.speed_components_at_radius(state, mu, r_e)
     # Un-mirrored the tangential speed is -v_t1, so the Earth-relative closing
     # speed is hypot(v_t1 + v_earth, v_r1).
-    closing = float(np.hypot(v_t1 + params.v_earth_orbit, np.sqrt(v_r1_sq)))
+    closing = float(np.hypot(v_t1 + params.v_earth_orbit, v_r1))
     collision = float(np.hypot(closing, params.v_esc_surface))
     return _ReturnLeg(
         perihelion=perihelion,
@@ -2246,31 +2184,29 @@ def _powered_flyby_leg(
     v_r0 = v_infinity_earth * float(np.sin(aim_angle))
     if v_t0 <= 0.0:
         return None
-    energy = (v_t0 * v_t0 + v_r0 * v_r0) / 2.0 - mu / r_e
-    h = r_e * v_t0
-    p = h * h / mu
-    ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
+    state = conic_kernel.conic_state_at_radius(mu, r_e, v_t0, v_r0)
+    ecc = state.ecc
     if abs(ecc - 1.0) < 1e-9 or ecc < 1e-9:
         return None
-    if ecc < 1.0 and p / (1.0 - ecc) < r_j:
+    if ecc < 1.0 and state.p / (1.0 - ecc) < r_j:
         return None
     if ecc > 1.0 and descending_arrival:
         return None
-    nu_depart = _true_anomaly_at_radius_rad(p, ecc, r_e)
-    nu_arrive = _true_anomaly_at_radius_rad(p, ecc, r_j)
+    nu_depart = conic_kernel.true_anomaly_at_radius_rad(state.p, ecc, r_e)
+    nu_arrive = conic_kernel.true_anomaly_at_radius_rad(state.p, ecc, r_j)
     if nu_depart is None or nu_arrive is None:
         return None
     if ecc < 1.0:
-        a = p / (1.0 - ecc * ecc)
+        a = state.p / (1.0 - ecc * ecc)
         period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
-        t_depart = _elliptic_tof_seconds(mu, a, ecc, nu_depart)
-        t_arrive = _elliptic_tof_seconds(mu, a, ecc, nu_arrive)
+        t_depart = conic_kernel.elliptic_tof_seconds(mu, a, ecc, nu_depart)
+        t_arrive = conic_kernel.elliptic_tof_seconds(mu, a, ecc, nu_arrive)
         if descending_arrival:
             t_arrive = period - t_arrive
     else:
-        a_abs = p / (ecc * ecc - 1.0)
-        t_depart = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_depart)
-        t_arrive = _hyperbolic_tof_seconds(mu, a_abs, ecc, nu_arrive)
+        a_abs = state.p / (ecc * ecc - 1.0)
+        t_depart = conic_kernel.hyperbolic_tof_seconds(mu, a_abs, ecc, nu_depart)
+        t_arrive = conic_kernel.hyperbolic_tof_seconds(mu, a_abs, ecc, nu_arrive)
     if v_r0 < 0.0:
         t_depart = -t_depart
     outbound_tof = t_arrive - t_depart
@@ -2278,12 +2214,7 @@ def _powered_flyby_leg(
         return None
 
     # Jupiter-relative arrival state.
-    v_arr_sq = 2.0 * (energy + mu / r_j)
-    v_t_arr = h / r_j
-    v_r_arr_sq = v_arr_sq - v_t_arr * v_t_arr
-    if v_r_arr_sq < -1e-9:
-        return None
-    v_r_arr = float(np.sqrt(max(0.0, v_r_arr_sq)))
+    v_t_arr, v_r_arr = conic_kernel.speed_components_at_radius(state, mu, r_j)
     if descending_arrival:
         v_r_arr = -v_r_arr
     rel_t = v_t_arr - params.v_jupiter_orbit
@@ -2294,17 +2225,15 @@ def _powered_flyby_leg(
 
     # Split-hyperbola powered flyby at periapsis_radius.
     mu_j = params.mu_jupiter
-    ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
-    half_turn_in = float(np.arcsin(1.0 / ecc_in))
     v_peri_in = float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius))
     v_peri_out = v_peri_in + flyby_burn
     w_out_sq = v_peri_out * v_peri_out - 2.0 * mu_j / periapsis_radius
     if w_out_sq <= 0.0:
         return None
     w_out = float(np.sqrt(w_out_sq))
-    ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
-    half_turn_out = float(np.arcsin(1.0 / ecc_out))
-    turn = half_turn_in + half_turn_out
+    ecc_in = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_in)
+    ecc_out = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_out)
+    turn = conic_kernel.powered_bend_angle(ecc_in, ecc_out)
     cos_turn = float(np.cos(bend_sign * turn))
     sin_turn = float(np.sin(bend_sign * turn))
     unit_t = rel_t / w_in
@@ -2828,101 +2757,6 @@ def _assist_chain_params(
     )
 
 
-def _elliptic_time_from_periapsis(mu: float, a: float, ecc: float, nu: float) -> float:
-    """Time from periapsis to true anomaly ``nu`` in [0, 2*pi) on an ellipse.
-
-    Extends :func:`_elliptic_tof_seconds` past pi by period symmetry.
-
-    Args:
-        mu: Gravitational parameter (km^3/s^2).
-        a: Semi-major axis (km).
-        ecc: Eccentricity, 0 <= ecc < 1.
-        nu: True anomaly from periapsis (rad, in [0, 2*pi)).
-
-    Returns:
-        The time since periapsis passage (s).
-    """
-    if nu > np.pi:
-        period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
-        return period - _elliptic_tof_seconds(mu, a, ecc, 2.0 * np.pi - nu)
-    return _elliptic_tof_seconds(mu, a, ecc, nu)
-
-
-def _conic_radius_crossings(
-    mu: float, r0: float, v_t0: float, v_r0: float, r1: float
-) -> List[Tuple[float, float, float, bool, float]]:
-    """Future crossings of radius ``r1`` from a heliocentric state at ``r0``.
-
-    The state is (tangential, radial-outward) at radius ``r0`` with positive
-    angular momentum. Within one revolution (ellipse) or on the remaining
-    branch (hyperbola) the orbit crosses ``r1`` at most twice: once moving
-    outward and once moving inward.
-
-    Args:
-        mu: Gravitational parameter of the Sun (km^3/s^2).
-        r0: Current radius (km).
-        v_t0: Tangential speed, > 0 for prograde (km/s).
-        v_r0: Radial-outward speed (km/s).
-        r1: Target radius (km).
-
-    Returns:
-        Up to two tuples (time of flight s, tangential speed at r1, signed
-        radial speed at r1, outbound flag, swept heliocentric longitude rad),
-        skipping degenerate sub-day legs. The swept angle is what a *phased*
-        chain needs: paired with the leg time it says where the craft arrives,
-        not merely when, so an arrival can be matched against where the target
-        body will actually be. Motion is prograde (h > 0), so it is positive.
-    """
-    energy = (v_t0 * v_t0 + v_r0 * v_r0) / 2.0 - mu / r0
-    h = r0 * v_t0
-    if h <= 0.0:
-        return []
-    p = h * h / mu
-    ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
-    if ecc < 1e-9 or abs(ecc - 1.0) < 1e-9:
-        return []
-    nu0 = _true_anomaly_at_radius_rad(p, ecc, r0)
-    nu1 = _true_anomaly_at_radius_rad(p, ecc, r1)
-    if nu0 is None or nu1 is None:
-        return []
-    if v_r0 < 0.0:
-        nu0 = -nu0
-    v1_sq = 2.0 * (energy + mu / r1)
-    v_t1 = h / r1
-    v_r1 = float(np.sqrt(max(0.0, v1_sq - v_t1 * v_t1)))
-    crossings: List[Tuple[float, float, float, bool, float]] = []
-    if ecc < 1.0:
-        a = p / (1.0 - ecc * ecc)
-        period = 2.0 * np.pi * float(np.sqrt(a**3 / mu))
-        t0 = _elliptic_time_from_periapsis(mu, a, ecc, nu0 % (2.0 * np.pi))
-        for nu_target, v_r_signed, outbound in (
-            (nu1, v_r1, True),
-            (2.0 * np.pi - nu1, -v_r1, False),
-        ):
-            dt = (_elliptic_time_from_periapsis(mu, a, ecc, nu_target) - t0) % period
-            if dt > _ASSIST_MIN_LEG_TIME:
-                swept = (nu_target - nu0) % (2.0 * np.pi)
-                crossings.append((dt, v_t1, v_r_signed, outbound, swept))
-    else:
-        a_abs = p / (ecc * ecc - 1.0)
-        t0 = float(np.sign(nu0)) * _hyperbolic_tof_seconds(mu, a_abs, ecc, abs(nu0))
-        for nu_target, v_r_signed, outbound in (
-            (nu1, v_r1, True),
-            (-nu1, -v_r1, False),
-        ):
-            dt = (
-                float(np.sign(nu_target))
-                * _hyperbolic_tof_seconds(mu, a_abs, ecc, abs(nu_target))
-                - t0
-            )
-            if dt > _ASSIST_MIN_LEG_TIME:
-                # A hyperbola never wraps, so the sweep is the bare difference;
-                # a positive dt guarantees nu_target is ahead of nu0.
-                swept = nu_target - nu0
-                crossings.append((dt, v_t1, v_r_signed, outbound, swept))
-    return crossings
-
-
 def _mean_motion(body: _AssistBody) -> float:
     """Mean motion of a chain body on its circular orbit (rad/s).
 
@@ -2932,19 +2766,7 @@ def _mean_motion(body: _AssistBody) -> float:
     Returns:
         Angular rate v_circ / r, positive (prograde).
     """
-    return body.v_circ / body.orbit_radius
-
-
-def _wrap_pi(angle: float) -> float:
-    """Wrap an angle to (-pi, pi].
-
-    Args:
-        angle: Angle in radians.
-
-    Returns:
-        The equivalent angle in (-pi, pi].
-    """
-    return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+    return conic_kernel.mean_motion(body.v_circ, body.orbit_radius)
 
 
 def _phased_leg_rotations(
@@ -3000,23 +2822,24 @@ def _phased_leg_rotations(
     if w < 1e-9:
         return []
     phi = float(np.arctan2(excess_r, excess_t))
-    bend_limit = (
-        2.0 * float(np.arcsin(1.0 / (1.0 + body.min_periapsis * w * w / body.mu)))
-        if rotation_limit is None
-        else rotation_limit
-    )
+    if rotation_limit is None:
+        ecc = conic_kernel.hyperbolic_eccentricity(body.mu, body.min_periapsis, w)
+        bend_limit = conic_kernel.unpowered_bend_angle(ecc)
+    else:
+        bend_limit = rotation_limit
     n_target = _mean_motion(target)
 
     def evaluate(theta: float) -> Optional[Tuple[float, float, float, float]]:
         angle = phi + theta
         v_t0 = body.v_circ + w * float(np.cos(angle))
         v_r0 = w * float(np.sin(angle))
-        for leg_tof, v_t1, v_r1, out, swept in _conic_radius_crossings(
+        for leg_tof, v_t1, v_r1, out, swept in conic_kernel.conic_radius_crossings(
             params.flyby.mu_sun,
             body.orbit_radius,
             v_t0,
             v_r0,
             target.orbit_radius,
+            min_leg_time=_ASSIST_MIN_LEG_TIME,
         ):
             if out != outbound:
                 continue
@@ -3025,7 +2848,12 @@ def _phased_leg_rotations(
             # the epoch and manufacture a spurious window cadence.
             arrival = body_longitude + swept
             where_target_is = target_longitude + n_target * leg_tof
-            return (_wrap_pi(arrival - where_target_is), leg_tof, v_t1, v_r1)
+            return (
+                conic_kernel.wrap_pi(arrival - where_target_is),
+                leg_tof,
+                v_t1,
+                v_r1,
+            )
         return None
 
     def residual(theta: float) -> float:
@@ -3246,9 +3074,9 @@ def _powered_node_burn(
         return abs(speed_out - speed_in), body.min_periapsis
 
     def bend(periapsis: float) -> float:
-        ecc_in = 1.0 + periapsis * speed_in * speed_in / body.mu
-        ecc_out = 1.0 + periapsis * speed_out * speed_out / body.mu
-        return float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+        ecc_in = conic_kernel.hyperbolic_eccentricity(body.mu, periapsis, speed_in)
+        ecc_out = conic_kernel.hyperbolic_eccentricity(body.mu, periapsis, speed_out)
+        return conic_kernel.powered_bend_angle(ecc_in, ecc_out)
 
     def burn(periapsis: float) -> float:
         v_in = float(np.sqrt(speed_in * speed_in + 2.0 * body.mu / periapsis))
@@ -3325,8 +3153,8 @@ def _flyby_mismatch_burn(
     speed_out = float(np.linalg.norm(excess_out))
     if speed_in < 1e-9 or speed_out < 1e-9:
         return abs(speed_out - speed_in)
-    ecc = 1.0 + body.min_periapsis * speed_in * speed_in / body.mu
-    bend_limit = 2.0 * float(np.arcsin(min(1.0, 1.0 / ecc)))
+    ecc = conic_kernel.hyperbolic_eccentricity(body.mu, body.min_periapsis, speed_in)
+    bend_limit = conic_kernel.unpowered_bend_angle(ecc)
     cos_turn = float(
         np.clip(np.dot(excess_in, excess_out) / (speed_in * speed_out), -1.0, 1.0)
     )
@@ -3379,8 +3207,9 @@ def _jupiter_assist_body(params: _AssistChainParams) -> _AssistBody:
     """Jupiter as a ladder body, so the Jovian leg can be phased like any other.
 
     ``_jovian_terminal`` and ``_powered_jovian_terminal`` reach Jupiter through
-    ``_conic_radius_crossings``, which finds crossings of Jupiter's orbit
-    *radius* and assumes Jupiter is there. That is the model's largest hole: it
+    :func:`conic_kernel.conic_radius_crossings`, which finds crossings of
+    Jupiter's orbit *radius* and assumes Jupiter is there. That is the model's
+    largest hole: it
     phases Venus and Earth while letting Jupiter be anywhere, so every chain
     result built on it is a lower bound.
 
@@ -3445,7 +3274,6 @@ def _phased_jovian_flyby(
     if w_in < 1e-6:
         return None
     mu_j = flyby.mu_jupiter
-    ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
     v_peri_out = (
         float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius)) + flyby_burn
     )
@@ -3454,8 +3282,9 @@ def _phased_jovian_flyby(
         # A retro burn past the escape margin captures the craft.
         return None
     w_out = float(np.sqrt(w_out_sq))
-    ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
-    turn = bend_sign * float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+    ecc_in = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_in)
+    ecc_out = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_out)
+    turn = bend_sign * conic_kernel.powered_bend_angle(ecc_in, ecc_out)
     cos_t, sin_t = float(np.cos(turn)), float(np.sin(turn))
     scale = w_out / w_in
     excess_out = scale * np.array(
@@ -3545,22 +3374,27 @@ def _powered_jovian_terminal(
         return None
     mu_j = flyby.mu_jupiter
     best: Optional[_PoweredJovianTerminal] = None
-    for leg_tof, v_t1, v_r1, _, _ in _conic_radius_crossings(
-        flyby.mu_sun, r0, v_t0, v_r0, flyby.r_jupiter_orbit
+    for leg_tof, v_t1, v_r1, _, _ in conic_kernel.conic_radius_crossings(
+        flyby.mu_sun,
+        r0,
+        v_t0,
+        v_r0,
+        flyby.r_jupiter_orbit,
+        min_leg_time=_ASSIST_MIN_LEG_TIME,
     ):
         rel_t = v_t1 - flyby.v_jupiter_orbit
         w_in = float(np.hypot(rel_t, v_r1))
         if w_in < 1e-6:
             continue
-        ecc_in = 1.0 + periapsis_radius * w_in * w_in / mu_j
         v_peri_in = float(np.sqrt(w_in * w_in + 2.0 * mu_j / periapsis_radius))
         v_peri_out = v_peri_in + flyby_burn
         w_out_sq = v_peri_out * v_peri_out - 2.0 * mu_j / periapsis_radius
         if w_out_sq <= 0.0:
             continue
         w_out = float(np.sqrt(w_out_sq))
-        ecc_out = 1.0 + periapsis_radius * w_out * w_out / mu_j
-        turn = float(np.arcsin(1.0 / ecc_in) + np.arcsin(1.0 / ecc_out))
+        ecc_in = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_in)
+        ecc_out = conic_kernel.hyperbolic_eccentricity(mu_j, periapsis_radius, w_out)
+        turn = conic_kernel.powered_bend_angle(ecc_in, ecc_out)
         angle = float(np.arctan2(v_r1, rel_t)) + bend_sign * turn
         return_leg = _flyby_return_leg(
             flyby.v_jupiter_orbit + w_out * float(np.cos(angle)),
@@ -3613,16 +3447,23 @@ def _jovian_terminal(
     """
     flyby = params.flyby
     best: Optional[_ChainTerminal] = None
-    for leg_tof, v_t1, v_r1, outbound, _ in _conic_radius_crossings(
-        flyby.mu_sun, r0, v_t0, v_r0, flyby.r_jupiter_orbit
+    for leg_tof, v_t1, v_r1, outbound, _ in conic_kernel.conic_radius_crossings(
+        flyby.mu_sun,
+        r0,
+        v_t0,
+        v_r0,
+        flyby.r_jupiter_orbit,
+        min_leg_time=_ASSIST_MIN_LEG_TIME,
     ):
         rel_t = v_t1 - flyby.v_jupiter_orbit
         rel_r = v_r1
         w = float(np.hypot(rel_t, rel_r))
         if w < 1e-6:
             continue
-        ecc = 1.0 + flyby.periapsis_floor * w * w / flyby.mu_jupiter
-        bend_limit = 2.0 * float(np.arcsin(1.0 / ecc))
+        ecc = conic_kernel.hyperbolic_eccentricity(
+            flyby.mu_jupiter, flyby.periapsis_floor, w
+        )
+        bend_limit = conic_kernel.unpowered_bend_angle(ecc)
         phi = float(np.arctan2(rel_r, rel_t))
         for bend in np.linspace(-bend_limit, bend_limit, _ASSIST_JOVIAN_BEND_SAMPLES):
             angle = phi + float(bend)
@@ -3720,9 +3561,10 @@ def _assist_chain_search(
             if depth == 0:
                 rotations = np.array([0.0])
             else:
-                bend_limit = 2.0 * float(
-                    np.arcsin(1.0 / (1.0 + body.min_periapsis * w * w / body.mu))
+                ecc = conic_kernel.hyperbolic_eccentricity(
+                    body.mu, body.min_periapsis, w
                 )
+                bend_limit = conic_kernel.unpowered_bend_angle(ecc)
                 rotations = np.linspace(
                     -bend_limit, bend_limit, _ASSIST_ROTATION_SAMPLES
                 )
@@ -3743,12 +3585,19 @@ def _assist_chain_search(
                 if depth >= params.max_flybys:
                     continue
                 for next_index, next_body in enumerate(params.bodies):
-                    for leg_tof, v_t1, v_r1, outbound, _ in _conic_radius_crossings(
+                    for (
+                        leg_tof,
+                        v_t1,
+                        v_r1,
+                        outbound,
+                        _,
+                    ) in conic_kernel.conic_radius_crossings(
                         params.flyby.mu_sun,
                         body.orbit_radius,
                         v_t0,
                         v_r0,
                         next_body.orbit_radius,
+                        min_leg_time=_ASSIST_MIN_LEG_TIME,
                     ):
                         new_elapsed = elapsed + leg_tof
                         if new_elapsed > time_floor:
@@ -3951,12 +3800,13 @@ def _chain_to_result(
         next_body = params.bodies[decision.next_body_index]
         candidates = [
             crossing
-            for crossing in _conic_radius_crossings(
+            for crossing in conic_kernel.conic_radius_crossings(
                 params.flyby.mu_sun,
                 body.orbit_radius,
                 v_t0,
                 v_r0,
                 next_body.orbit_radius,
+                min_leg_time=_ASSIST_MIN_LEG_TIME,
             )
             if crossing[3] == decision.outbound_arrival
         ]
@@ -4038,11 +3888,8 @@ def venus_reach_departure_floor() -> u.Quantity:
             np.sqrt((params.v_esc_leo + burn) ** 2 - params.v_esc_leo**2)
         )
         v_t = params.v_earth_orbit - v_infinity
-        energy = v_t * v_t / 2.0 - mu / r_earth
-        h = r_earth * v_t
-        p = h * h / mu
-        ecc = float(np.sqrt(max(0.0, 1.0 + 2.0 * energy * h * h / (mu * mu))))
-        return p / (1.0 + ecc) - r_venus
+        state = conic_kernel.conic_state_at_radius(mu, r_earth, v_t, 0.0)
+        return conic_kernel.periapsis_radius_of_conic(state.p, state.ecc) - r_venus
 
     floor = brentq(perihelion_gap, 1e-6, 2.0)
     return float(floor) * u.km / u.s
@@ -4200,8 +4047,10 @@ def jovian_return_phasing_envelope(
     kms = u.km / u.s
     w = float(chain.v_infinity_jupiter.to_value(kms))
     phi = float(chain.jovian_arrival_direction.to_value(u.rad))
-    ecc = 1.0 + params.periapsis_floor * w * w / params.mu_jupiter
-    bend_limit = 2.0 * float(np.arcsin(1.0 / ecc))
+    ecc = conic_kernel.hyperbolic_eccentricity(
+        params.mu_jupiter, params.periapsis_floor, w
+    )
+    bend_limit = conic_kernel.unpowered_bend_angle(ecc)
     chain_seconds = float(chain.chain_time.to_value(u.s))
     cap = None if max_total_time is None else float(max_total_time.to_value(u.s))
 

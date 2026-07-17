@@ -54,6 +54,8 @@ The source modules form a strict dependency hierarchy — each layer imports onl
 ```
 astro_constants.py   ← physical constants and mission parameters (no src imports)
       ↓
+conic_kernel.py      ← float two-body conic geometry (TOF, bend angles, radius crossings)
+      ↓
 orbit_utils.py       ← orbital mechanics primitives (boinor/astropy wrappers)
       ↓
 propulsion.py        ← rocket equation, Hohmann transfers, mass ratio calculations
@@ -62,6 +64,12 @@ scenario.py          ← PuffSatScenario dataclass, paper_scenarios(), find_best
       ↓
 main.py              ← entry point, prints scenario tables and analysis
 ```
+
+`conic_kernel.py` trades `astropy.units.Quantity` for plain floats (km, s, km/s, rad):
+it is the shared substrate under optimizer hot loops (the powered Jovian flyby and
+assist-chain searches in `scenario.py`, and `nozzle_analysis.py`), and
+`orbit_utils.py`'s Quantity-valued time-of-flight/true-anomaly functions delegate to
+it rather than duplicating the algebra. See CONTEXT.md, "Conic kernel".
 
 **Key types used throughout:**
 - `astropy.units.Quantity` — all physical values carry units; never use bare floats for physics

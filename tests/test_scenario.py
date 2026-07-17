@@ -7,6 +7,7 @@ from boinor.bodies import Earth, Jupiter
 from boinor.core.iod import izzo
 from boinor.threebody.flybys import compute_flyby
 
+from src import conic_kernel
 from src.astro_constants import (
     ASSIST_CHAIN_MAX_FLYBYS,
     ASSIST_CHAIN_MAX_TRIP_TIME,
@@ -31,11 +32,11 @@ from src.orbit_utils import (
 )
 from src.propulsion import payload_mass_ratio, retrograde_jovian_hohmann_transfer
 from src.scenario import (
+    _ASSIST_MIN_LEG_TIME,
     SCENARIO_COLUMNS,
     PuffSatScenario,
     _assist_chain_params,
     _body_state,
-    _conic_radius_crossings,
     _earth_phase_mismatch,
     _flyby_mismatch_burn,
     _flyby_return_leg,
@@ -48,7 +49,6 @@ from src.scenario import (
     _powered_flyby_params,
     _powered_jovian_terminal,
     _powered_node_burn,
-    _wrap_pi,
     apoapsis_raise_economics,
     apoapsis_raise_finite_burn,
     apoapsis_raise_reintercept,
@@ -666,50 +666,6 @@ def test_venus_reach_departure_floor() -> None:
     assert floor > 0.250 * u.km / u.s
 
 
-def test_conic_radius_crossings_reproduces_hohmann_leg(flyby_params):
-    # Fed the periapsis state of the Earth->Jupiter Hohmann ellipse, the leg
-    # machinery must reproduce the textbook transfer: the Jupiter crossing at
-    # aphelion after the half period (~2.731 yr) at the apoapsis speed, and the
-    # Mars-radius crossings as an outbound/inbound pair sharing h/r.
-    transfer = orbit_from_rp_ra(periapsis_radius=EARTH_A, apoapsis_radius=JUPITER_A)
-    v_peri = periapsis_speed(transfer).to_value(u.km / u.s)
-    jupiter_crossings = _conic_radius_crossings(
-        flyby_params.mu_sun,
-        flyby_params.r_earth_orbit,
-        v_peri,
-        0.0,
-        flyby_params.r_jupiter_orbit,
-    )
-    assert jupiter_crossings
-    v_apo = apoapsis_speed(transfer).to_value(u.km / u.s)
-    leg_time, v_t1, v_r1, _, swept = jupiter_crossings[0]
-    assert is_nearly_equal((leg_time * u.s).to(u.year), 2.731 * u.year, percent=0.1)
-    assert v_t1 == pytest.approx(v_apo, rel=1e-6)
-    assert v_r1 == pytest.approx(0.0, abs=1e-3)
-    # A Hohmann runs perihelion to aphelion, so it sweeps exactly half a turn.
-    # This is the anchor for the swept angle a phased chain steers on: paired
-    # with the leg time it says *where* the craft arrives, not merely when.
-    # Tolerance is 1e-4 deg (0.36 arcsec), not tighter: recovering the true
-    # anomaly at an apsis inverts a cosine through arccos(-1), which is
-    # ill-conditioned there and lands ~1e-6 deg out.
-    assert np.degrees(swept) == pytest.approx(180.0, abs=1e-4)
-    mars_crossings = _conic_radius_crossings(
-        flyby_params.mu_sun,
-        flyby_params.r_earth_orbit,
-        v_peri,
-        0.0,
-        float(MARS_A.to_value(u.km)),
-    )
-    assert len(mars_crossings) == 2
-    outbound = [c for c in mars_crossings if c[3]]
-    inbound = [c for c in mars_crossings if not c[3]]
-    assert len(outbound) == 1 and len(inbound) == 1
-    assert outbound[0][0] < inbound[0][0]  # outward crossing comes first
-    assert outbound[0][2] > 0.0 > inbound[0][2]  # radial speed signs
-    h = flyby_params.r_earth_orbit * v_peri
-    assert outbound[0][1] == pytest.approx(h / float(MARS_A.to_value(u.km)), rel=1e-9)
-
-
 def test_venus_only_pump_ceiling_blocks_vve_at_300_mps(flyby_params) -> None:
     # ADR 0004: a V->V leg preserves the Venus-relative excess speed (the
     # Tisserand invariant), so any number of Venus-only interior flybys caps
@@ -725,12 +681,13 @@ def test_venus_only_pump_ceiling_blocks_vve_at_300_mps(flyby_params) -> None:
         for aim in np.linspace(-np.pi, np.pi, 721):
             v_t = body_from.v_circ + excess * np.cos(aim)
             v_r = excess * np.sin(aim)
-            for _, v_t1, v_r1, _, _ in _conic_radius_crossings(
+            for _, v_t1, v_r1, _, _ in conic_kernel.conic_radius_crossings(
                 params.flyby.mu_sun,
                 body_from.orbit_radius,
                 float(v_t),
                 float(v_r),
                 body_to.orbit_radius,
+                min_leg_time=_ASSIST_MIN_LEG_TIME,
             ):
                 best = max(best, float(np.hypot(v_t1 - body_to.v_circ, v_r1)))
         return best
@@ -863,24 +820,18 @@ def test_bend_limit_matches_boinor_flyby(flyby_params) -> None:
         v_out, delta = compute_flyby(
             v_sc, v_body, body.mu * u.km**3 / u.s**2, body.min_periapsis * u.km
         )
-        mine = 2.0 * np.degrees(
-            np.arcsin(1.0 / (1.0 + body.min_periapsis * excess**2 / body.mu))
-        )
+        ecc = conic_kernel.hyperbolic_eccentricity(body.mu, body.min_periapsis, excess)
+        mine = float(np.degrees(conic_kernel.unpowered_bend_angle(ecc)))
         assert delta.to_value(u.deg) == pytest.approx(mine, abs=1e-9)
         # And the flyby is unpowered: it rotates the excess without rescaling
         # it. That is the Tisserand invariant the whole assist chain rests on.
         excess_out = np.linalg.norm((v_out - v_body).to_value(u.km / u.s))
         assert excess_out == pytest.approx(excess, abs=1e-9)
     # The same formula at the Jovian arrival gives ADR 0006's bend limit.
-    jovian = 2.0 * np.degrees(
-        np.arcsin(
-            1.0
-            / (
-                1.0
-                + flyby_params.periapsis_floor * 15.3685**2 / flyby_params.mu_jupiter
-            )
-        )
+    jovian_ecc = conic_kernel.hyperbolic_eccentricity(
+        flyby_params.mu_jupiter, flyby_params.periapsis_floor, 15.3685
     )
+    jovian = float(np.degrees(conic_kernel.unpowered_bend_angle(jovian_ecc)))
     v_body = np.array([0.0, flyby_params.v_jupiter_orbit, 0.0]) * (u.km / u.s)
     v_sc = np.array([15.3685, flyby_params.v_jupiter_orbit, 0.0]) * (u.km / u.s)
     _, delta = compute_flyby(
@@ -904,8 +855,13 @@ def test_lambert_reproduces_the_conic_propagator(flyby_params) -> None:
     venus, earth, _ = params.bodies
     excess = 2.5875  # the 300 m/s chain's departure
     v_t0, v_r0 = earth.v_circ - excess, 0.0  # aim -180: brake to fall inward
-    crossings = _conic_radius_crossings(
-        params.flyby.mu_sun, earth.orbit_radius, v_t0, v_r0, venus.orbit_radius
+    crossings = conic_kernel.conic_radius_crossings(
+        params.flyby.mu_sun,
+        earth.orbit_radius,
+        v_t0,
+        v_r0,
+        venus.orbit_radius,
+        min_leg_time=_ASSIST_MIN_LEG_TIME,
     )
     assert crossings
     for leg_tof, v_t1, v_r1, _, swept in crossings:
@@ -935,12 +891,13 @@ def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
     excess = 2.5875
     leg1 = [
         c
-        for c in _conic_radius_crossings(
+        for c in conic_kernel.conic_radius_crossings(
             params.flyby.mu_sun,
             earth.orbit_radius,
             earth.v_circ - excess,
             0.0,
             venus.orbit_radius,
+            min_leg_time=_ASSIST_MIN_LEG_TIME,
         )
         if not c[3]
     ]
@@ -952,12 +909,13 @@ def test_phased_ladder_burn_is_free_when_the_planets_cooperate() -> None:
     angle = float(np.arctan2(ex_r, ex_t)) + np.radians(44.08122687)
     leg2 = [
         c
-        for c in _conic_radius_crossings(
+        for c in conic_kernel.conic_radius_crossings(
             params.flyby.mu_sun,
             venus.orbit_radius,
             venus.v_circ + w2 * np.cos(angle),
             w2 * np.sin(angle),
             earth.orbit_radius,
+            min_leg_time=_ASSIST_MIN_LEG_TIME,
         )
         if c[3]
     ]
@@ -1059,13 +1017,20 @@ def test_phased_leg_solves_onto_the_moving_target() -> None:
         v_r0 = 2.5875 * np.sin(rotation)
         swept = [
             c[4]
-            for c in _conic_radius_crossings(
-                params.flyby.mu_sun, earth.orbit_radius, v_t0, v_r0, venus.orbit_radius
+            for c in conic_kernel.conic_radius_crossings(
+                params.flyby.mu_sun,
+                earth.orbit_radius,
+                v_t0,
+                v_r0,
+                venus.orbit_radius,
+                min_leg_time=_ASSIST_MIN_LEG_TIME,
             )
             if abs(c[0] - leg_tof) < 1.0
         ]
         assert swept, "solved leg did not replay"
-        assert _wrap_pi(swept[0] - arrival_is) == pytest.approx(0.0, abs=1e-6)
+        assert conic_kernel.wrap_pi(swept[0] - arrival_is) == pytest.approx(
+            0.0, abs=1e-6
+        )
 
 
 def test_phased_leg_windows_recur_at_the_earth_venus_synodic() -> None:

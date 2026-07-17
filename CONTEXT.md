@@ -103,11 +103,25 @@ excess arrival already yields the best retrograde return (`v_b` ~51 km/s,
 end-to-end ~2.0 on a flat 49–55 km/s plateau); the Jupiter burn only starts paying
 when a `v_b` floor above ~66 km/s is demanded.
 
+**Conic kernel**:
+The float-valued (km, s, km/s, rad) two-body conic geometry shared by this section's
+flyby search, the **unpowered assist chain** below, and `nozzle_analysis.py` —
+`src/conic_kernel.py`: time-of-flight, true-anomaly-at-radius, radius crossings, and
+the eccentricity/bend algebra (`half_turn_angle`, `unpowered_bend_angle`,
+`powered_bend_angle`). Plain floats rather than `astropy.units.Quantity` because the
+optimizer hot loops (`differential_evolution`, the beam search) evaluate this
+geometry many thousands of times per run; `orbit_utils.py`'s Quantity-valued
+time-of-flight and true-anomaly functions delegate to it rather than duplicating the
+algebra, so it sits *below* `orbit_utils.py` in the module hierarchy (CLAUDE.md).
+_Avoid_: re-inlining the eccentricity or bend formulas at a new call site — the whole
+point of the kernel is that this algebra has exactly one home.
+
 **Powered Jovian flyby**:
 A gravity assist with an impulsive periapsis burn. The burn splits the flyby into
 two hyperbolas sharing one periapsis but with *different* eccentricities, so the
-total bend is the sum of two different asymptote half-angles — a burn changes the
-turning geometry, it is not "unpowered bend plus a tangent kick".
+total bend is the sum of two different asymptote half-angles (the **conic kernel**'s
+`powered_bend_angle`) — a burn changes the turning geometry, it is not "unpowered
+bend plus a tangent kick".
 _Avoid_: applying the unpowered turning-angle formula `sin(δ/2) = 1/e` across a
 powered flyby.
 

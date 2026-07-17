@@ -34,6 +34,8 @@ from boinor.bodies import Body, Earth, Moon, Saturn, Sun
 from boinor.maneuver import Maneuver
 from boinor.twobody import Orbit
 
+from src import conic_kernel
+
 
 def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
     """Compute the orbital speed at a given altitude above a body's surface.
@@ -401,8 +403,10 @@ def hyperbolic_eccentricity(
     Returns:
         The (dimensionless) eccentricity, strictly greater than 1.
     """
-    e: u.Quantity = 1 + periapsis_radius * v_infinity**2 / attractor.k
-    return float(e.decompose().value)
+    mu = float(attractor.k.to_value(u.km**3 / u.s**2))
+    r_p = float(periapsis_radius.to_value(u.km))
+    v_inf = float(v_infinity.to_value(u.km / u.s))
+    return conic_kernel.hyperbolic_eccentricity(mu, r_p, v_inf)
 
 
 def true_anomaly_at_radius(
@@ -428,13 +432,12 @@ def true_anomaly_at_radius(
     Raises:
         ValueError: If the radius is not reachable on the orbit (``|cos(nu)| > 1``).
     """
-    semi_latus_rectum: u.Quantity = periapsis_radius * (1 + eccentricity)
-    cos_nu: float = float(
-        ((semi_latus_rectum / radius).decompose().value - 1) / eccentricity
-    )
-    if not -1.0 <= cos_nu <= 1.0:
+    p = float((periapsis_radius * (1 + eccentricity)).to_value(u.km))
+    r = float(radius.to_value(u.km))
+    nu = conic_kernel.true_anomaly_at_radius_rad(p, eccentricity, r)
+    if nu is None:
         raise ValueError("Radius is not reachable on this orbit.")
-    return (np.degrees(np.arccos(cos_nu)) * u.deg).to(u.deg)
+    return (np.degrees(nu) * u.deg).to(u.deg)
 
 
 def elliptic_time_of_flight(
@@ -472,16 +475,12 @@ def elliptic_time_of_flight(
         raise ValueError(
             "elliptic_time_of_flight requires an elliptical orbit (0 <= e < 1)."
         )
-    nu: float = true_anomaly.to(u.rad).value
-    eccentric_anomaly: float = 2.0 * np.arctan2(
-        np.sqrt(1.0 - eccentricity) * np.sin(nu / 2.0),
-        np.sqrt(1.0 + eccentricity) * np.cos(nu / 2.0),
-    )
-    eccentric_anomaly = eccentric_anomaly % (2.0 * np.pi)
-    mean_anomaly: float = eccentric_anomaly - eccentricity * np.sin(eccentric_anomaly)
-    semimajor_axis: u.Quantity = periapsis_radius / (1.0 - eccentricity)
-    mean_motion: u.Quantity = np.sqrt(attractor.k / semimajor_axis**3)
-    return (mean_anomaly / mean_motion).to(u.day)
+    mu = float(attractor.k.to_value(u.km**3 / u.s**2))
+    r_p = float(periapsis_radius.to_value(u.km))
+    nu = float(true_anomaly.to_value(u.rad))
+    a = r_p / (1.0 - eccentricity)
+    tof = conic_kernel.elliptic_tof_seconds(mu, a, eccentricity, nu)
+    return (tof * u.s).to(u.day)
 
 
 def hyperbolic_time_of_flight(
@@ -520,15 +519,12 @@ def hyperbolic_time_of_flight(
         raise ValueError(
             "hyperbolic_time_of_flight requires a hyperbolic orbit (e > 1)."
         )
-    nu: float = true_anomaly.to(u.rad).value
-    cosh_f: float = (eccentricity + np.cos(nu)) / (1 + eccentricity * np.cos(nu))
-    hyperbolic_anomaly: float = float(np.arccosh(cosh_f))
-    mean_anomaly: float = (
-        eccentricity * np.sinh(hyperbolic_anomaly) - hyperbolic_anomaly
-    )
-    abs_semimajor_axis: u.Quantity = attractor.k / v_infinity**2
-    mean_motion: u.Quantity = np.sqrt(attractor.k / abs_semimajor_axis**3)
-    return (mean_anomaly / mean_motion).to(u.day)
+    mu = float(attractor.k.to_value(u.km**3 / u.s**2))
+    v_inf = float(v_infinity.to_value(u.km / u.s))
+    nu = float(true_anomaly.to_value(u.rad))
+    a_abs = mu / (v_inf * v_inf)
+    tof = conic_kernel.hyperbolic_tof_seconds(mu, a_abs, eccentricity, nu)
+    return (tof * u.s).to(u.day)
 
 
 def orbit_from_periapsis_speed_and_apoapsis_radius(
