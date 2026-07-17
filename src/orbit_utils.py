@@ -109,7 +109,10 @@ def speed_with_escape_energy(
         The local speed at the given altitude (astropy Quantity, km/s).
     """
     v_esc: u.Quantity = escape_velocity(body, altitude)
-    return np.sqrt(v_infinity**2 + v_esc**2).to(u.km / u.s)
+    result = conic_kernel.speed_with_escape_energy(
+        float(v_infinity.to_value(u.km / u.s)), float(v_esc.to_value(u.km / u.s))
+    )
+    return result * u.km / u.s
 
 
 def get_period(body: Body, a: u.Quantity) -> u.Quantity:

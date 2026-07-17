@@ -106,15 +106,21 @@ when a `v_b` floor above ~66 km/s is demanded.
 **Conic kernel**:
 The float-valued (km, s, km/s, rad) two-body conic geometry shared by this section's
 flyby search, the **unpowered assist chain** below, and `nozzle_analysis.py` —
-`src/conic_kernel.py`: time-of-flight, true-anomaly-at-radius, radius crossings, and
-the eccentricity/bend algebra (`half_turn_angle`, `unpowered_bend_angle`,
-`powered_bend_angle`). Plain floats rather than `astropy.units.Quantity` because the
+`src/conic_kernel.py`: time-of-flight, true-anomaly-at-radius, radius crossings, the
+eccentricity/bend algebra (`half_turn_angle`, `unpowered_bend_angle`,
+`powered_bend_angle`), the branch-cut angle wrap (`wrap_pi`), and the well-folding
+speed formula (`speed_with_escape_energy`, `sqrt(v_infinity**2 + v_esc**2)` in
+quadrature). Plain floats rather than `astropy.units.Quantity` because the
 optimizer hot loops (`differential_evolution`, the beam search) evaluate this
 geometry many thousands of times per run; `orbit_utils.py`'s Quantity-valued
-time-of-flight and true-anomaly functions delegate to it rather than duplicating the
-algebra, so it sits *below* `orbit_utils.py` in the module hierarchy (CLAUDE.md).
-_Avoid_: re-inlining the eccentricity or bend formulas at a new call site — the whole
-point of the kernel is that this algebra has exactly one home.
+time-of-flight, true-anomaly, and escape-energy functions delegate to it rather than
+duplicating the algebra, so it sits *below* `orbit_utils.py` in the module hierarchy
+(CLAUDE.md).
+_Avoid_: re-inlining the eccentricity, bend, angle-wrap, or well-folding formulas at
+a new call site — the whole point of the kernel is that this algebra has exactly one
+home. (Three ad hoc re-implementations of the angle wrap and one of well-folding were
+found and fixed when this was written up — check for existing kernel coverage before
+adding a new one.)
 
 **Retrograde-return legs**:
 The float-valued substrate one layer up from the **conic kernel**, shared by this

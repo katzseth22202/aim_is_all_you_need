@@ -415,3 +415,20 @@ def wrap_pi(angle: float) -> float:
         -pi (the branch cut), never +pi.
     """
     return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+
+def speed_with_escape_energy(v_infinity: float, v_esc: float) -> float:
+    """Local two-body speed v(r) = sqrt(v_infinity**2 + v_esc**2).
+
+    Vis-viva for a hyperbolic orbit: the speed at a radius r given the
+    hyperbolic-excess speed far from the body and the escape speed at r. The
+    excess kinetic energy and the escape energy add in quadrature.
+
+    Args:
+        v_infinity: Hyperbolic-excess speed far from the body (km/s).
+        v_esc: Escape speed at the radius of interest (km/s).
+
+    Returns:
+        The local speed at that radius (km/s).
+    """
+    return float(np.hypot(v_infinity, v_esc))

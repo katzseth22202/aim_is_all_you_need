@@ -256,11 +256,23 @@ def test_wrap_pi() -> None:
     assert conic_kernel.wrap_pi(2.5 * np.pi) == pytest.approx(0.5 * np.pi)
 
 
+def test_speed_with_escape_energy_matches_quadrature() -> None:
+    # Vis-viva for a hyperbolic orbit: excess kinetic energy and escape energy
+    # add in quadrature, not linearly.
+    assert conic_kernel.speed_with_escape_energy(3.0, 4.0) == pytest.approx(5.0)
+    # Zero excess speed leaves exactly the escape speed.
+    assert conic_kernel.speed_with_escape_energy(0.0, 11.2) == pytest.approx(11.2)
+    # Symmetric in its two arguments -- it's a hypot, not a directional fold.
+    assert conic_kernel.speed_with_escape_energy(5.0, 12.0) == pytest.approx(
+        conic_kernel.speed_with_escape_energy(12.0, 5.0)
+    )
+
+
 def test_bend_limit_matches_boinor_flyby() -> None:
     # The turning formula (e = 1 + r_p*w^2/mu, delta = 2*asin(1/e)) is the
     # foundation of every bend limit the assist chain and the Jovian terminal
     # use. Check it against an implementation we did not write, self-contained
-    # (no mission-specific altitude floors -- see test_scenario.py's
+    # (no mission-specific altitude floors -- see test_retrograde_return_legs.py's
     # test_bend_limit_matches_boinor_flyby for the chain's actual numbers).
     cases = [
         (

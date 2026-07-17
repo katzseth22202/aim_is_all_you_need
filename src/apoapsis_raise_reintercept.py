@@ -59,16 +59,20 @@ from src.propulsion import (
 
 
 def _wrap_to_180_deg(angle: u.Quantity) -> u.Quantity:
-    """Wrap an angle into the half-open interval ``(-180, 180]`` degrees.
+    """Wrap an angle into the half-open interval ``[-180, 180)`` degrees.
+
+    Delegates to :func:`conic_kernel.wrap_pi` -- same branch cut, same
+    formula, just degrees in and out.
 
     Args:
         angle: The angle to wrap (astropy Quantity, angle units).
 
     Returns:
-        The equivalent angle in ``(-180, 180]`` degrees (astropy Quantity).
+        The equivalent angle in ``[-180, 180)`` degrees (astropy Quantity).
+        Odd multiples of 180 resolve to -180, never +180.
     """
-    deg: float = angle.to(u.deg).value
-    return (((deg + 180.0) % 360.0) - 180.0) * u.deg
+    wrapped_rad = conic_kernel.wrap_pi(float(angle.to_value(u.rad)))
+    return (wrapped_rad * u.rad).to(u.deg)
 
 
 @dataclass(frozen=True)
@@ -562,7 +566,7 @@ def apoapsis_raise_finite_burn(
 
     swept = (np.degrees(np.arctan2(y, x)) - 180.0) % 360.0
     earth_advance = 360.0 * (arrival_time / year_s)
-    residual = ((swept - earth_advance + 180.0) % 360.0) - 180.0
+    residual = np.degrees(conic_kernel.wrap_pi(np.radians(swept - earth_advance)))
 
     impulsive_closing: float = reintercept.closing_speed.to(u.km / u.s).value
     closing_speed_error: float = float(

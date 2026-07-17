@@ -235,7 +235,7 @@ def _flyby_return_leg(
     # Un-mirrored the tangential speed is -v_t1, so the Earth-relative closing
     # speed is hypot(v_t1 + v_earth, v_r1).
     closing = float(np.hypot(v_t1 + params.v_earth_orbit, v_r1))
-    collision = float(np.hypot(closing, params.v_esc_surface))
+    collision = conic_kernel.speed_with_escape_energy(closing, params.v_esc_surface)
     return _ReturnLeg(
         perihelion=perihelion,
         tof=tof,
@@ -282,7 +282,7 @@ def _earth_phase_mismatch(
     crossing = jupiter_longitude - leg.sweep_angle
     n_earth = params.v_earth_orbit / params.r_earth_orbit
     earth = earth_longitude_0 + n_earth * arrival_time
-    return float((crossing - earth + np.pi) % (2.0 * np.pi) - np.pi)
+    return conic_kernel.wrap_pi(crossing - earth)
 
 
 @dataclass(frozen=True)
