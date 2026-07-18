@@ -5,7 +5,7 @@ orbital parameters, velocities, and trajectories. It serves as the foundation
 for orbital calculations used throughout the PuffSat propulsion system.
 
 Key Functions:
-    - body_speed: Calculate orbital speed at given altitude
+    - speed_around_attractor: Calculate circular orbital speed around a body
     - escape_velocity: Calculate escape velocity from celestial bodies
     - orbit_from_rp_ra: Create orbits from periapsis/apoapsis radii
     - orbit_from_periapsis_speed_and_apoapsis_radius: Create orbits from a
@@ -35,23 +35,6 @@ from boinor.maneuver import Maneuver
 from boinor.twobody import Orbit
 
 from src import conic_kernel
-
-
-def body_speed(body: Body, altitude: u.Quantity) -> u.Quantity:
-    """Compute the orbital speed at a given altitude above a body's surface.
-
-    Args:
-        body: A boinor Body instance
-        altitude: Altitude above the body's surface (astropy Quantity)
-
-    Returns:
-        The orbital speed at the given altitude (astropy Quantity, m/s)
-    """
-
-    orbit: Orbit = Orbit.circular(body, altitude)
-    _, velocity_vector = orbit.rv()
-    speed = np.linalg.norm(velocity_vector.value) * velocity_vector.unit
-    return speed.to(u.km / u.s)
 
 
 def speed_around_attractor(a: u.Quantity, attractor: Body = Sun) -> u.Quantity:
@@ -127,34 +110,6 @@ def get_period(body: Body, a: u.Quantity) -> u.Quantity:
     """
     T = (2 * np.pi / np.sqrt(body.k)) * (a**1.5)
     return T.to(u.second)
-
-
-def get_semimajor_axis(body: Body, T: u.Quantity) -> u.Quantity:
-    """Compute the semi-major axis for a given orbital period around a body.
-
-    Args:
-        body: A boinor Body instance.
-        T: Orbital period (astropy Quantity).
-
-    Returns:
-        The semi-major axis (astropy Quantity, km).
-    """
-    a_cubed = (T**2 * body.k) / (4 * np.pi**2)
-    a = a_cubed ** (1 / 3)
-    return a.to(u.km)
-
-
-def distance_to_center(altitude: u.Quantity, body: Body) -> u.Quantity:
-    """Compute the distance from the center of a body given altitude and body radius.
-
-    Args:
-        altitude: Altitude above the body's surface (astropy Quantity).
-        body: The celestial body (boinor Body).
-
-    Returns:
-        The distance from the center of the body (astropy Quantity, km).
-    """
-    return (body.R + altitude).to(u.km)
 
 
 def orbit_from_rp_ra(
