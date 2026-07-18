@@ -2,39 +2,17 @@
 
 import pytest
 from astropy import units as u
-from boinor.bodies import Earth, Moon, Sun
-from boinor.maneuver import Maneuver
+from boinor.bodies import Earth, Moon
 
-from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
+from src.astro_constants import STD_FUDGE_FACTOR
 from src.propulsion import (
     burn_for_v_infinity,
     exhaust_velocity_from_isp,
-    get_burn,
-    get_hohmann_burns,
-    hohmann_transfer,
     payload_mass_ratio,
     retrograde_jovian_hohmann_transfer,
     rocket_equation,
 )
 from tests.test_helpers import is_nearly_equal
-
-
-def test_get_hohmann_burns() -> None:
-    """Test get_hohmann_burns function."""
-    transfer: Maneuver = hohmann_transfer(r_i=EARTH_A, r_f=JUPITER_A)
-    burns = get_hohmann_burns(transfer)
-
-    assert len(burns) == 2
-    assert is_nearly_equal(burns[0], 8757 * u.m / u.s)
-    assert is_nearly_equal(burns[1], 5628 * u.m / u.s)
-
-
-def test_hohmann_transfer() -> None:
-    """Test hohmann_transfer function."""
-    transfer: Maneuver = hohmann_transfer(r_i=EARTH_A, r_f=JUPITER_A)
-    initial_burn, final_burn = get_hohmann_burns(transfer)
-    assert is_nearly_equal(initial_burn, 8757 * u.m / u.s)
-    assert is_nearly_equal(final_burn, 5628 * u.m / u.s)
 
 
 def test_payload_mass_ratio() -> None:
@@ -94,10 +72,19 @@ def test_exhaust_velocity_from_isp() -> None:
 
 
 def test_retrograde_jovian_hohmann_transfer() -> None:
-    """Test retrograde_jovian_hohmann_transfer function."""
+    """Test retrograde_jovian_hohmann_transfer function.
+
+    69.2702 km/s, not the previously-computed 69.2730: the old implementation
+    built its initial circular orbit via boinor's Orbit.circular(attractor,
+    alt), whose second argument is altitude above the attractor's *surface*,
+    not absolute orbital radius -- so passing JUPITER_A there silently
+    inflated Jupiter's orbital radius by Sun.R (~695,700 km, ~0.09% of
+    Jupiter's orbital radius). Confirmed independently via a closed-form
+    vis-viva calculation.
+    """
     speed = retrograde_jovian_hohmann_transfer()
-    expected = 69.272 * u.km / u.s
-    assert is_nearly_equal(speed, expected)
+    expected = 69.2702 * u.km / u.s
+    assert is_nearly_equal(speed, expected, percent=1e-4)
 
 
 def test_burn_for_v_infinity_earth_leo() -> None:

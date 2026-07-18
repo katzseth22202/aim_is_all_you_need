@@ -98,13 +98,19 @@ def test_paper_scenarios_is_uniform_catalog() -> None:
 def test_paper_scenarios_mass_ratios_regression() -> None:
     # Pin the paper's headline mass ratios so no future refactor can silently
     # shift them. Values captured from the repo's primitives.
+    #
+    # Indices 3-5 (v_b = retrograde_jovian_hohmann_transfer()) were corrected
+    # here: the old value baked in a boinor Orbit.circular altitude/radius
+    # bug that inflated Jupiter's orbital radius by Sun.R (~695,700 km), which
+    # overstated v_b by ~2.7 m/s (~0.004%) -- see
+    # test_propulsion.test_retrograde_jovian_hohmann_transfer.
     expected = [
         1.28130083,
         2.30831207,
         2.97219375,
-        3.82951318,
-        1.84518438,
-        9.33111762,
+        3.82932510,
+        1.84506818,
+        9.33071486,
         2.30831207,
         1.29699573,
     ]
@@ -149,8 +155,10 @@ def test_earth_reintercept_scenarios_phases_for_return() -> None:
     assert is_nearly_equal(
         phased.v_rf, single_impulse_resonant_dive().earth_boost, percent=1e-9
     )
-    # Pin the phased mass ratio (captured from the repo's primitives).
-    assert float(phased.mass_ratio) == pytest.approx(2.05041932, rel=1e-6)
+    # Pin the phased mass ratio (captured from the repo's primitives). Corrected
+    # from 2.05041932 for the same retrograde_jovian_hohmann_transfer fix as
+    # test_paper_scenarios_mass_ratios_regression.
+    assert float(phased.mass_ratio) == pytest.approx(2.05029641, rel=1e-6)
     # The apoapsis-raise row is scored on its own collision: v_rf = 200 km Earth
     # escape speed, v_b = the ~24 km/s closing speed, ratio ~2.62.
     apoapsis_row = catalog[1]

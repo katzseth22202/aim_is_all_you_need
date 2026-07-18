@@ -7,7 +7,6 @@ orbit_utils.py to provide higher-level propulsion analysis.
 Key Functions:
     - rocket_equation: Tsiolkovsky rocket equation for propellant mass
     - payload_mass_ratio: Calculate payload/PuffSat mass ratios
-    - hohmann_transfer: Plan Hohmann transfer maneuvers
     - burn_for_v_infinity: Calculate burns for hyperbolic trajectories
     - retrograde_jovian_hohmann_transfer: Specialized Jupiter-Earth transfer
 
@@ -19,43 +18,18 @@ This module is designed to be imported by scenario.py for scenario analysis
 and by main.py for high-level propulsion calculations.
 """
 
-from typing import List, Tuple
-
 import astropy.units as u
 import numpy as np
-import numpy.typing as npt
 from astropy.constants import g0
-from boinor.bodies import Body, Earth, Sun
-from boinor.maneuver import Maneuver
-from boinor.twobody import Orbit
+from boinor.bodies import Body, Earth
 
 from src.astro_constants import EARTH_A, JUPITER_A, LEO_ALTITUDE, STD_FUDGE_FACTOR
-from src.orbit_utils import as_scalar, speed_around_attractor, speed_with_escape_energy
-
-
-def get_burn(impulse: Tuple[npt.ArrayLike, npt.ArrayLike]) -> u.Quantity:
-    """Compute the magnitude of the second impulse vector in a maneuver.
-
-    Args:
-        impulse: Tuple containing two impulse vectors (numpy arrays).
-
-    Returns:
-        The magnitude of the second impulse (astropy Quantity).
-    """
-    return as_scalar(impulse[1])
-
-
-def get_hohmann_burns(h: Maneuver) -> List[u.Quantity]:
-    """Compute the burn magnitudes for a Hohmann transfer maneuver.
-
-    Args:
-        h: A Maneuver object representing a Hohmann transfer.
-
-    Returns:
-        A list containing the magnitudes of the two burns (astropy Quantities).
-    """
-    i_1, i_2 = h.impulses
-    return [get_burn(i_1), get_burn(i_2)]
+from src.orbit_utils import (
+    orbit_from_rp_ra,
+    periapsis_speed,
+    speed_around_attractor,
+    speed_with_escape_energy,
+)
 
 
 def payload_mass_ratio(
@@ -113,23 +87,6 @@ def rocket_equation(delta_v: u.Quantity, exhaust_v: u.Quantity) -> u.Quantity:
     return 1 - np.exp(-delta_v / exhaust_v)
 
 
-def hohmann_transfer(
-    r_i: u.Quantity, r_f: u.Quantity, attractor: Body = Sun
-) -> Maneuver:
-    """Compute the Hohmann transfer maneuver between two circular orbits.
-
-    Args:
-        r_i: Initial orbit radius (astropy Quantity).
-        r_f: Final orbit radius (astropy Quantity).
-        attractor: The central body (boinor Body, default Sun).
-
-    Returns:
-        A Maneuver object representing the Hohmann transfer.
-    """
-    initial_orbit: Orbit = Orbit.circular(attractor, r_i)
-    return Maneuver.hohmann(initial_orbit, r_f)
-
-
 def burn_for_v_infinity(
     v_infinity: u.Quantity,
     body: Body = Earth,
@@ -170,17 +127,16 @@ def burn_for_v_infinity(
 def retrograde_jovian_hohmann_transfer() -> u.Quantity:
     """Compute the reverse Hohmann transfer maneuver from Jupiter to Earth.
 
-    Args:
-        None
-
     Returns:
         the Earth crossing velocity in km/s
     """
-
-    prograde_hohmann_speed = get_hohmann_burns(hohmann_transfer(JUPITER_A, EARTH_A))[1]
+    transfer = orbit_from_rp_ra(apoapsis_radius=JUPITER_A, periapsis_radius=EARTH_A)
+    prograde_speed = periapsis_speed(transfer)
     earth_speed = speed_around_attractor(EARTH_A)
-    # since we are retrograde, we add twice the Earth's speed
-    retrograde_speed = prograde_hohmann_speed + 2 * earth_speed
+    # Retrograde: the transfer ellipse's prograde periapsis speed, plus
+    # Earth's own speed in the opposite direction, gives the closing speed
+    # of a head-on encounter.
+    retrograde_speed = prograde_speed + earth_speed
     # add the potential energy of the Earth's orbit, which equals the kinetic
     # energy of Earth's escape velocity (escape energy adds in quadrature).
     return speed_with_escape_energy(retrograde_speed, Earth)
