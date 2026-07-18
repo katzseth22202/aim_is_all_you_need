@@ -42,7 +42,6 @@ from src.heliocentric_reintercept import (
     solar_dive_reintercept_gap,
 )
 from src.jovian_flyby import jupiter_flyby_vb_trade_curve, powered_jovian_flyby_return
-from src.propulsion import payload_mass_ratio
 from src.scenario_catalog import (
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
@@ -50,7 +49,7 @@ from src.scenario_catalog import (
     find_parker_orbit_period,
     lunar_return_transfer_dv,
     paper_scenarios,
-    parker_injection_burns,
+    parker_rows_rescored_at,
     scenarios_to_dataframe,
     solar_fusion_velocity,
     solar_impact_dv,
@@ -229,7 +228,7 @@ def main() -> None:
         "at 200 km, v_p=closing speed) -- matches tab:mass_scenarios' "
         "11.009 / 24.059 / 0 / 2.616 row",
         f"net growth per cycle = {apoapsis_econ.net_growth_per_cycle:.4f} "
-        f"(+{100 * (apoapsis_econ.net_growth_per_cycle - 1):.1f}% per "
+        f"(+{apoapsis_econ.net_growth_percent:.1f}% per "
         f"{apoapsis_econ.cycle_time:.3f}; {apoapsis_econ.doublings_per_year:.3f} "
         "doublings/yr)",
         f"time to millionfold = {apoapsis_econ.time_to_millionfold:.1f} "
@@ -299,7 +298,9 @@ def main() -> None:
     # rows above deliberately keep the paper's published retrograde-Hohmann
     # v_b ~ 69.27 km/s until the paper adopts these numbers.
     flyby = powered_jovian_flyby_return()
-    parker_prograde_burn, parker_retrograde_burn = parker_injection_burns()
+    parker_prograde_ratio, parker_retrograde_ratio = parker_rows_rescored_at(
+        flyby.collision_speed
+    )
     print_paper_point(
         "Powered Jovian Flyby Retrograde Return -- PLANNED subsection under "
         "Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
@@ -328,9 +329,8 @@ def main() -> None:
         f"{flyby.return_time:.2f} back = {flyby.total_time:.2f} "
         f"(cap {JUPITER_FLYBY_MAX_TOF})",
         "Parker rows re-scored at the achieved v_b: prograde ratio = "
-        f"{payload_mass_ratio(v_rf=parker_prograde_burn, v_b=flyby.collision_speed):.3f}, "
-        "retrograde ratio = "
-        f"{payload_mass_ratio(v_rf=parker_retrograde_burn, v_b=flyby.collision_speed):.3f}",
+        f"{parker_prograde_ratio:.3f}, retrograde ratio = "
+        f"{parker_retrograde_ratio:.3f}",
     )
     print(
         "\nPowered Jovian flyby -- min total burn vs target v_b (ADR 0002 "

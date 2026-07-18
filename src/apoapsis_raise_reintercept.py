@@ -343,6 +343,8 @@ class ApoapsisRaiseEconomics:
             PuffSat mass, m_r / m_p.
         net_growth_per_cycle: payload_puffsat_mass_ratio times the combined dry
             fraction -- the cascade's per-cycle multiplier.
+        net_growth_percent: net_growth_per_cycle expressed as a percentage
+            gain over one cycle, i.e. 100 * (net_growth_per_cycle - 1).
         cycle_time: One Earth-to-Earth cycle (astropy Quantity, years).
         cycles_to_millionfold: Cycles to multiply launch capacity a millionfold.
         time_to_millionfold: cycles_to_millionfold times the cycle time (astropy
@@ -352,6 +354,7 @@ class ApoapsisRaiseEconomics:
 
     payload_puffsat_mass_ratio: float
     net_growth_per_cycle: float
+    net_growth_percent: float
     cycle_time: u.Quantity
     cycles_to_millionfold: float
     time_to_millionfold: u.Quantity
@@ -396,6 +399,7 @@ def apoapsis_raise_economics(
     return ApoapsisRaiseEconomics(
         payload_puffsat_mass_ratio=mass_ratio,
         net_growth_per_cycle=net_growth,
+        net_growth_percent=100.0 * (net_growth - 1.0),
         cycle_time=cycle_time.to(u.year),
         cycles_to_millionfold=cycles_to_millionfold,
         time_to_millionfold=time_to_millionfold,

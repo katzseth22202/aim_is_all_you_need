@@ -15,6 +15,8 @@ from src.scenario_catalog import (
     find_best_lunar_return,
     lunar_return_transfer_dv,
     paper_scenarios,
+    parker_injection_burns,
+    parker_rows_rescored_at,
     scenarios_to_dataframe,
     solar_impact_dv,
     suborbital_200km_propellant_fraction,
@@ -141,6 +143,27 @@ def test_find_best_lunar_return_raises_when_no_feasible_burn() -> None:
     # filtered out and the function raises rather than returning None.
     with pytest.raises(ValueError, match="No valid burn"):
         find_best_lunar_return(retrograde_dv_required=1000 * u.km / u.s)
+
+
+def test_parker_rows_rescored_at_matches_payload_mass_ratio() -> None:
+    # parker_rows_rescored_at is the named home for a derivation main.py used
+    # to compute inline: re-score the two Parker injection burns' mass ratios
+    # against an arbitrary v_b, e.g. the powered Jovian flyby's achieved
+    # collision speed rather than the retrograde-Hohmann one paper_scenarios
+    # uses.
+    prograde_burn, retrograde_burn = parker_injection_burns()
+    v_b = 50 * u.km / u.s
+    prograde_ratio, retrograde_ratio = parker_rows_rescored_at(v_b)
+    assert prograde_ratio == pytest.approx(
+        payload_mass_ratio(v_rf=prograde_burn, v_b=v_b)
+    )
+    assert retrograde_ratio == pytest.approx(
+        payload_mass_ratio(v_rf=retrograde_burn, v_b=v_b)
+    )
+    # A higher v_b (more collision energy to work with) gives a better ratio.
+    hotter_prograde, hotter_retrograde = parker_rows_rescored_at(60 * u.km / u.s)
+    assert hotter_prograde > prograde_ratio
+    assert hotter_retrograde > retrograde_ratio
 
 
 def test_earth_reintercept_scenarios_phases_for_return() -> None:

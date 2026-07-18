@@ -66,6 +66,11 @@ def test_apoapsis_raise_economics_matches_design_point() -> None:
     econ = apoapsis_raise_economics()
     assert econ.payload_puffsat_mass_ratio == pytest.approx(2.6157, rel=1e-3)  # ~2.62
     assert econ.net_growth_per_cycle == pytest.approx(1.5453, rel=1e-3)  # doc 1.5469
+    # net_growth_percent is just net_growth_per_cycle as a percentage gain --
+    # doc's "~+54.7%".
+    assert econ.net_growth_percent == pytest.approx(
+        100.0 * (econ.net_growth_per_cycle - 1.0)
+    )
     assert is_nearly_equal(econ.cycle_time, 1.69196 * u.year, percent=0.001)  # 1.692
     assert econ.cycles_to_millionfold == pytest.approx(31.75, rel=1e-2)  # doc 31.7
     assert is_nearly_equal(

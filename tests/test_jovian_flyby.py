@@ -19,7 +19,11 @@ from src.jovian_flyby import (
 from src.orbit_utils import escape_velocity, speed_with_escape_energy
 from src.propulsion import payload_mass_ratio, retrograde_jovian_hohmann_transfer
 from src.retrograde_return_legs import _powered_flyby_leg
-from src.scenario_catalog import lunar_transfer_periapsis_speed, parker_injection_burns
+from src.scenario_catalog import (
+    lunar_transfer_periapsis_speed,
+    parker_injection_burns,
+    parker_rows_rescored_at,
+)
 from tests.test_helpers import is_nearly_equal
 
 
@@ -79,9 +83,17 @@ def test_parker_rows_rescoreable_at_flyby_v_b(flyby_optimum):
     prograde_burn, retrograde_burn = parker_injection_burns()
     assert prograde_burn < flyby_optimum.collision_speed
     assert retrograde_burn < flyby_optimum.collision_speed
-    assert payload_mass_ratio(v_rf=prograde_burn, v_b=flyby_optimum.collision_speed) > 0
-    assert (
-        payload_mass_ratio(v_rf=retrograde_burn, v_b=flyby_optimum.collision_speed) > 0
+    prograde_ratio, retrograde_ratio = parker_rows_rescored_at(
+        flyby_optimum.collision_speed
+    )
+    assert prograde_ratio > 0
+    assert retrograde_ratio > 0
+    # Matches calling payload_mass_ratio directly against the same burns.
+    assert prograde_ratio == pytest.approx(
+        payload_mass_ratio(v_rf=prograde_burn, v_b=flyby_optimum.collision_speed)
+    )
+    assert retrograde_ratio == pytest.approx(
+        payload_mass_ratio(v_rf=retrograde_burn, v_b=flyby_optimum.collision_speed)
     )
 
 

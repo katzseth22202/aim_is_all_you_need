@@ -152,6 +152,27 @@ def parker_injection_burns() -> Tuple[u.Quantity, u.Quantity]:
     return prograde, retrograde
 
 
+def parker_rows_rescored_at(v_b: u.Quantity) -> Tuple[float, float]:
+    """Re-score the two Parker-injection catalog rows at a different v_b.
+
+    The catalog's Parker rows (:func:`paper_scenarios`) score against the
+    retrograde-Hohmann v_b; this re-scores the same two rows' v_rf against an
+    alternative achieved collision speed, e.g. the powered Jovian flyby's
+    optimum (CONTEXT.md "Jupiter powered-flyby retrograde return").
+
+    Args:
+        v_b: Collision speed to score against (astropy Quantity).
+
+    Returns:
+        (prograde mass ratio, retrograde mass ratio).
+    """
+    prograde_burn, retrograde_burn = parker_injection_burns()
+    return (
+        payload_mass_ratio(v_rf=prograde_burn, v_b=v_b),
+        payload_mass_ratio(v_rf=retrograde_burn, v_b=v_b),
+    )
+
+
 def paper_scenarios() -> List[PuffSatScenario]:
     """Build the catalog of PuffSat scenarios analyzed in the paper.
 
