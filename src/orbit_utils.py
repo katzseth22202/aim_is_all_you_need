@@ -38,14 +38,15 @@ from src import conic_kernel
 
 
 def speed_around_attractor(a: u.Quantity, attractor: Body = Sun) -> u.Quantity:
-    """Compute the orbital speed at a given altitude above an attractor's surface.
+    """Compute the circular orbital speed at an absolute orbital radius.
 
     Args:
-        a: Altitude above the attractor's surface (astropy Quantity).
+        a: Absolute orbital radius, i.e. distance from the attractor's center
+            (astropy Quantity). Not an altitude above the surface.
         attractor: The central body (boinor Body, default Sun).
 
     Returns:
-        The orbital speed at the given altitude (astropy Quantity, km/s).
+        The circular orbital speed at that radius (astropy Quantity, km/s).
     """
     orbit: Orbit = Orbit.circular(attractor, a - attractor.R)
     _, velocity_vector = orbit.rv()
