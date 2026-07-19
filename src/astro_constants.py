@@ -164,3 +164,21 @@ APOAPSIS_RAISE_APHELION_BRACKET = (2.1, 2.45)
 # on apoapsis reproduces the impulsive kick to within ~1% in closing speed; apoapsis
 # is the slowest part of the orbit, so the thrust stays near-tangential throughout.
 APOAPSIS_RAISE_SEP_BURN_DURATION = 90 * u.day
+
+# --- Near-escape dry-mass disposal: Earth reentry vs. lunar impact (paper
+#     sec:coordinator_node_dry_mass_disposal) ---
+# A spent package pushed just past Earth's escape velocity coasts out to the edge
+# of Earth's gravitational reach, nearly stops (a near-parabolic orbit's speed
+# there is essentially the local escape speed), and a small retrograde burn at
+# that turnaround lowers its perigee for disposal. Two targets: graze the
+# atmosphere and reenter, or fall only to lunar distance and strike the Moon. The
+# Moon route lowers perigee less, so it costs less delta-v.
+#
+# Turnaround radius: Earth's sphere of influence is a_earth*(m_earth/m_sun)^(2/5)
+# ~= 924,000 km; the paper rounds this to "roughly 900,000 km" for the near-zero
+# turnaround speed (~0.94 km/s) it quotes, so we pin the same round value here.
+EARTH_GRAVITATIONAL_REACH = 900000 * u.km
+# Perigee radius that grazes the atmosphere for reentry. ~6500 km is Earth's
+# ~6371 km radius plus a ~130 km reentry-interface altitude; the paper quotes
+# "the atmosphere near 6500 km" as this target.
+REENTRY_PERIGEE_RADIUS = 6500 * u.km

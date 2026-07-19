@@ -11,9 +11,12 @@ from src.propulsion import payload_mass_ratio
 from src.scenario_catalog import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
+    earth_reentry_disposal_dv,
     earth_reintercept_scenarios,
     find_best_lunar_return,
+    lunar_impact_disposal_dv,
     lunar_return_transfer_dv,
+    near_escape_disposal_dv,
     paper_scenarios,
     parker_injection_burns,
     parker_rows_rescored_at,
@@ -58,6 +61,54 @@ def test_lunar_return_transfer_dv() -> None:
     # Within 1% of the values computed from the repo's primitives.
     assert is_nearly_equal(venus_dv, 372.36 * u.m / u.s, percent=0.01)
     assert is_nearly_equal(mars_dv, 480.06 * u.m / u.s, percent=0.01)
+
+
+def test_near_escape_disposal_reentry_vs_lunar() -> None:
+    # Paper sec:coordinator_node_dry_mass_disposal: from a just-past-escape
+    # turnaround near Earth's gravitational reach (~900,000 km, where the package
+    # crawls at ~0.94 km/s), the retrograde burn to graze the atmosphere is
+    # ~0.86 km/s while the burn to fall only to lunar distance is ~0.43 km/s.
+    reentry_dv = earth_reentry_disposal_dv()
+    lunar_dv = lunar_impact_disposal_dv()
+    # The headline claim: hitting the Moon costs less delta-v than reentering.
+    assert lunar_dv < reentry_dv
+    # Within 1% of the values computed from the repo's primitives.
+    assert is_nearly_equal(reentry_dv, 0.8615 * u.km / u.s, percent=0.01)
+    assert is_nearly_equal(lunar_dv, 0.4263 * u.km / u.s, percent=0.01)
+
+
+def test_lunar_impact_redirect_stays_below_reentry() -> None:
+    # Folding a 20-30 deg plane-change redirect into the retrograde burn (to match
+    # the Moon's orbital plane) raises the lunar-impact cost to ~0.49-0.56 km/s,
+    # still below the ~0.86 km/s reentry burn. Zero redirect recovers the coplanar
+    # perigee-lowering delta-v exactly.
+    coplanar = lunar_impact_disposal_dv()
+    assert lunar_impact_disposal_dv(0 * u.deg) == coplanar
+    dv_20 = lunar_impact_disposal_dv(20 * u.deg)
+    dv_30 = lunar_impact_disposal_dv(30 * u.deg)
+    assert coplanar < dv_20 < dv_30 < earth_reentry_disposal_dv()
+    assert is_nearly_equal(dv_20, 0.4901 * u.km / u.s, percent=0.01)
+    assert is_nearly_equal(dv_30, 0.5582 * u.km / u.s, percent=0.01)
+
+
+def test_near_escape_disposal_deeper_perigee_costs_more() -> None:
+    # near_escape_disposal_dv is monotone in how far it drops perigee: a lower
+    # target perigee means a slower apoapsis speed on the transfer ellipse, so a
+    # larger delta-v. This is why reentry (atmosphere perigee) beats the Moon.
+    from src.astro_constants import MOON_A, REENTRY_PERIGEE_RADIUS
+
+    assert near_escape_disposal_dv(REENTRY_PERIGEE_RADIUS) > near_escape_disposal_dv(
+        MOON_A
+    )
+    # earth_reentry_disposal_dv delegates straight to near_escape_disposal_dv.
+    assert (
+        near_escape_disposal_dv(REENTRY_PERIGEE_RADIUS) == earth_reentry_disposal_dv()
+    )
+    # The zero-redirect lunar burn matches the plain perigee-lowering delta-v (its
+    # vector-difference form reduces to the same magnitude, up to rounding).
+    assert is_nearly_equal(
+        near_escape_disposal_dv(MOON_A), lunar_impact_disposal_dv(), percent=1e-9
+    )
 
 
 def test_puffsat_scenario_knows_its_mass_ratio() -> None:

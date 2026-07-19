@@ -25,6 +25,7 @@ from boinor.twobody import Orbit
 from src.apoapsis_raise_reintercept import apoapsis_raise_reintercept
 from src.astro_constants import (
     EARTH_A,
+    EARTH_GRAVITATIONAL_REACH,
     EFFECTIVE_DV_LUNAR,
     LEO_ALTITUDE,
     LOW_SATURN_ALTITUDE,
@@ -34,6 +35,7 @@ from src.astro_constants import (
     PERIAPSIS_SOLAR_BURN,
     PERIAPSIS_SOLAR_V,
     PHOEBE_A,
+    REENTRY_PERIGEE_RADIUS,
     REQUIRED_DV_LUNAR_TRANSFER_PROGRADE,
     REQUIRED_DV_LUNAR_TRANSFER_RETROGRADE,
     RETROGRADE_FRACTION,
@@ -621,6 +623,107 @@ def lunar_return_transfer_dv(
     return burn_for_v_infinity(
         v_inf, body=Earth, altitude=perigee_altitude, initial_velocity=v_perigee
     ).to(u.km / u.s)
+
+
+def near_escape_disposal_dv(
+    target_perigee_radius: u.Quantity,
+    turnaround_radius: u.Quantity = EARTH_GRAVITATIONAL_REACH,
+    attractor: Body = Earth,
+) -> u.Quantity:
+    """Retrograde delta-v at a near-escape turnaround to lower perigee for disposal.
+
+    A spent package pushed just past escape velocity coasts out to the edge of the
+    attractor's gravitational reach and nearly stops: on a near-parabolic orbit the
+    speed at ``turnaround_radius`` is essentially the local escape speed
+    ``sqrt(2*mu/r)``. A retrograde burn there converts that near-parabolic orbit
+    into an ellipse whose apoapsis is the turnaround and whose periapsis is
+    ``target_perigee_radius``; the package then falls inward to that perigee. The
+    delta-v is the drop in speed at the turnaround,
+
+        dv = v_escape(turnaround) - v_apoapsis(turnaround -> target_perigee)
+
+    computed with the same vis-viva helpers used elsewhere in the repo
+    (:func:`escape_velocity`, :func:`orbit_from_rp_ra`, :func:`apoapsis_speed`).
+    Because a lower target perigee means a slower apoapsis speed on the transfer
+    ellipse, a deeper drop costs more delta-v: reentry (perigee at the atmosphere)
+    is more expensive than a lunar-distance perigee. This backs the paper's
+    near-escape disposal comparison (sec:coordinator_node_dry_mass_disposal).
+
+    Args:
+        target_perigee_radius: Radius the retrograde burn lowers perigee to
+            (astropy Quantity, length units), e.g. REENTRY_PERIGEE_RADIUS for an
+            atmosphere-grazing reentry or MOON_A for a lunar-distance impact orbit.
+        turnaround_radius: Radius of the near-escape turnaround (astropy Quantity,
+            default EARTH_GRAVITATIONAL_REACH), treated as the transfer ellipse's
+            apoapsis.
+        attractor: The central body (boinor Body, default Earth).
+
+    Returns:
+        The retrograde disposal delta-v at the turnaround (astropy Quantity, km/s).
+    """
+    v_turnaround = escape_velocity(attractor, altitude=turnaround_radius - attractor.R)
+    transfer = orbit_from_rp_ra(
+        apoapsis_radius=turnaround_radius,
+        periapsis_radius=target_perigee_radius,
+        attractor_body=attractor,
+    )
+    return (v_turnaround - apoapsis_speed(transfer)).to(u.km / u.s)
+
+
+def earth_reentry_disposal_dv() -> u.Quantity:
+    """Near-escape disposal delta-v to graze the atmosphere and reenter.
+
+    The retrograde turnaround burn that lowers perigee all the way to
+    REENTRY_PERIGEE_RADIUS (the atmosphere). Backs the paper's ~0.86 km/s reentry
+    figure (sec:coordinator_node_dry_mass_disposal).
+
+    Returns:
+        The reentry disposal delta-v (astropy Quantity, km/s).
+    """
+    return near_escape_disposal_dv(REENTRY_PERIGEE_RADIUS)
+
+
+def lunar_impact_disposal_dv(redirect_angle: u.Quantity = 0 * u.deg) -> u.Quantity:
+    """Near-escape disposal delta-v to fall to lunar distance and strike the Moon.
+
+    The retrograde turnaround burn that lowers perigee only to lunar distance
+    (MOON_A) rather than to the atmosphere. Because the Moon sits far above the
+    atmosphere, this drops perigee less and so costs less than reentry -- the
+    paper's ~0.43 km/s figure vs. ~0.86 km/s to reenter
+    (sec:coordinator_node_dry_mass_disposal).
+
+    Hitting the Moon also means matching its orbital plane. A non-zero
+    ``redirect_angle`` folds that plane change into the same burn: the maneuver
+    turns the velocity vector by that angle while changing its magnitude, so the
+    delta-v is the vector difference
+
+        dv = sqrt(v_i**2 + v_f**2 - 2*v_i*v_f*cos(redirect_angle))
+
+    of the turnaround speed ``v_i`` and the transfer-ellipse apoapsis speed
+    ``v_f``. At the near-zero turnaround speed the redirect is cheap: a 20-30 deg
+    fold raises the burn only to ~0.49-0.56 km/s, still below the reentry cost.
+
+    Args:
+        redirect_angle: Plane-change angle folded into the retrograde burn
+            (astropy Quantity, angle units, default 0 deg). Zero recovers the pure
+            coplanar perigee-lowering delta-v.
+
+    Returns:
+        The lunar-impact disposal delta-v (astropy Quantity, km/s).
+    """
+    v_turnaround = escape_velocity(Earth, altitude=EARTH_GRAVITATIONAL_REACH - Earth.R)
+    transfer = orbit_from_rp_ra(
+        apoapsis_radius=EARTH_GRAVITATIONAL_REACH,
+        periapsis_radius=MOON_A,
+        attractor_body=Earth,
+    )
+    v_final = apoapsis_speed(transfer)
+    delta_v = np.sqrt(
+        v_turnaround**2
+        + v_final**2
+        - 2 * v_turnaround * v_final * np.cos(redirect_angle)
+    )
+    return delta_v.to(u.km / u.s)
 
 
 def suborbital_200km_propellant_fraction(

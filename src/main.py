@@ -43,10 +43,12 @@ from src.heliocentric_reintercept import (
 )
 from src.jovian_flyby import jupiter_flyby_vb_trade_curve, powered_jovian_flyby_return
 from src.scenario_catalog import (
+    earth_reentry_disposal_dv,
     earth_reintercept_scenarios,
     earth_velocity_200km_periapsis,
     find_best_lunar_return,
     find_parker_orbit_period,
+    lunar_impact_disposal_dv,
     lunar_return_transfer_dv,
     paper_scenarios,
     parker_rows_rescored_at,
@@ -290,6 +292,22 @@ def main() -> None:
         f"{lunar_return_transfer_dv(VENUS_A).to(u.m / u.s)}",
         "lunar-return delta-v beyond lunar escape to Mars transfer = "
         f"{lunar_return_transfer_dv(MARS_A).to(u.m / u.s)}",
+    )
+
+    print_paper_point(
+        "Near-Escape Dry-Mass Disposal: Reentry vs. Lunar Impact "
+        "(sec:coordinator_node_dry_mass_disposal)",
+        "from a just-past-escape turnaround the Moon strike costs less delta-v "
+        "than reentry: about 0.43 km/s to fall to lunar distance vs. about "
+        "0.86 km/s to graze the atmosphere",
+        "retrograde turnaround burn to reenter (perigee at atmosphere) = "
+        f"{earth_reentry_disposal_dv():.3f}",
+        "retrograde turnaround burn to fall to lunar distance = "
+        f"{lunar_impact_disposal_dv():.3f}",
+        "with a 20-30 deg plane-change redirect folded in, lunar burn = "
+        f"{lunar_impact_disposal_dv(20 * u.deg):.3f} to "
+        f"{lunar_impact_disposal_dv(30 * u.deg):.3f} "
+        "(still below the reentry cost)",
     )
 
     # Powered Jovian flyby retrograde return: the leg the three Jovian-return
