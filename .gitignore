@@ -218,7 +218,10 @@ todos/*
 !todos/.gitkeep
 
 # Claude Code local settings/state
-.claude/
+#   Track shareable project config (settings.json, commands/, agents/); ignore
+#   personal skill packs and machine-local settings.
+.claude/skills/
+.claude/settings.local.json
 
 # macOS
 .DS_Store
