@@ -110,10 +110,11 @@ def boosted_solar_dive_v_infinity(
     The projectile arrives from the ellipse defined by ``apoapsis_radius`` and
     ``periapsis_radius``. A tangential ``periapsis_burn`` is added to that
     ellipse's actual periapsis speed, then the resulting hyperbolic excess is
-    ``sqrt(v_boosted**2 - v_esc**2)``. For the default minimum-energy dive, the
-    ~306.0 km/s arrival plus a 34.5 km/s burn leaves ~143.4 km/s to spare. Using
-    local escape speed as the arrival speed would inject energy the ellipse does
-    not carry and overstate the result as ~150 km/s.
+    ``sqrt(v_boosted**2 - v_esc**2)``. The burn is tuned so the resonant dive
+    (the cycle's actual return leg, on a ~1.93 AU ellipse) leaves ~150 km/s --
+    the main text's ~150 km/s Earth-crossing scale; the shallower default
+    minimum-energy 1 AU dive leaves ~147 km/s. Adding the burn to local escape
+    speed instead would inject energy the ellipse does not carry.
 
     Args:
         periapsis_radius: Periapsis distance from the Sun's center (astropy

@@ -9,7 +9,7 @@ perihelion, and it falls back to intercept Earth at 1 AU on the inbound leg.
 The single free knob Q is root-solved for phasing-exact Earth re-intercept, the
 same closure method single_impulse_resonant_dive() uses. This is the lowest-
 closing-speed member of the sec:earth_reintercept family: ~24 km/s instead of
-~145-150 km/s, needing no solar dive, no gravity assist, and no off-Earth boost
+~150 km/s, needing no solar dive, no gravity assist, and no off-Earth boost
 node -- only onboard propellant. The functions below reproduce the design doc's
 locked design point (Sec. 4), economics (Sec. 5), and finite-thrust check
 (Sec. 3) from the repo's own primitives.

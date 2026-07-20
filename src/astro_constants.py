@@ -58,12 +58,14 @@ SOLAR_DIVE_PERIAPSIS_SOLAR_RADII = 4.0
 # second colinear retrograde PuffSat boost drops it into the deep dive.
 TWO_IMPULSE_DIP_PERIAPSIS = 0.50 * u.AU
 # PuffSat boost applied at the 4 solar-radii dive periapsis. Added to the actual
-# incoming ellipse speed, it leaves ~143 km/s of excess for the minimum-energy
-# 1 AU dive and ~147 km/s for the resonant dive -- close to the main text's
-# ~150 km/s Earth-crossing scale. This tones down an earlier formulation that
-# scaled the Parker boost fraction (x1.25) up to the deeper dive, which left an
-# aggressive ~233 km/s of excess.
-SOLAR_DIVE_PERIAPSIS_BURN = 34.5 * u.km / u.s
+# incoming ellipse speed (energy-conserving; the earlier formulation wrongly
+# added it to local escape speed), it is tuned so the resonant dive -- the
+# no-ISRU cycle's actual return leg -- leaves ~150 km/s of hyperbolic excess,
+# the main text's ~150 km/s Earth-crossing scale. The shallower minimum-energy
+# 1 AU dive, on a lower-energy ellipse, keeps ~147 km/s. This still tones down an
+# even earlier formulation that scaled the Parker boost fraction (x1.25) up to
+# the deeper dive, which left an aggressive ~233 km/s of excess.
+SOLAR_DIVE_PERIAPSIS_BURN = 35.9807 * u.km / u.s
 
 # --- Powered Jovian flyby retrograde return (planned subsection under
 #     sec:jupiter_only_growth; ADR 0002; CONTEXT.md "Jupiter powered-flyby

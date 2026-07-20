@@ -33,10 +33,20 @@ def test_solar_dive_periapsis_speed_matches_appendix() -> None:
 
 def test_boosted_solar_dive_v_infinity_uses_actual_incoming_speed() -> None:
     # The incoming minimum-energy ellipse reaches ~306.0 km/s, not the local
-    # ~308.8 km/s escape speed. Adding the 34.5 km/s burn to the actual incoming
-    # speed leaves ~143.4 km/s of hyperbolic excess.
+    # ~308.8 km/s escape speed. The burn is tuned to the resonant dive (see
+    # test_single_impulse_resonant_dive_matches_main_text_scale), so the shallower
+    # min-energy default leaves ~146.9 km/s -- computed from the actual incoming
+    # speed, not by injecting energy the ellipse lacks.
     v_inf = boosted_solar_dive_v_infinity()
-    assert is_nearly_equal(v_inf, 143.4 * u.km / u.s, percent=0.01)
+    assert is_nearly_equal(v_inf, 146.9 * u.km / u.s, percent=0.01)
+
+
+def test_single_impulse_resonant_dive_matches_main_text_scale() -> None:
+    # The burn is tuned so the resonant dive -- the no-ISRU cycle's actual return
+    # leg -- carries the main text's ~150 km/s Earth-crossing excess.
+    dive = single_impulse_resonant_dive()
+    v_inf = boosted_solar_dive_v_infinity(apoapsis_radius=dive.closing_aphelion)
+    assert is_nearly_equal(v_inf, 150 * u.km / u.s, percent=0.01)
 
 
 def test_boosted_solar_dive_v_infinity_conserves_incoming_orbit_energy() -> None:
@@ -128,8 +138,8 @@ def test_single_impulse_resonant_dive_couples_climb_energy_to_aphelion() -> None
     # This high-precision root pins the energy-coupled solve. Computing climb-out
     # once from the default 1 AU ellipse instead gives the old ~1.92593 AU root.
     dive = single_impulse_resonant_dive()
-    assert is_nearly_equal(dive.closing_aphelion, 1.927961357 * u.AU, percent=1e-6)
-    assert is_nearly_equal(dive.reintercept_time, 0.894604016 * u.year, percent=1e-6)
+    assert is_nearly_equal(dive.closing_aphelion, 1.925931893 * u.AU, percent=1e-6)
+    assert is_nearly_equal(dive.reintercept_time, 0.892533677 * u.year, percent=1e-6)
 
 
 def test_single_impulse_resonant_dive_boost_decomposition() -> None:

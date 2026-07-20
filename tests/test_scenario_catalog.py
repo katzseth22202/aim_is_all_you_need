@@ -229,10 +229,10 @@ def test_earth_reintercept_scenarios_phases_for_return() -> None:
     assert is_nearly_equal(
         phased.v_rf, single_impulse_resonant_dive().earth_boost, percent=1e-9
     )
-    # Pin the phased mass ratio (captured from the repo's primitives). The
-    # energy-coupled solar-dive solve raises the required Earth boost slightly
-    # and therefore lowers this ratio from the former 2.05029641.
-    assert float(phased.mass_ratio) == pytest.approx(2.04924969, rel=1e-6)
+    # Pin the phased mass ratio (captured from the repo's primitives). Re-tuning
+    # the periapsis burn to 35.9807 km/s (so the resonant dive carries the main
+    # text's ~150 km/s excess under the energy-coupled solve) sets this ratio.
+    assert float(phased.mass_ratio) == pytest.approx(2.05029637, rel=1e-6)
     # The apoapsis-raise row is scored on its own collision: v_rf = 200 km Earth
     # escape speed, v_b = the ~24 km/s closing speed, ratio ~2.62.
     apoapsis_row = catalog[1]
