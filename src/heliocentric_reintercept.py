@@ -103,26 +103,41 @@ def solar_dive_periapsis_speed(
 def boosted_solar_dive_v_infinity(
     periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
     periapsis_burn: u.Quantity = SOLAR_DIVE_PERIAPSIS_BURN,
+    apoapsis_radius: u.Quantity = EARTH_A,
 ) -> u.Quantity:
     """Hyperbolic-excess speed left after a periapsis boost at the solar dive.
 
-    A pulsed-propulsion boost of ``periapsis_burn`` (~34.5 km/s) at the 4
-    solar-radii periapsis lifts the ~309 km/s local escape speed to ~343 km/s.
-    The projectile then escapes with ``sqrt(v_boosted**2 - v_esc**2)`` to spare,
-    the appendix's ~150 km/s -- matching the main text's ~150 km/s
-    Earth-crossing scale for the no-ISRU cycle.
+    The projectile arrives from the ellipse defined by ``apoapsis_radius`` and
+    ``periapsis_radius``. A tangential ``periapsis_burn`` is added to that
+    ellipse's actual periapsis speed, then the resulting hyperbolic excess is
+    ``sqrt(v_boosted**2 - v_esc**2)``. For the default minimum-energy dive, the
+    ~306.0 km/s arrival plus a 34.5 km/s burn leaves ~143.4 km/s to spare. Using
+    local escape speed as the arrival speed would inject energy the ellipse does
+    not carry and overstate the result as ~150 km/s.
 
     Args:
         periapsis_radius: Periapsis distance from the Sun's center (astropy
             Quantity, default 4 solar radii).
         periapsis_burn: Speed increase from the PuffSat boost at periapsis
             (astropy Quantity, default SOLAR_DIVE_PERIAPSIS_BURN).
+        apoapsis_radius: Aphelion of the incoming dive ellipse (astropy Quantity,
+            default EARTH_A).
 
     Returns:
         The hyperbolic-excess (escape-to-spare) speed (astropy Quantity, km/s).
+
+    Raises:
+        ValueError: If the boosted periapsis speed does not exceed local escape
+            speed, so the post-burn orbit is not hyperbolic.
     """
+    v_incoming: u.Quantity = solar_dive_periapsis_speed(
+        periapsis_radius=periapsis_radius,
+        apoapsis_radius=apoapsis_radius,
+    )
     v_escape: u.Quantity = escape_velocity(Sun, altitude=periapsis_radius - Sun.R)
-    v_boosted: u.Quantity = v_escape + periapsis_burn
+    v_boosted: u.Quantity = v_incoming + periapsis_burn
+    if v_boosted <= v_escape:
+        raise ValueError("periapsis burn does not put the solar dive on a hyperbola")
     return np.sqrt(v_boosted**2 - v_escape**2).to(u.km / u.s)
 
 
@@ -175,7 +190,8 @@ def solar_dive_whip_around_angle(
         The total whip-around angle (astropy Quantity, degrees).
     """
     v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
-        periapsis_radius=periapsis_radius
+        periapsis_radius=periapsis_radius,
+        apoapsis_radius=apoapsis_radius,
     )
     eccentricity: float = hyperbolic_eccentricity(periapsis_radius, v_infinity, Sun)
     climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
@@ -205,7 +221,8 @@ def solar_dive_reintercept_gap(
         The unphased heliocentric miss angle (astropy Quantity, degrees).
     """
     v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
-        periapsis_radius=periapsis_radius
+        periapsis_radius=periapsis_radius,
+        apoapsis_radius=apoapsis_radius,
     )
     eccentricity: float = hyperbolic_eccentricity(periapsis_radius, v_infinity, Sun)
     climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
@@ -384,25 +401,29 @@ def single_impulse_resonant_dive(
         A :class:`SingleImpulseResonantDive` with the closing aphelion, the
         re-intercept time, and the boost with its retrograde/radial decomposition.
     """
-    # The boosted climb-out is fixed by the periapsis and its boost; it does not
-    # depend on the aphelion, so compute it once outside the root solve.
-    v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
-        periapsis_radius=periapsis_radius
-    )
-    climb_eccentricity: float = hyperbolic_eccentricity(
-        periapsis_radius, v_infinity, Sun
-    )
-    climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
-        periapsis_radius, climb_eccentricity, launch_radius
-    )
-    climb_time: u.Quantity = hyperbolic_time_of_flight(
-        periapsis_radius, v_infinity, climb_true_anomaly, Sun
-    )
     earth_speed: u.Quantity = speed_around_attractor(a=launch_radius, attractor=Sun)
+
+    def climb_geometry(aphelion: u.Quantity) -> tuple[u.Quantity, u.Quantity]:
+        """Return the climb-out anomaly and time for an incoming trial ellipse."""
+        v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
+            periapsis_radius=periapsis_radius,
+            apoapsis_radius=aphelion,
+        )
+        climb_eccentricity: float = hyperbolic_eccentricity(
+            periapsis_radius, v_infinity, Sun
+        )
+        climb_true_anomaly: u.Quantity = true_anomaly_at_radius(
+            periapsis_radius, climb_eccentricity, launch_radius
+        )
+        climb_time: u.Quantity = hyperbolic_time_of_flight(
+            periapsis_radius, v_infinity, climb_true_anomaly, Sun
+        )
+        return climb_true_anomaly, climb_time
 
     def closure_residual_deg(aphelion_au: float) -> float:
         """Heliocentric gap (deg) between Earth and the 1 AU re-crossing for a trial aphelion."""
         aphelion: u.Quantity = aphelion_au * u.AU
+        climb_true_anomaly, climb_time = climb_geometry(aphelion)
         eccentricity: float = float(
             ((aphelion - periapsis_radius) / (aphelion + periapsis_radius))
             .decompose()
@@ -428,6 +449,7 @@ def single_impulse_resonant_dive(
     )
 
     # Re-build the closing geometry once to report the timing and boost.
+    _, climb_time = climb_geometry(closing_aphelion)
     eccentricity = float(
         ((closing_aphelion - periapsis_radius) / (closing_aphelion + periapsis_radius))
         .decompose()

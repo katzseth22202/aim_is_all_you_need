@@ -109,6 +109,16 @@ def test_conic_state_at_radius_is_orbit_invariant() -> None:
     assert state_from_r1.ecc == pytest.approx(state.ecc, rel=1e-9)
 
 
+def test_speed_components_at_radius_rejects_unreachable_radius() -> None:
+    """A radius beyond an ellipse's apoapsis must not become a fake apsis."""
+    transfer = orbit_from_rp_ra(periapsis_radius=EARTH_A, apoapsis_radius=JUPITER_A)
+    v_peri = periapsis_speed(transfer).to_value(u.km / u.s)
+    state = conic_kernel.conic_state_at_radius(_MU_SUN, _R_EARTH_ORBIT, v_peri, 0.0)
+
+    with pytest.raises(ValueError, match="not reachable"):
+        conic_kernel.speed_components_at_radius(state, _MU_SUN, 1.01 * _R_JUPITER_ORBIT)
+
+
 def test_true_anomaly_at_radius_rad_matches_orbit_utils() -> None:
     # The kernel float and orbit_utils' Quantity interface must agree exactly
     # -- orbit_utils delegates to this function, so this also pins the wiring.

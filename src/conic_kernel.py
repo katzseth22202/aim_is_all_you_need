@@ -201,10 +201,19 @@ def speed_components_at_radius(
 
     Returns:
         (v_tangential km/s, |v_radial| km/s).
+
+    Raises:
+        ValueError: If ``r`` is not reachable on ``state``'s conic. Tiny negative
+            radial-speed squares caused by floating-point round-off at an apsis
+            are still clamped to zero.
     """
     v_tangential = state.h / r
     v_squared = 2.0 * (state.energy + mu / r)
-    v_radial = float(np.sqrt(max(0.0, v_squared - v_tangential * v_tangential)))
+    radial_squared = v_squared - v_tangential * v_tangential
+    roundoff_tolerance = 1e-12 * max(1.0, abs(v_squared), v_tangential * v_tangential)
+    if radial_squared < -roundoff_tolerance:
+        raise ValueError(f"radius {r} is not reachable on this conic")
+    v_radial = float(np.sqrt(max(0.0, radial_squared)))
     return v_tangential, v_radial
 
 

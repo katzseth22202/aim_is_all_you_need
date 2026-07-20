@@ -2,8 +2,11 @@
 
 import numpy as np
 from astropy import units as u
+from boinor.bodies import Sun
 
+from src.astro_constants import SOLAR_DIVE_PERIAPSIS_BURN
 from src.heliocentric_reintercept import (
+    SOLAR_DIVE_PERIAPSIS,
     boosted_solar_dive_v_infinity,
     earth_reintercept_cycle_floor,
     launch_capacity_time,
@@ -16,6 +19,7 @@ from src.heliocentric_reintercept import (
     solar_dive_whip_around_angle,
     two_impulse_phasing_loop,
 )
+from src.orbit_utils import escape_velocity
 from tests.test_helpers import is_nearly_equal
 
 
@@ -27,12 +31,35 @@ def test_solar_dive_periapsis_speed_matches_appendix() -> None:
     assert is_nearly_equal(v, 306.0 * u.km / u.s, percent=0.01)
 
 
-def test_boosted_solar_dive_v_infinity_matches_appendix() -> None:
-    # Appendix sec:earth_reintercept: a ~34.5 km/s PuffSat boost lifts the
-    # ~309 km/s escape speed to ~343 km/s, leaving ~150 km/s of hyperbolic-excess
-    # speed to spare, so the return genuinely escapes on a hyperbola.
+def test_boosted_solar_dive_v_infinity_uses_actual_incoming_speed() -> None:
+    # The incoming minimum-energy ellipse reaches ~306.0 km/s, not the local
+    # ~308.8 km/s escape speed. Adding the 34.5 km/s burn to the actual incoming
+    # speed leaves ~143.4 km/s of hyperbolic excess.
     v_inf = boosted_solar_dive_v_infinity()
-    assert is_nearly_equal(v_inf, 150 * u.km / u.s, percent=0.01)
+    assert is_nearly_equal(v_inf, 143.4 * u.km / u.s, percent=0.01)
+
+
+def test_boosted_solar_dive_v_infinity_conserves_incoming_orbit_energy() -> None:
+    incoming = solar_dive_periapsis_speed()
+    escape = escape_velocity(Sun, SOLAR_DIVE_PERIAPSIS - Sun.R)
+    expected = np.sqrt((incoming + SOLAR_DIVE_PERIAPSIS_BURN) ** 2 - escape**2)
+
+    assert is_nearly_equal(
+        boosted_solar_dive_v_infinity(), expected.to(u.km / u.s), percent=1e-9
+    )
+
+
+def test_boosted_solar_dive_v_infinity_tracks_incoming_aphelion() -> None:
+    # A higher incoming aphelion carries more periapsis energy, so the same burn
+    # must leave more hyperbolic excess instead of reusing the 1 AU result.
+    one_au = boosted_solar_dive_v_infinity(apoapsis_radius=1 * u.AU)
+    two_au = boosted_solar_dive_v_infinity(apoapsis_radius=2 * u.AU)
+    assert two_au > one_au
+
+
+def test_boosted_solar_dive_requires_an_escaping_post_burn_speed() -> None:
+    with np.testing.assert_raises_regex(ValueError, "does not put.*hyperbola"):
+        boosted_solar_dive_v_infinity(periapsis_burn=0 * u.km / u.s)
 
 
 def test_min_energy_solar_dive_time_matches_appendix() -> None:
@@ -95,6 +122,14 @@ def test_single_impulse_resonant_dive_matches_appendix() -> None:
     assert is_nearly_equal(dive.earth_boost, 37.5 * u.km / u.s, percent=0.02)
     assert is_nearly_equal(dive.retrograde_component, 24 * u.km / u.s, percent=0.02)
     assert is_nearly_equal(dive.radial_component, 29 * u.km / u.s, percent=0.03)
+
+
+def test_single_impulse_resonant_dive_couples_climb_energy_to_aphelion() -> None:
+    # This high-precision root pins the energy-coupled solve. Computing climb-out
+    # once from the default 1 AU ellipse instead gives the old ~1.92593 AU root.
+    dive = single_impulse_resonant_dive()
+    assert is_nearly_equal(dive.closing_aphelion, 1.927961357 * u.AU, percent=1e-6)
+    assert is_nearly_equal(dive.reintercept_time, 0.894604016 * u.year, percent=1e-6)
 
 
 def test_single_impulse_resonant_dive_boost_decomposition() -> None:

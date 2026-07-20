@@ -57,11 +57,12 @@ SOLAR_DIVE_PERIAPSIS_SOLAR_RADII = 4.0
 # ~0.50 AU, returns to 1 AU tangentially after one dip period (~0.65 yr), then a
 # second colinear retrograde PuffSat boost drops it into the deep dive.
 TWO_IMPULSE_DIP_PERIAPSIS = 0.50 * u.AU
-# PuffSat boost applied at the 4 solar-radii dive periapsis. Chosen so the
-# hyperbolic-excess (escape-to-spare) speed is ~150 km/s, matching the main
-# text's ~150 km/s Earth-crossing scale for the no-ISRU cycle. This tones down
-# an earlier formulation that scaled the Parker boost fraction (x1.25) up to
-# the deeper dive, which left an aggressive ~233 km/s of excess.
+# PuffSat boost applied at the 4 solar-radii dive periapsis. Added to the actual
+# incoming ellipse speed, it leaves ~143 km/s of excess for the minimum-energy
+# 1 AU dive and ~147 km/s for the resonant dive -- close to the main text's
+# ~150 km/s Earth-crossing scale. This tones down an earlier formulation that
+# scaled the Parker boost fraction (x1.25) up to the deeper dive, which left an
+# aggressive ~233 km/s of excess.
 SOLAR_DIVE_PERIAPSIS_BURN = 34.5 * u.km / u.s
 
 # --- Powered Jovian flyby retrograde return (planned subsection under
