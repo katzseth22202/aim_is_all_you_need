@@ -41,6 +41,7 @@ from src.heliocentric_reintercept import (
     single_impulse_resonant_dive,
     solar_dive_reintercept_gap,
 )
+from src.jovian_cycle_phasing import ChainResult, optimize_jovian_cycle_chain
 from src.jovian_flyby import jupiter_flyby_vb_trade_curve, powered_jovian_flyby_return
 from src.scenario_catalog import (
     earth_reentry_disposal_dv,
@@ -72,6 +73,60 @@ def print_paper_point(section: str, claim: str, *results: str) -> None:
     print(f'  paper claim: "{claim}"')
     for result in results:
         print(f"  computed:    {result}")
+
+
+def _print_cycle_chain(label: str, chain: ChainResult) -> None:
+    """Print a phased 30-year growth chain as a per-cycle launch table.
+
+    Args:
+        label: Short tag for the run (e.g. "unpowered (bend only)").
+        chain: The optimized chain to render.
+    """
+    print_paper_point(
+        "Phased 30-Year Jupiter-Only Growth Chain -- PLANNED for the paper "
+        "under Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
+        f"ADR 0010 -- {label}",
+        "proposed claim: the returning mass cannot wait, yet the Jupiter bend "
+        "steers each arrival onto a growth-viable next launch, so the loop "
+        "self-sustains and the launched mass compounds over decades",
+        f"self-sustaining (every cycle grows): {chain.all_growth_positive}; "
+        f"{len(chain.cycles)} cycles in 30 yr",
+        f"compounded launched mass x seed = {chain.mass_multiple_10yr:.1f} at "
+        f"10 yr, {chain.mass_multiple_20yr:.1f} at 20 yr, "
+        f"{chain.mass_multiple_30yr:.1f} at 30 yr",
+        "caveat: circular-coplanar phasing, relative epoch -- real calendar "
+        "windows still need the ephemeris/Lambert study (ADR 0006)",
+    )
+    print(
+        tabulate(
+            [
+                [
+                    cycle.cycle_index,
+                    f"{cycle.launch_time.to_value(u.year):.2f}",
+                    f"{cycle.outbound_time.to_value(u.year):.2f}",
+                    f"{cycle.return_time.to_value(u.year):.2f}",
+                    f"{cycle.departure_burn.to_value(u.km / u.s):.2f}",
+                    f"{cycle.flyby_burn.to_value(u.km / u.s):.2f}",
+                    f"{cycle.collision_speed.to_value(u.km / u.s):.1f}",
+                    f"{cycle.net_growth:.3f}",
+                    f"{cycle.cumulative_mass:.1f}",
+                ]
+                for cycle in chain.cycles
+            ],
+            headers=[
+                "cycle",
+                "launch (yr)",
+                "out (yr)",
+                "return (yr)",
+                "dep dv",
+                "perijove dv",
+                "v_b",
+                "cycle growth",
+                "cum. mass",
+            ],
+            tablefmt="grid",
+        )
+    )
 
 
 def print_scenario_table(title: str, note: str, df: pd.DataFrame) -> None:
@@ -535,6 +590,22 @@ def main() -> None:
         "calendar windows and their trip-time spread need Lambert arcs "
         "against real planet positions",
     )
+
+    # Phased 30-year chain: the mass cannot wait, so each cycle's departure is
+    # pinned to the previous arrival; the Jupiter bend (and, powered, the perijove
+    # burn) steers the arrival to keep the next launch on a growth-viable Jupiter
+    # phase. A forward chain search maximizes compounded mass off Earth (ADR 0010).
+    for label, chain in (
+        (
+            "unpowered (bend only)",
+            optimize_jovian_cycle_chain(years=30.0, powered=False),
+        ),
+        (
+            "powered (perijove burn)",
+            optimize_jovian_cycle_chain(years=30.0, powered=True),
+        ),
+    ):
+        _print_cycle_chain(label, chain)
 
     suborbital_frac = float(suborbital_200km_propellant_fraction())
     print_paper_point(

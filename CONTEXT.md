@@ -251,6 +251,28 @@ km/s, 3.347 at 200). Any cycle beyond ~9.2 yr therefore loses to the direct flyb
 **at zero delta-v**. Algebra, not a search result; use it to disqualify a sequence
 before optimizing it.
 
+### Phased growth chain (no waiting)
+
+The doubling-time clock above assumes the mass re-departs to Jupiter the instant
+it returns; `src/jovian_cycle_phasing.py` (`optimize_jovian_cycle_chain()`,
+ADR `0010-jovian-cycle-phasing-verifier`) tests whether that relaunch actually
+exists, cycle after cycle, against real Earth and Jupiter phases. The binding
+fact is that **the mass cannot wait**: it is consumed on arrival, so each cycle's
+departure is pinned to the previous arrival plus the 20-day coast. The only
+freedom is to *steer* the arrival — the Jupiter bend moves the return crossing
+across ~1130 days (~3 Earth-Jupiter synodics, ADR 0006), so each return is chosen
+to land the next launch on a growth-viable Jupiter phase. That couples the cycles
+into a **chain** (cycle k's bend sets cycle k+1's departure phase), searched
+forward as a generational beam over cycles that maximizes compounded mass
+launched off Earth. Result: the loop self-sustains both ways — unpowered (bend
+only) 8 cycles / ×74.8 over 30 yr, powered (perijove burn) 9 cycles / ×90.2, the
+burn acting as a **second steering knob** that tightens the return timing enough
+to fit one more cycle. _Avoid_: the "wait for a good window" model (ADR 0005's
+windowed cycle) here — that staggering is available to the assist-chain *fleet*,
+not to a single returning mass; and treating a direct off-phase relaunch as cheap
+(it is ~4.45 km/s only on-phase, 10–38 km/s off it). Circular-coplanar, relative
+epoch, not calendar dates.
+
 ### Unpowered assist chain
 
 The companion question to the powered flyby: can Venus/Earth/Mars gravity assists
