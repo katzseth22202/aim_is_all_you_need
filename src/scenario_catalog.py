@@ -300,9 +300,10 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
     re-intercepts Earth after ~0.89 yr.
 
     The phasing is not free: off the same ~69 km/s Jovian-return PuffSat, the
-    boost grows from the prograde Parker row's ~23.7 km/s to ~37.5 km/s, which
-    lowers the payload/PuffSat mass ratio from ~3.83 to ~2.05. This is the row
-    that is actually "in the right phase for Earth return".
+    boost grows from the prograde Parker row's ~23.66 km/s to ~39.11 km/s (both
+    geocentric at 200 km altitude), which lowers the payload/PuffSat mass ratio
+    from ~3.83 to ~1.92. This is the row that is actually "in the right phase
+    for Earth return".
 
     The second row is the apoapsis-raise Earth re-intercept
     (:func:`apoapsis_raise_reintercept`), the lowest-closing-speed member of the
@@ -323,9 +324,9 @@ def earth_reintercept_scenarios() -> List[PuffSatScenario]:
     apoapsis_raise = apoapsis_raise_reintercept()
     return [
         PuffSatScenario(
-            v_rf=resonant_dive.earth_boost,
+            v_rf=burn_for_v_infinity(resonant_dive.earth_boost),
             v_b=retrograde_jovian_speed,
-            desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.89 yr. Folding the phasing into one Earth boost raises it to ~37.5 km/s, lowering the mass ratio from the prograde Parker injection's ~3.83""",
+            desc="""Phased single-impulse resonant dive: aim the payload outbound to a ~1.9 AU aphelion so its boosted solar-dive return re-intercepts Earth after ~0.89 yr. Folding the phasing into one Earth boost raises it to ~39.11 km/s geocentric at 200 km (heliocentric ~37.5 km/s), lowering the mass ratio from the prograde Parker injection's ~3.83""",
             paper_ref="sec:earth_reintercept",
         ),
         PuffSatScenario(

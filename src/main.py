@@ -173,7 +173,7 @@ def main() -> None:
     print_scenario_table(
         "Phased Earth-return scenarios -- the two phased rows of Table "
         "'tab:mass_scenarios' that fold Earth-return phasing into the boost",
-        "Row 1 backs the 37.53 / 69.272 / 2.05 resonant-dive row, derived in "
+        "Row 1 backs the 39.11 / 69.270 / 1.92 resonant-dive row, derived in "
         "Appendix 'Earth Re-Intercept and the Phasing Loop' (sec:earth_reintercept) "
         "-- folding phasing into one Earth boost costs mass ratio vs. the ~3.83 "
         "Parker row. Row 2 is the apoapsis-raise re-intercept: v_rf=11.009 / "

@@ -7,7 +7,7 @@ from astropy import units as u
 from src.apoapsis_raise_reintercept import apoapsis_raise_reintercept
 from src.astro_constants import CERES_A, EARTH_A, MARS_A, SATURN_A, VENUS_A
 from src.heliocentric_reintercept import single_impulse_resonant_dive
-from src.propulsion import payload_mass_ratio
+from src.propulsion import burn_for_v_infinity, payload_mass_ratio
 from src.scenario_catalog import (
     SCENARIO_COLUMNS,
     PuffSatScenario,
@@ -220,19 +220,24 @@ def test_parker_rows_rescored_at_matches_payload_mass_ratio() -> None:
 def test_earth_reintercept_scenarios_phases_for_return() -> None:
     # Appendix sec:earth_reintercept: the phased single-impulse resonant dive is
     # the row that actually re-intercepts Earth. Off the same ~69 km/s Jovian
-    # PuffSat, its boost is the resonant dive's ~37.5 km/s Earth boost (not the
-    # prograde Parker row's minimum-energy ~23.7 km/s injection). The apoapsis-raise
+    # PuffSat, its boost is burn_for_v_infinity(resonant_dive.earth_boost),
+    # converting the heliocentric ~37.5 km/s to ~39.11 km/s geocentric at 200 km
+    # (vs. the prograde Parker row's ~23.66 km/s at 200 km). The apoapsis-raise
     # re-intercept is the second phased row.
     catalog = earth_reintercept_scenarios()
     assert len(catalog) == 2
     phased = catalog[0]
     assert is_nearly_equal(
-        phased.v_rf, single_impulse_resonant_dive().earth_boost, percent=1e-9
+        phased.v_rf,
+        burn_for_v_infinity(single_impulse_resonant_dive().earth_boost),
+        percent=1e-9,
     )
     # Pin the phased mass ratio (captured from the repo's primitives). Re-tuning
     # the periapsis burn to 35.9807 km/s (so the resonant dive carries the main
     # text's ~150 km/s excess under the energy-coupled solve) sets this ratio.
-    assert float(phased.mass_ratio) == pytest.approx(2.05029637, rel=1e-6)
+    # v_rf is now burn_for_v_infinity(earth_boost) ~39.11 km/s, not the raw
+    # heliocentric earth_boost ~37.5 km/s, matching the paper's geocentric frame.
+    assert float(phased.mass_ratio) == pytest.approx(1.9242867660766017, rel=1e-6)
     # The apoapsis-raise row is scored on its own collision: v_rf = 200 km Earth
     # escape speed, v_b = the ~24 km/s closing speed, ratio ~2.62.
     apoapsis_row = catalog[1]
