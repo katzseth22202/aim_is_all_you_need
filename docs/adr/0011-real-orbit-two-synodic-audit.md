@@ -125,3 +125,29 @@ can be exported with `--csv` and `--maneuver-csv`, respectively.
 - Astropy's built-in ephemeris is an analytical approximation, not a navigation-grade
   JPL DE kernel. It is adequate for this architecture-level screen; any mission claim,
   especially beyond 2100, still requires a DE-kernel/N-body verification.
+
+## Follow-up: conditional three-synodic fallback
+
+The fixed-cadence result's high DSM tail motivates a conditional clock: optimize
+the 2S endpoint from the actual departure, and use 3S instead whenever the 2S DSM
+proxy is strictly greater than 50 m/s. The chosen return is the next departure,
+so a 3S choice shifts the later synodic lattice instead of being evaluated as an
+independent row. `analyze_adaptive_synodic_cadence()` makes this greedy policy
+reproducible with the same ephemeris, Lambert search, DSM definition, first epoch,
+and 200-year endpoint horizon as the fixed 2S comparison above. The resonance CLI
+prints its summary and accepts `--adaptive-threshold-m-s` and `--adaptive-csv`.
+
+The policy completes 76 cycles: 47 use 2S and **29 use 3S (38.2%)**. Among the
+selected 3S cycles, DSM proxy correction has mean **0.395 m/s**, median
+**0.345 m/s**, and maximum **1.010 m/s**. The worst 3S case departs 2179-09-30.
+Across all 76 selected cycles, the maximum is **18.479 m/s**, on the selected 2S
+cycle departing 2036-09-07; no flown cycle remains above the 50 m/s trigger.
+Thus this screen supports the conditional fallback and removes the kilometer-per-
+second tail, at the cadence cost of using 3S on roughly two cycles in five.
+
+This result inherits the earlier DSM caveat: the correction is an exact velocity
+match at the Jupiter SOI seam, not a finite-location interplanetary DSM optimum.
+It also inherits the analytical-ephemeris limitation after 2100. The unexpectedly
+small 3S values occur because a 3S endpoint gives the zero-revolution Lambert
+search substantially more encounter-time freedom; a navigation-grade DE-kernel/
+N-body trajectory optimization is still required before mission-level sizing.

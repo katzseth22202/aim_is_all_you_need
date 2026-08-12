@@ -34,7 +34,7 @@ run:  ## Run the main script
 nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'all')
 	python -m src.nozzle_analysis
 
-resonance:  ## Audit 200 years of real-orbit two-synodic windows (not part of 'all')
+resonance:  ## Audit 200 years of real-orbit 2S windows and the 2S/3S fallback
 	python -m src.real_orbit_resonance --years 200
 
 export-env:  ## Export the current conda environment to environment.yml

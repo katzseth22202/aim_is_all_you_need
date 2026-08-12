@@ -1,8 +1,12 @@
 """Tests for the opt-in real-orbit two-synodic analysis."""
 
 import numpy as np
+import pytest
 
-from src.real_orbit_resonance import analyze_two_synodic_resonance
+from src.real_orbit_resonance import (
+    analyze_adaptive_synodic_cadence,
+    analyze_two_synodic_resonance,
+)
 
 
 def test_short_real_orbit_audit_returns_tables_and_exact_closures() -> None:
@@ -81,3 +85,50 @@ def test_fixed_cadence_repeats_the_identical_period() -> None:
     assert np.allclose(fixed["period_days"], fixed["period_days"].iloc[0], atol=1e-9)
     assert 797.0 < fixed["period_days"].iloc[0] < 798.0
     assert fixed["resonance_endpoint_error_s"].eq(0.0).all()
+
+
+def test_adaptive_cadence_chains_exact_two_or_three_synodic_periods() -> None:
+    """The selected return must become the next departure without timing drift."""
+    result = analyze_adaptive_synodic_cadence(
+        start="2026-08-11", years=8.0, threshold_m_s=50.0
+    )
+    cycles = result.cycles
+    assert set(cycles["selected_synodic_periods"]) <= {2, 3}
+    assert cycles["three_synodic_selected"].equals(
+        cycles["selected_synodic_periods"].eq(3)
+    )
+    assert cycles["resonance_endpoint_error_s"].eq(0.0).all()
+    assert np.array_equal(
+        cycles["return_tdb"].to_numpy()[:-1],
+        cycles["departure_tdb"].to_numpy()[1:],
+    )
+    selected_two = cycles.loc[~cycles["three_synodic_selected"]]
+    selected_three = cycles.loc[cycles["three_synodic_selected"]]
+    assert (selected_two["two_synodic_dsm_m_s"] <= result.threshold_m_s).all()
+    assert (selected_three["two_synodic_dsm_m_s"] > result.threshold_m_s).all()
+
+
+@pytest.mark.slow
+def test_adaptive_cadence_pins_200_year_fallback_result() -> None:
+    """Pin the conditional policy's selection frequency and DSM tail."""
+    result = analyze_adaptive_synodic_cadence()
+    summary = result.summary.iloc[0]
+    assert summary["total_cycles"] == 76
+    assert summary["two_synodic_cycles"] == 47
+    assert summary["three_synodic_cycles"] == 29
+    assert np.isclose(summary["three_synodic_fraction"], 29.0 / 76.0)
+    assert np.isclose(summary["three_synodic_cycles_per_century"], 14.5)
+    assert np.isclose(summary["three_synodic_mean_dsm_m_s"], 0.394707, atol=1e-6)
+    assert np.isclose(summary["three_synodic_median_dsm_m_s"], 0.345221, atol=1e-6)
+    assert np.isclose(summary["three_synodic_max_dsm_m_s"], 1.009817, atol=1e-6)
+    assert summary["worst_three_synodic_departure"] == "2179-09-30"
+    assert np.isclose(summary["selected_max_dsm_m_s"], 18.478978, atol=1e-6)
+    assert summary["selected_dsm_over_threshold_cycles"] == 0
+
+
+def test_adaptive_cadence_rejects_invalid_inputs() -> None:
+    """The public policy analysis should reject invalid horizons and thresholds."""
+    with pytest.raises(ValueError, match="years must be positive"):
+        analyze_adaptive_synodic_cadence(years=0.0)
+    with pytest.raises(ValueError, match="threshold_m_s must be nonnegative"):
+        analyze_adaptive_synodic_cadence(years=5.0, threshold_m_s=-1.0)

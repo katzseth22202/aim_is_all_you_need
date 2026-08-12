@@ -29,6 +29,12 @@ This is deliberately not imported by :mod:`src.main`.  Run it explicitly with
 ``builtin`` ephemeris is a fast analytical planetary theory, not a
 navigation-grade JPL DE kernel; the latter remains the appropriate final check
 for a mission design, particularly after 2100.
+
+The module also audits a chained fixed-mean-cadence fallback: try an exact
+two-synodic return from every actual departure, but use three synodic periods
+when its DSM proxy exceeds a configurable threshold.  The selected return is
+the next departure, preserving integer-synodic timing without treating the
+three-synodic alternatives as independent rows.
 """
 
 import argparse
@@ -133,6 +139,24 @@ class ResonanceAnalysis:
     all_corrected_feasible: bool
     ephemeris: str
     reference_phase: float
+
+
+@dataclass(frozen=True)
+class AdaptiveCadenceAnalysis:
+    """Conditional two-or-three-synodic fixed-cadence DSM audit.
+
+    Attributes:
+        cycles: One row per flown cycle in the chained conditional schedule.
+        summary: Headline selection counts and DSM statistics.
+        threshold_m_s: Two-synodic DSM threshold that selects a three-synodic
+            cycle when exceeded.
+        ephemeris: Ephemeris provider used to generate the planet states.
+    """
+
+    cycles: pd.DataFrame
+    summary: pd.DataFrame
+    threshold_m_s: float
+    ephemeris: str
 
 
 @dataclass(frozen=True)
@@ -985,10 +1009,15 @@ def _window_maneuver_solutions(
     departure_jd: float,
     return_jd: float,
     selected_unpowered: Optional[_Candidate],
+    cases: Sequence[str] = ("perijove_only", "dsm_only", "hybrid_50mps"),
 ) -> List[_ManeuverSolution]:
     """Optimize exact-endpoint maneuver cases inside one resonance window."""
     if selected_unpowered is not None and selected_unpowered.feasible:
-        return _zero_maneuver_solutions(selected_unpowered)
+        return [
+            solution
+            for solution in _zero_maneuver_solutions(selected_unpowered)
+            if solution.case in cases
+        ]
     earth_departure_position, earth_departure_velocity = _heliocentric_state(
         "earth", departure_jd
     )
@@ -1003,11 +1032,15 @@ def _window_maneuver_solutions(
     jupiter_positions, jupiter_velocities = _heliocentric_state(
         "jupiter", encounter_grid
     )
-    evaluators = {
+    all_evaluators = {
         "perijove_only": _perijove_only_solution,
         "dsm_only": _dsm_only_solution,
         "hybrid_50mps": _hybrid_solution,
     }
+    unknown_cases = set(cases) - set(all_evaluators)
+    if unknown_cases:
+        raise ValueError(f"unknown maneuver cases: {sorted(unknown_cases)}")
+    evaluators = {case: all_evaluators[case] for case in cases}
     best: dict[str, _ManeuverSolution] = {}
     refinement_brackets: dict[str, List[Tuple[float, float, bool, bool]]] = {
         case: [] for case in evaluators
@@ -1104,9 +1137,14 @@ def _window_maneuver_solutions(
     # Independent encounter-time refinements can otherwise leave the hybrid at
     # a slightly worse local numerical minimum even though its feasible set is
     # a strict superset.  Enforce that physical dominance before reporting.
-    if "dsm_only" in best and (
-        "hybrid_50mps" not in best
-        or best["dsm_only"].total_dv < best["hybrid_50mps"].total_dv
+    if (
+        "dsm_only" in evaluators
+        and "hybrid_50mps" in evaluators
+        and "dsm_only" in best
+        and (
+            "hybrid_50mps" not in best
+            or best["dsm_only"].total_dv < best["hybrid_50mps"].total_dv
+        )
     ):
         dsm = best["dsm_only"]
         best["hybrid_50mps"] = _ManeuverSolution(
@@ -1124,7 +1162,7 @@ def _window_maneuver_solutions(
             outgoing_vinf=dsm.outgoing_vinf,
             turn_angle=dsm.turn_angle,
         )
-    return [best[case] for case in evaluators if case in best]
+    return [best[case] for case in cases if case in best]
 
 
 def _maneuver_rows(
@@ -1426,6 +1464,146 @@ def analyze_two_synodic_resonance(
     )
 
 
+def analyze_adaptive_synodic_cadence(
+    start: str = _DEFAULT_START,
+    years: float = _DEFAULT_YEARS,
+    threshold_m_s: float = 50.0,
+) -> AdaptiveCadenceAnalysis:
+    """Audit a chained 2S/3S policy on the fixed mean synodic lattice.
+
+    Each cycle first optimizes the DSM proxy for a return exactly two mean
+    Earth-Jupiter synodic periods after its actual departure. If that DSM is
+    strictly greater than ``threshold_m_s``, the flown return is instead
+    optimized at exactly three synodic periods. The selected return becomes
+    the next departure, so a 3S choice correctly shifts the later phase lattice.
+    Only cycles whose selected return fits inside the requested horizon are
+    reported.
+
+    Args:
+        start: First date on which a departure epoch may occur (ISO date).
+        years: Length of the endpoint study interval (Julian years).
+        threshold_m_s: DSM threshold above which the fallback changes from a
+            two-synodic to a three-synodic cycle.
+
+    Returns:
+        Per-cycle policy choices and a one-row headline summary.
+    """
+    if years <= 0.0:
+        raise ValueError("years must be positive")
+    if threshold_m_s < 0.0:
+        raise ValueError("threshold_m_s must be nonnegative")
+    start_epoch = Time(start, scale="tdb")
+    departure_jd = float(_resonance_epochs(start_epoch, 5.0)[0])
+    horizon_end_jd = float(start_epoch.tdb.jd) + years * _DAYS_PER_YEAR
+    one_synodic_days = _FIXED_TWO_SYNODIC_DAYS / 2.0
+    rows: List[dict[str, object]] = []
+    while departure_jd + 2.0 * one_synodic_days <= horizon_end_jd:
+        two_return_jd = departure_jd + 2.0 * one_synodic_days
+        two_solutions = _window_maneuver_solutions(
+            departure_jd, two_return_jd, None, cases=("dsm_only",)
+        )
+        if not two_solutions:
+            raise RuntimeError("two-synodic DSM search found no solution")
+        two_solution = two_solutions[0]
+        two_dsm_m_s = 1000.0 * two_solution.dsm
+        selected_solution = two_solution
+        selected_multiple = 2
+        selected_return_jd = two_return_jd
+        if two_dsm_m_s > threshold_m_s:
+            selected_multiple = 3
+            selected_return_jd = departure_jd + 3.0 * one_synodic_days
+            if selected_return_jd > horizon_end_jd:
+                break
+            three_solutions = _window_maneuver_solutions(
+                departure_jd,
+                selected_return_jd,
+                None,
+                cases=("dsm_only",),
+            )
+            if not three_solutions:
+                raise RuntimeError("three-synodic DSM search found no solution")
+            selected_solution = three_solutions[0]
+        selected_dsm_m_s = 1000.0 * selected_solution.dsm
+        rows.append(
+            {
+                "cycle": len(rows),
+                "departure_tdb": Time(departure_jd, format="jd", scale="tdb").isot[:10],
+                "return_tdb": Time(selected_return_jd, format="jd", scale="tdb").isot[
+                    :10
+                ],
+                "selected_synodic_periods": selected_multiple,
+                "selected_period_days": selected_return_jd - departure_jd,
+                "two_synodic_dsm_m_s": two_dsm_m_s,
+                "selected_dsm_m_s": selected_dsm_m_s,
+                "three_synodic_selected": selected_multiple == 3,
+                "jupiter_tdb": Time(
+                    selected_solution.encounter_jd, format="jd", scale="tdb"
+                ).isot[:10],
+                "outbound_days": selected_solution.encounter_jd - departure_jd,
+                "perijove_altitude_km": (
+                    selected_solution.perijove_radius - _JUPITER_RADIUS
+                ),
+                "earth_departure_vinf_km_s": (selected_solution.earth_departure_vinf),
+                "earth_departure_200km_speed_km_s": (
+                    selected_solution.earth_departure_periapsis_speed
+                ),
+                "earth_return_vinf_km_s": selected_solution.earth_return_vinf,
+                "earth_collision_speed_km_s": (
+                    selected_solution.earth_return_collision_speed
+                ),
+                "jupiter_vinf_in_km_s": selected_solution.incoming_vinf,
+                "jupiter_vinf_out_km_s": selected_solution.outgoing_vinf,
+                "jupiter_turn_deg": np.rad2deg(selected_solution.turn_angle),
+                "resonance_endpoint_error_s": 0.0,
+            }
+        )
+        departure_jd = selected_return_jd
+    cycles = pd.DataFrame(rows)
+    if cycles.empty:
+        raise RuntimeError("study interval contains no complete adaptive cycle")
+    three = cycles.loc[cycles["three_synodic_selected"], "selected_dsm_m_s"]
+    selected = cycles["selected_dsm_m_s"]
+    worst_three_departure: Optional[str]
+    if three.empty:
+        three_mean = np.nan
+        three_median = np.nan
+        three_max = np.nan
+        worst_three_departure = None
+    else:
+        three_mean = float(three.mean())
+        three_median = float(three.median())
+        three_max = float(three.max())
+        worst_three_departure = str(cycles.loc[three.idxmax(), "departure_tdb"])
+    three_count = int(cycles["three_synodic_selected"].sum())
+    summary = pd.DataFrame(
+        [
+            {
+                "total_cycles": len(cycles),
+                "two_synodic_cycles": len(cycles) - three_count,
+                "three_synodic_cycles": three_count,
+                "three_synodic_fraction": three_count / len(cycles),
+                "three_synodic_cycles_per_century": 100.0 * three_count / years,
+                "three_synodic_mean_dsm_m_s": three_mean,
+                "three_synodic_median_dsm_m_s": three_median,
+                "three_synodic_max_dsm_m_s": three_max,
+                "worst_three_synodic_departure": worst_three_departure,
+                "selected_max_dsm_m_s": float(selected.max()),
+                "selected_mean_dsm_m_s": float(selected.mean()),
+                "selected_median_dsm_m_s": float(selected.median()),
+                "selected_dsm_over_threshold_cycles": int(
+                    (selected > threshold_m_s).sum()
+                ),
+            }
+        ]
+    )
+    return AdaptiveCadenceAnalysis(
+        cycles=cycles,
+        summary=summary,
+        threshold_m_s=threshold_m_s,
+        ephemeris=_EPHEMERIS,
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     """Command-line parser for the opt-in analysis."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1446,6 +1624,16 @@ def _parser() -> argparse.ArgumentParser:
         "--maneuver-csv",
         help="optional path to write exact-endpoint maneuver cases as CSV",
     )
+    parser.add_argument(
+        "--adaptive-threshold-m-s",
+        default=50.0,
+        type=float,
+        help="2S DSM threshold for the chained 3S fallback (default: 50)",
+    )
+    parser.add_argument(
+        "--adaptive-csv",
+        help="optional path to write the chained 2S/3S policy cycles as CSV",
+    )
     return parser
 
 
@@ -1453,10 +1641,17 @@ def main() -> None:
     """Run and print the real-orbit two-synodic audit."""
     args = _parser().parse_args()
     analysis = analyze_two_synodic_resonance(start=args.start, years=args.years)
+    adaptive = analyze_adaptive_synodic_cadence(
+        start=args.start,
+        years=args.years,
+        threshold_m_s=args.adaptive_threshold_m_s,
+    )
     if args.csv:
         analysis.windows.to_csv(args.csv, index=False)
     if args.maneuver_csv:
         analysis.maneuvers.to_csv(args.maneuver_csv, index=False)
+    if args.adaptive_csv:
+        adaptive.cycles.to_csv(args.adaptive_csv, index=False)
     print(
         "Real-orbit two-synodic resonance audit\n"
         f"ephemeris: Astropy {analysis.ephemeris!r} analytical ephemeris "
@@ -1500,6 +1695,12 @@ def main() -> None:
         "\nCorrected exact-endpoint repeatability across both schedules: "
         f"{analysis.all_corrected_feasible}."
     )
+    print(
+        "\nConditional fixed-cadence policy. Try 2S from every actual "
+        f"departure; select 3S when 2S DSM > {adaptive.threshold_m_s:.3f} m/s. "
+        "The selected return becomes the next departure:"
+    )
+    print(adaptive.summary.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
     print(
         f"\nUnpowered feasibility: {feasible}/{total} windows "
         f"({100.0 * feasible / total:.1f}%); "
