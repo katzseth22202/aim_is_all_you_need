@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -34,8 +34,11 @@ run:  ## Run the main script
 nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'all')
 	python -m src.nozzle_analysis
 
+resonance:  ## Audit 200 years of real-orbit two-synodic windows (not part of 'all')
+	python -m src.real_orbit_resonance --years 200
+
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp
 	mv environment.yml.tmp environment.yml
 
-all: format mypy test run  ## Format code, run mypy, tests, and main script (run export-env separately) 
+all: format mypy test run  ## Format code, run mypy, tests, and main script (run export-env separately)
