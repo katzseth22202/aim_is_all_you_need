@@ -251,6 +251,58 @@ km/s, 3.347 at 200). Any cycle beyond ~9.2 yr therefore loses to the direct flyb
 **at zero delta-v**. Algebra, not a search result; use it to disqualify a sequence
 before optimizing it.
 
+### Impact direction
+
+Which way the arriving PuffSats point relative to the thrust the vehicle wants, and
+what that costs (`src/circular_resonance_impulse.py`, `make resonance-impulse`, ADR
+`0012-head-on-impact-penalty-is-bounded`).
+
+**Impact-angle impulse law**:
+`beta(theta, k) = sqrt(1 + k - sin^2 theta) + cos theta`, the impulse per arriving
+impactor kilogram at impact angle `theta` from the thrust axis, with the exhaust
+canted to leave the vehicle no transverse kick. The repo's two impulse laws are its
+two endpoints: ADR 0009's head-on nozzle `sqrt(1+k) - 1` at 180°, and the growth
+push's along-axis `1 + sqrt(1+k)` at 0°.
+_Avoid_: treating head-on and along-axis as separate models; reading the `-1` as a
+loss term that can be tuned away (it is `cos 180°`, the full incoming momentum).
+
+**Aim separation**:
+The angle between the arriving PuffSats' Earth-relative excess vector and the one the
+next Jupiter departure needs. A **diagnostic**, measured at the patched-conic
+boundary — *not* the angle the **impact-angle impulse law** consumes, which is taken
+at the 200 km burn point relative to the moving vehicle (157.27° becomes 148.5° for
+2S once the vehicle's motion and the **departure-hyperbola mirror** are applied).
+_Avoid_: feeding the SOI angle into `beta`; scaling impulse by the Earth-inertial
+return `v_inf` instead of the vehicle-frame closing speed `w` (that overstates a
+canted geometry roughly two-fold and ranks the trade backwards).
+
+**Departure-hyperbola mirror**:
+The free sign choice in the ~14° (2S) / ~18° (3S) rotation between the departure
+hyperbola's outgoing excess vector and its periapsis velocity, `arcsin(1/e)`. Both
+mirror images give the same outgoing excess, so picking the one that rotates the
+thrust axis *toward* the incoming stream is worth ×1.012 / ×1.020 at zero
+propellant — more than any delta-v purchase on the aim trade curve. Same ~18.1° ADR
+0009 counted; now priced.
+_Avoid_: leaving it out of an aim comparison (it is larger than the effect being
+measured).
+
+**Free-aim ceiling**:
+What the impact angle would be worth if it carried *no* delta-v charge: ×1.166 (2S) /
+×1.131 (3S) at `k = 3`, ×1.105 / ×1.079 at ADR 0009's `k* = 7.057`, ×1.072 / ×1.050
+at `k = 10`. No trajectory, resonance or phasing beats a free angle, so it bounds
+every aim-steering scheme; the searched optimum captures under 30% of it.
+_Avoid_: quoting an aim result without it — a per-row gain of ×1.216 at the 25 km/s
+cap is real and still loses, because it is bought with delivered mass.
+
+**Head-on crossover**:
+The slug ratio above which an exactly head-on impact is the *optimum* rather than a
+penalty — `k = 18.47` (2S) / `16.43` (3S). `v_e` goes as `beta * w`; canting raises
+`beta` but lowers the closing speed `w`, because head-on *adds* the vehicle's own
+speed to the impactor's, and the bias term `cos theta` is `k`-independent while
+`sqrt(1+k)` grows.
+_Avoid_: calling head-on a penalty without naming `k`; searching for aim relief at
+`k` near or above the crossover.
+
 ### Phased growth chain (no waiting)
 
 The doubling-time clock above assumes the mass re-departs to Jupiter the instant
@@ -408,6 +460,13 @@ need Lambert arcs against actual planet positions).
 - The **push axis** and **free-aim departure** are reconciled only by the
   **apoapsis reversal**, which only a bound parking orbit provides — so the
   **closed cycle**'s sub-escape push target is forced by aim, not by propulsion.
+- The **push axis** is why the growth push needs no **aim separation** term: the
+  payload goes where it is pushed, so that collision sits at 0° on the
+  **impact-angle impulse law** by construction. Only the departure burn is charged
+  an angle.
+- The **free-aim ceiling** and the **head-on crossover** bound the same question
+  from two sides — how much a better angle could ever be worth, and the `k` past
+  which "better" means head-on.
 
 ## Example dialogue
 
@@ -529,6 +588,21 @@ need Lambert arcs against actual planet positions).
   the charge but forces the trip under 3.11 yr to keep the 3-window cycle, so the
   right period is a re-optimization, not a lookup. The ranking vs the chains is
   unaffected (they'd pay it too); the *published* number is what moves. Unresolved.
+- **The capture-fraction derating is a head-on derivation applied to canted
+  impacts.** The slug/nozzle capture fraction (`beta_bare/beta_ideal` = 0.31 at
+  `k = 3`, 0.92 tamped) is derived for a plume centre-of-mass drifting *along* the
+  dish axis. A canted impact drifts the blob off-axis, out of the capture cone, and
+  nothing models that. It can only penalize the canted case, so every gain in ADR
+  0012 is an upper bound in that respect too. Unresolved, and load-bearing for any
+  future aim-steering claim.
+- **The 2S aim floor is a clock artifact, not a wall.** The 2S family is pinned to
+  149.3-179.8° of **aim separation** across a 721 x 401 grid, but a phasing-free
+  envelope (energy and angular momentum only, recipe in ADR 0012, *not* committed
+  code) admits ~73° at the same speeds. The lock comes from fitting both legs inside
+  two synodic periods on zero-revolution arcs, not from physics; 4S+ with
+  multi-revolution arcs is unexplored. Deliberately not pursued — ADR 0012's
+  **free-aim ceiling** makes the prize too small — but do not quote 149° as a
+  physical limit.
 - **An all-failed optimizer table is not a result.** It is ambiguous between an empty
   feasible set (physics) and a search that never found it (artifact), and the two look
   identical. Random-sample the box first: if blind sampling finds feasible points at a

@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -36,6 +36,9 @@ nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'al
 
 resonance:  ## Audit 200 years of real-orbit 2S windows and the 2S/3S fallback
 	python -m src.real_orbit_resonance --years 200
+
+resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
+	python -m src.circular_resonance_impulse
 
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp
