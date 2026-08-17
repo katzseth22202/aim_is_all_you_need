@@ -24,7 +24,16 @@ def test_wheel_contains_code_dependencies_and_importable_entry_point(
         project_root,
         checkout,
         ignore=shutil.ignore_patterns(
-            ".git", ".pytest_cache", ".mypy_cache", "__pycache__"
+            ".git",
+            ".pytest_cache",
+            ".mypy_cache",
+            "__pycache__",
+            # A virtualenv is never an input to the wheel, and copying one is
+            # not merely wasteful: its bin/python* are symlinks to an
+            # interpreter that need not exist here, and copytree raises on a
+            # dangling symlink before the build starts.
+            ".venv",
+            "venv",
         ),
     )
     wheel_dir = tmp_path / "wheel"
