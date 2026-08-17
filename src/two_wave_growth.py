@@ -73,6 +73,9 @@ _DEFAULT_SPLIT_OPTIONS = (10.0, 20.0, 30.0, 60.0)
 # Operating point the split gap and the per-cycle table are reported at.
 _REFERENCE_RECOVERY = 0.6
 _REFERENCE_FUDGE = 0.8
+# Horizon the continuous-rate projection is run out to, independent of the span
+# the chain actually flies (which lands wherever whole cycles happen to end).
+_PROJECTION_YEARS = 30.0
 
 
 @lru_cache(maxsize=1)
@@ -292,6 +295,30 @@ class ChainGrowth:
     two_synodic_cycles: int
     three_synodic_cycles: int
 
+    @property
+    def annual_increase(self) -> float:
+        """Fractional mass gain per year as a continuous exponential process.
+
+        ``exp(rate) - 1``, so 0.5 means the launched mass grows by 50% a year.
+        The real chain is lumpy -- mass arrives in 2.18 and 3.28 year steps --
+        so this is the smooth idealization of it, not a per-cycle figure.
+        """
+        return float(np.expm1(self.rate))
+
+    def mass_after(self, years: float) -> float:
+        """Mass multiple after ``years`` at this chain's continuous rate.
+
+        Args:
+            years: Length of the projection.
+
+        Returns:
+            ``exp(rate * years)``.  At ``years = horizon_years`` this is
+            exactly the compounded ``total_growth``; beyond the flown span it
+            extrapolates the rate rather than flying more cycles, so it
+            assumes the cadence keeps finding equally good windows.
+        """
+        return float(np.exp(self.rate * years))
+
 
 def price_chain(
     cycles: List[TwoWaveCycle],
@@ -459,9 +486,10 @@ def analyze_two_wave_growth(
                     "fudge": fudge,
                     "slug_ratio": chain.slug_ratio,
                     "total_growth": chain.total_growth,
-                    "growth_per_year": float(np.exp(chain.rate)),
+                    "annual_increase_pct": 100.0 * chain.annual_increase,
                     "e_foldings_per_year": chain.rate,
                     "doubling_years": chain.doubling,
+                    "mass_after_30_yr": chain.mass_after(_PROJECTION_YEARS),
                 }
             )
 
@@ -588,11 +616,18 @@ def main() -> None:
                 "fudge": ".2f",
                 "slug_ratio": ".2f",
                 "total_growth": ".4g",
-                "growth_per_year": ".4f",
+                "annual_increase_pct": "+.2f",
                 "e_foldings_per_year": ".4f",
                 "doubling_years": ".3f",
+                "mass_after_30_yr": ".4g",
             },
         )
+    )
+    print(
+        "\ntotal_growth is the flown chain compounded over its own span; "
+        f"mass_after_30_yr runs the\ncontinuous rate out to {_PROJECTION_YEARS:.0f} "
+        "years, which assumes the cadence keeps finding\nequally good windows "
+        "past the flown span."
     )
     if args.csv is not None:
         analysis.sweep.to_csv(args.csv, index=False)

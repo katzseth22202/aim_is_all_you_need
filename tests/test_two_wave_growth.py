@@ -152,3 +152,16 @@ def test_sweep_covers_the_grid_and_finds_interior_slug_ratios():
     assert set(analysis.sweep["fudge"]) == {0.5, 0.8}
     assert analysis.sweep["slug_ratio"].between(0.3, 79.0).all()
     assert len(analysis.cycles) == 11
+
+
+def test_chain_reports_a_continuous_annual_rate_and_a_horizon_projection():
+    """The rate is an exponent; the projection is that exponent run out."""
+    chain = price_chain([CYCLE], recovery=0.6, fudge=0.8, slug_ratio=7.0)
+
+    assert chain.annual_increase == pytest.approx(math.exp(chain.rate) - 1.0)
+    assert chain.mass_after(30.0) == pytest.approx(math.exp(30.0 * chain.rate))
+    # The projection is the continuous idealization of a lumpy chain: over the
+    # span actually flown it must agree with the compounded cycles.
+    assert chain.mass_after(chain.horizon_years) == pytest.approx(
+        chain.total_growth, rel=1e-12
+    )

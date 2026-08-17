@@ -187,6 +187,27 @@ one-cycle parking delay, and it is worth roughly a square root of the growth.
   | 0.80 | 0.332 / 2.09 / 6.76 | 0.389 / 1.78 / 7.63 | 0.437 / 1.59 / 8.46 | 0.478 / 1.45 / 9.25 |
   | 0.90 | 0.356 / 1.95 / 6.92 | 0.415 / 1.67 / 7.82 | 0.464 / 1.50 / 8.69 | 0.505 / 1.37 / 9.52 |
 
+- **The same sweep as a continuous exponential**: annual mass increase, and the
+  multiple reached if that rate is run out to a full 30 years. The chain
+  actually flies 28.3930 yr, so the projection extrapolates the last 1.6 yr
+  rather than flying it, and assumes the cadence keeps finding equally good
+  windows.
+
+  | `e` | f = 0.5 | f = 0.6 | f = 0.7 | f = 0.8 |
+  | ---: | ---: | ---: | ---: | ---: |
+  | 0.25 | -7.95% / x0.083 | -4.03% / x0.292 | -0.71% / x0.806 | +2.14% / x1.889 |
+  | 0.30 | +0.87% / x1.298 | +5.48% / x4.951 | +9.39% / x14.78 | +12.79% / x37.03 |
+  | 0.40 | +13.90% / x49.59 | +19.61% / x215.3 | +24.52% / x719.9 | +28.83% / x1,995 |
+  | 0.50 | +23.07% / x506.2 | +29.64% / x2,409 | +35.32% / x8,734 | +40.34% / x2.60e4 |
+  | 0.60 | +29.88% / x2,551 | +37.13% / x1.30e4 | +43.44% / x5.01e4 | +49.03% / x1.58e5 |
+  | 0.70 | +35.15% / x8,408 | +42.95% / x4.52e4 | +49.76% / x1.83e5 | +55.82% / x6.00e5 |
+  | 0.80 | +39.35% / x2.10e4 | +47.60% / x1.18e5 | +54.83% / x4.96e5 | +61.28% / x1.69e6 |
+  | 0.90 | +42.77% / x4.36e4 | +51.40% / x2.53e5 | +58.98% / x1.10e6 | +65.76% / x3.84e6 |
+
+  The annual figure is the honest headline for a process this lumpy: mass
+  arrives in 2.18 and 3.28 year steps, so "49% a year" at the reference point
+  is a smoothed rate, not something observable at any single epoch.
+
 - **The architecture dies below `e` about 0.3, and that is the real design
   requirement.** At `e = 0.25` -- a bare paraboloid's free-molecular capture at
   `k = 3` -- the chain is flat or shrinking at every `f` below 0.8. Everything
