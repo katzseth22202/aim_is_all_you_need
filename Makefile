@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -36,6 +36,9 @@ nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'al
 
 resonance:  ## Audit 200 years of real-orbit 2S windows and the 2S/3S fallback
 	python -m src.real_orbit_resonance --years 200
+
+two-wave:  ## Price the real-orbit adaptive 2S/3S cadence on the two-wave nozzle ledger
+	python -m src.two_wave_growth
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse

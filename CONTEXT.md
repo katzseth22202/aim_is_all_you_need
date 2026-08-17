@@ -303,6 +303,81 @@ speed to the impactor's, and the bias term `cos theta` is `k`-independent while
 _Avoid_: calling head-on a penalty without naming `k`; searching for aim relief at
 `k` near or above the crossover.
 
+### Slug-augmented collisions
+
+Both ends of the cycle can be improved by giving the arriving PuffSat something
+to vaporise. The vocabulary below is what `src/nozzle_analysis.py`,
+`src/circular_resonance_impulse.py` and `src/two_wave_growth.py` name; the
+closed-form derivations live in ADR `0013`, "The algebra, in one place".
+
+**Slug**:
+Carried mass the arriving PuffSat vaporises, whose plume is then collimated
+onto a pusher. Momentum comes out of energy as `sqrt(2mE)`, so spreading a
+fixed impact energy over more mass buys more momentum — that, and only that,
+is where the gain comes from. _Avoid_: calling it a pusher-plate improvement
+(an inelastic merge followed by an elastic bounce gives `2*mu*w` at every `k`
+— a flat plate recovers **nothing** from the merge); calling it reaction mass
+(the gain is collimation).
+
+**Slug ratio** (`k`):
+Kilograms of slug per kilogram of arriving impactor, a continuous real the
+designer sizes, not a count. Trades exhaust speed (falling in `k`) against
+impactor economy (rising), so its optimum depends on what is being charged:
+~7.06 for bare-dish Isp, 6–12 on ADR 0009's two-currency ledger, 8.5–9.5 for
+the **two-wave split**'s chain optimum. _Avoid_: "more mass is better" without
+naming the currency; treating `k` as quantized.
+
+**Closing speed** (`w`):
+The impactor's speed *relative to the moving vehicle* at impact — the quantity
+the **impact-angle impulse law** is linear in. On the departure burn the
+vehicle is flying into the stream, so `w = v_b + v` and it *climbs* through the
+burn as the vehicle accelerates (74.2 → 80.9 km/s for a 2S closure); on the
+growth push the PuffSat overtakes, so `w = v_b − v` and it falls.
+_Avoid_: using `v_b`, or the return leg's Earth-relative `closing_speed` at the
+1 AU crossing, in place of it — they are 10–20 km/s apart, and ADR 0012 shows
+the substitution overstates a canted geometry roughly two-fold.
+
+**Effective exhaust speed**:
+`v_e = e * w * (sqrt(1+k) − 1)/k` for the head-on departure nozzle — the
+**impact-angle impulse law** at 180°, charged against the slug actually spent.
+The `sqrt(1+k)` is the *blob*: impactor plus slug. _Avoid_: `sqrt(k)`, which
+omits the impactor and runs 31% high at `k = 3`.
+
+**Recovery** (`e`, also `eta`):
+One lumped factor for how much of the ideal collimated impulse a real device
+delivers — collimation, geometric capture and plasma coupling together.
+Numerically set to `f` = 0.8 in the ideal-ceiling rows so the `k → 0` limit
+reproduces the paper, but a bare paraboloid's free-molecular capture is only
+0.31 of ideal at `k = 3`. ADR 0013's sweep makes `e ≈ 0.3` the architecture's
+survival threshold. _Avoid_: quoting a point estimate without the break-even
+`e`; conflating it with `f`, which is an elasticity claim about a bounce, not
+a collimation claim about a plume.
+
+**Two-wave split**:
+The departing batch divides at Jupiter into a **growth wave** that arrives
+early and pushes the next payload, and a **nozzle wave** one parking-orbit
+period behind that supplies the head-on departure-burn projectiles for the
+payload the growth wave just parked. It is what makes growth *linear*
+(`g[(1+sigma)/(rMd1) + sigma/k] = 1`) instead of the one-wave parked
+architecture's square-root law (`g^2(1+sigma)/(rM) + (sigma/k)g = 1`), and the
+two differ by roughly a square — 3.81 against 1.93 per cycle at `e = 0.6`,
+`k = 7`. _Avoid_: pricing a growth loop without saying which of the two it is
+(it is the largest single number in the accounting); reading ADR 0009's "the
+split must be bought" as general — see **split gap**.
+
+**Split gap**:
+How far ahead the **growth wave** arrives, which *is* the parking-orbit period:
+the payload is pushed at periapsis, coasts one full orbit, and departs at the
+next periapsis. So the same number also sizes the **apoapsis reversal** (372.5
+m/s at 10 d, 233.9 at 20 d, 112.1 at 60 d) — a longer gap buys a cheaper
+reversal and pays for it in the burn needed to pull the growth wave further
+ahead. 10 d and 20 d land within 0.7% of each other. _Avoid_: choosing the gap
+and the parking period independently (ADR 0009 priced a 10 d split against a
+20-day reversal); assuming the split must be bought at all — in **real orbits**
+the Lambert pair's free encounter time makes it nearly free (8 of 11 flown
+cycles under 1 m/s, ADR 0013), whereas the circular-coplanar model had only
+the bend and found its Earth-hit roots ~1 yr apart.
+
 ### Phased growth chain (no waiting)
 
 The doubling-time clock above assumes the mass re-departs to Jupiter the instant
@@ -467,6 +542,17 @@ need Lambert arcs against actual planet positions).
 - The **free-aim ceiling** and the **head-on crossover** bound the same question
   from two sides — how much a better angle could ever be worth, and the `k` past
   which "better" means head-on.
+- The **impact-angle impulse law** has one endpoint at each end of the cycle:
+  the **growth push** sits at 0° (`1 + sqrt(1+k)`, and at `k = 0` the paper's
+  elastic plate), the departure nozzle at 180° (`sqrt(1+k) − 1`, and at `k = 0`
+  no device at all). **Slug ratio**, **closing speed** and **recovery** are the
+  three inputs both ends share.
+- The **split gap** and the **apoapsis reversal** are one knob read twice:
+  the gap is the parking-orbit period, and the reversal is sized from that
+  period. Neither can be chosen without the other.
+- The **two-wave split** and the **doubling time** compound: the split decides
+  whether growth is linear or square-root in the same per-cycle quantities, so
+  it moves doubling more than any propulsion parameter in the model.
 
 ## Example dialogue
 
@@ -603,6 +689,20 @@ need Lambert arcs against actual planet positions).
   multi-revolution arcs is unexplored. Deliberately not pursued — ADR 0012's
   **free-aim ceiling** makes the prize too small — but do not quote 149° as a
   physical limit.
+- **`f` and `e` are the same number wearing two hats.** `astro_constants.py`
+  defines `STD_FUDGE_FACTOR = 0.8` as "how elastic PuffSat collisions are"; the
+  slug models reuse that value as **recovery**, a collimation claim about a
+  plume. The `k → 0` limit matches identically, which is what makes the
+  substitution defensible, but they are different hardware claims and no source
+  calibrates either. ADR 0013 now sweeps both independently (`f` 0.5–0.8, `e`
+  0.25–0.9) and finds them worth comparable amounts, so neither should be
+  quoted without the other. Unresolved.
+- **The two-wave split's cost is a DSM proxy, not a deep-space maneuver.** ADR
+  0013's headline — 8 of 11 flown cycles buy their **split gap** for under
+  1 m/s — is priced as an exact velocity match at the Jupiter patched-conic
+  seam (ADR 0011's proxy), not a finite-location interplanetary burn. It is the
+  claim in that ADR most exposed to a real trajectory optimization, and it is
+  load-bearing for the whole two-wave architecture. Unresolved.
 - **An all-failed optimizer table is not a result.** It is ambiguous between an empty
   feasible set (physics) and a search that never found it (artifact), and the two look
   identical. Random-sample the box first: if blind sampling finds feasible points at a

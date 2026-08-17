@@ -32,7 +32,7 @@ from boinor.core.iod import izzo
 from scipy.optimize import brentq, least_squares
 
 from src import conic_kernel
-from src.astro_constants import PUFFSAT_CYCLE_ORBIT_PERIOD
+from src.astro_constants import PUFFSAT_CYCLE_ORBIT_PERIOD, STD_FUDGE_FACTOR
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.propulsion import payload_mass_ratio
 from src.retrograde_return_legs import (
@@ -517,6 +517,8 @@ def same_cycle_nozzle(
     exhaust_speed: float,
     recovery: float = 0.8,
     slug_ratio: Optional[float] = None,
+    fudge: float = STD_FUDGE_FACTOR,
+    reversal_period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
 ) -> NozzlePricing:
     """Price the two-wave same-cycle nozzle architecture.
 
@@ -535,6 +537,12 @@ def same_cycle_nozzle(
         exhaust_speed: Methalox exhaust speed (km/s).
         recovery: Nozzle impulse recovery fraction.
         slug_ratio: Fix ``k``; None optimizes it.
+        fudge: Elasticity of the growth-push collision, ``f`` in
+            ``eq:PuffSat_ratio``.
+        reversal_period: Period of the parking orbit the pushed payload coasts
+            through, which sizes the apoapsis reversal.  It is also the gap by
+            which the growth wave must lead the nozzle wave, so a caller
+            varying one must vary the other.
 
     Returns:
         The pricing; ``wave_to_growth`` is the batch fraction on the powered
@@ -544,10 +552,16 @@ def same_cycle_nozzle(
     v_rf2 = v_rf1 + departure_dv
     mass_ratio = float(
         payload_mass_ratio(
-            v_rf=v_rf1 * u.km / u.s, v_b=growth_collision_speed * u.km / u.s
+            v_rf=v_rf1 * u.km / u.s,
+            v_b=growth_collision_speed * u.km / u.s,
+            fudge_factor=fudge,
         )
     )
-    rev = float(np.exp(-apoapsis_reversal_dv().to_value(u.km / u.s) / exhaust_speed))
+    rev = float(
+        np.exp(
+            -apoapsis_reversal_dv(reversal_period).to_value(u.km / u.s) / exhaust_speed
+        )
+    )
     delivered1 = float(np.exp(-growth_wave_burn / exhaust_speed))
 
     def solve(k: float) -> Tuple[float, float]:
