@@ -378,6 +378,67 @@ the Lambert pair's free encounter time makes it nearly free (8 of 11 flown
 cycles under 1 m/s, ADR 0013), whereas the circular-coplanar model had only
 the bend and found its Earth-hit roots ~1 yr apart.
 
+### Two-legged nozzle and the launch ledger
+
+What happens if the *overtaking* growth push is a magnetic nozzle too, rather
+than the paper's pusher plate (`src/plume_thermal.py`,
+`src/two_leg_nozzle_sweep.py`, `make two-leg`, ADR `0014`).
+
+**Overtaking nozzle**:
+A magnetic nozzle on the growth push, carrying its own slug at ratio `k1`. It
+sits at the 0° end of the **impact-angle impulse law**, so the impactor's
+momentum *adds*: `beta = 1 + sqrt(1+k)`. Parked mass per arriving impactor
+kilogram becomes `k1/sigma1` in place of the plate's `2f/Lambda`, which is the
+only change to the **two-wave split**'s ledger. Read as an engine it is the
+plate's mirror image — the plate has infinite Isp and a hard impulse cap, the
+nozzle finite Isp (~975 s at `k1 = 15`) and impulse growing as `sqrt(k)`.
+_Avoid_: assuming "impactors are precious, slug is cheap" makes `k1` unbounded
+— `k1/sigma1` peaks and falls, and the **launch ledger** bites first anyway.
+
+**Plume ignition window**:
+The closed interval of slug ratios whose post-merge plume reaches 15,000 K, from
+`eps_th = w^2 k / (2(1+k)^2)` — only the *dissipated* CM-frame energy heats the
+blob, not the bulk drift. It peaks at `k = 1` and falls on **both** sides, so
+the condition is a window, not a ceiling: too little slug dissipates nothing and
+leaves no plasma to grip. Fleet-wide across the flown chain, `k1` in
+[0.098, 10.21] and `k2` in [0.043, 23.32], both ceilings set by the slowest-
+closing three-synodic cycles. _Avoid_: reading it as a ceiling only; charging
+the blob's *total* energy rather than the thermalised fraction (that roughly
+doubles every ceiling).
+
+**Ignition bill**:
+84.4 MJ/kg for water with a 1% potassium seed — and 60% of it is **atomising the
+water**, not ionising it. The seed carries the conductivity for 0.13% of the
+budget. _Avoid_: assuming ionisation dominates (it is the smallest term);
+optimising the slug material inside this model, which has no molar-mass
+dependence in the impulse and would therefore always pick the heaviest species.
+
+**Launch ledger**:
+Kilograms returning from Jupiter per kilogram off the pad: 2/3 of liftoff is
+ground-rocket propellant (exactly a 4.09 km/s lob at 380 s), a quarter of the
+remainder is launcher dry mass, so 1/4 reaches the intercept point, and
+`0.25 * r * d1 / [(1+sigma1)(1+sigma2)]` must clear 1/15. Both legs' slug is
+lofted from Earth, so the two nozzles **compete for the same launched
+kilograms** — at poor `e2` the departure burn takes the whole budget and `k1`
+collapses onto the ignition window's lower root. This is the binding constraint
+in 56 of 64 swept cells; the **plume ignition window** binds in one. _Avoid_:
+charging the launcher's dry mass against liftoff rather than the non-propellant
+remainder (that makes 1/15 unreachable for the plate incumbent too, so the bar
+stops discriminating).
+
+**Equivalent plate elasticity**:
+The `f` a pusher plate would need to match a given `(e1, e2)` nozzle cell at the
+same `e2` — the incumbent's own axis, so the two architectures compare directly.
+Above 1.0 means no physically possible plate matches, since `f` is a restitution
+coefficient. Crossover against the paper's `f = 0.8`: `e1` between 0.5 and 0.6
+at a good head-on leg, `e1 ~ 0.7` at a poor one. Against a perfect plate,
+`e1 >= 0.8`. Since ADR 0013 puts the architecture's survival threshold at
+`e ~ 0.3`, **the overtaking nozzle must be about twice as good as the leg that
+already exists just to replace a device that carries no propellant** — which is
+why the plate stays. _Avoid_: comparing a nozzle cell against a plate at a
+different `e2` (leg 2 is common to both, and holding it fixed is what makes the
+number one-dimensional).
+
 ### Phased growth chain (no waiting)
 
 The doubling-time clock above assumes the mass re-departs to Jupiter the instant
@@ -553,6 +614,20 @@ need Lambert arcs against actual planet positions).
 - The **two-wave split** and the **doubling time** compound: the split decides
   whether growth is linear or square-root in the same per-cycle quantities, so
   it moves doubling more than any propulsion parameter in the model.
+- The **overtaking nozzle** and the pusher plate are the same algebra at
+  different `k`: as `k1 -> 0`, `k1/sigma1 -> 2 e1 / Lambda`, which *is*
+  `payload_mass_ratio()` with **recovery** in the role of the elasticity `f`.
+  The identity is arithmetic only — the **plume ignition window**'s lower root
+  keeps a real nozzle away from that limit, so the plate remains a device the
+  nozzle cannot become.
+- The **plume ignition window** and the **launch ledger** bound `k1` from the
+  same side but for opposite reasons: one says the plume goes cold when the
+  energy is spread too thin, the other that the slug had to be launched. Across
+  the swept grid the ledger is what actually binds; the window binds only in the
+  high-recovery corner.
+- The **equivalent plate elasticity** is independent of `e2` to within a few
+  percent, because leg 2 is common to both architectures — so "when does a
+  nozzle beat a plate" is a question about `e1` alone.
 
 ## Example dialogue
 
@@ -562,6 +637,11 @@ need Lambert arcs against actual planet positions).
 > **Domain expert:** "That's the **lunar-return optimum** — it isn't a **PuffSat scenario** at all, so it doesn't belong in the **scenario table**. Present it separately."
 
 ## Flagged ambiguities
+
+- "The pusher plate is just the `k = 0` nozzle" is true of the impulse law and
+  false of the device. Resolved: the **plume ignition window** is two-sided, so
+  a magnetic nozzle cannot be run at vanishing slug; the **overtaking nozzle**
+  and the plate are separate devices whose formulas happen to converge.
 
 - `scenario_table()` (the old empty-DataFrame factory) and the per-instance
   `append()` conflated *building the list of scenarios* with *rendering the frame*.

@@ -22,6 +22,7 @@ ADR are self-sufficient without them.)
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -108,6 +109,7 @@ class PhasedGeometry:
     cycle: float
 
 
+@lru_cache(maxsize=1)
 def _chain_params() -> _AssistChainParams:
     """Build the standard assist-chain parameter block for the growth loop.
 
@@ -379,6 +381,20 @@ def apoapsis_reversal_dv(period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD) -> u.Q
     return 2.0 * v_apo * u.km / u.s
 
 
+@lru_cache(maxsize=1)
+def _cycle_v_rf() -> float:
+    """Closed-cycle 200 km periapsis speed (km/s), cached for the k searches.
+
+    Both nozzle-pricing entry points call this once per evaluation and the
+    two-leg sweep evaluates them millions of times, so the orbit construction
+    behind it is memoised rather than repeated.
+
+    Returns:
+        The periapsis speed in km/s.
+    """
+    return float(puffsat_cycle_periapsis_speed().to_value(u.km / u.s))
+
+
 @dataclass(frozen=True)
 class NozzlePricing:
     """A head-on-nozzle growth solution with its mass fractions.
@@ -399,6 +415,10 @@ class NozzlePricing:
         parked_to_slug: Fraction consumed as slug.
         parked_to_reversal: Fraction burned as reversal methalox.
         delivered_fraction: ``craft / (craft + slug)`` for the departure burn.
+        growth_slug_ratio: ``k`` of the *growth push*, zero when that leg is a
+            pusher plate (which carries no slug).
+        growth_sigma: Growth-push slug consumed per unit parked mass, zero for
+            a pusher plate.
     """
 
     slug_ratio: float
@@ -411,6 +431,18 @@ class NozzlePricing:
     parked_to_slug: float
     parked_to_reversal: float
     delivered_fraction: float
+    growth_slug_ratio: float = 0.0
+    growth_sigma: float = 0.0
+
+    @property
+    def mass_multiplier(self) -> float:
+        """Mass at the intercept point per unit mass departing as craft.
+
+        ``(1 + growth_sigma) (1 + sigma)`` -- everything the ground had to loft
+        for each kilogram that survives both legs.  A pusher plate consumes
+        nothing on the growth push, so its first factor is 1.
+        """
+        return (1.0 + self.growth_sigma) * (1.0 + self.sigma)
 
 
 def _sigma(k: float, recovery: float, v_b: float, v_rf1: float, v_rf2: float) -> float:
@@ -435,6 +467,38 @@ def _sigma(k: float, recovery: float, v_b: float, v_rf1: float, v_rf2: float) ->
     return float(np.exp(length / (recovery * beta)) - 1.0)
 
 
+def _sigma_overtaking(
+    k: float, recovery: float, v_b: float, v_ri: float, v_rf: float
+) -> float:
+    """Slug consumed per unit final craft mass for the overtaking growth push.
+
+    The same integration as :func:`_sigma`, at the other end of ADR 0012's
+    impulse law: the impactor overtakes, so its bulk drift *adds* and
+    ``beta = (1 + sqrt(1+k))/k`` per slug kilogram rather than
+    ``(sqrt(1+k) - 1)/k``.  The closing speed falls through the burn instead of
+    climbing, because the vehicle is running away from the stream.
+
+    As ``k -> 0`` this reproduces the pusher plate exactly: the parked mass per
+    impactor kilogram ``k/sigma`` tends to ``2 * recovery / Lambda``, which is
+    :func:`payload_mass_ratio` with ``recovery`` in the role of ``f``.  That
+    identity is formal, not physical -- a magnetic nozzle has no plasma to grip
+    at vanishing slug (``src/plume_thermal.py``).
+
+    Args:
+        k: Slug mass per impactor mass.
+        recovery: Fraction of the ideal impulse recovered (1.0 = ideal).
+        v_b: Growth wave's collision speed (km/s).
+        v_ri: Vehicle speed at the start of the push (km/s).
+        v_rf: Vehicle speed at the end of the push (km/s).
+
+    Returns:
+        Slug mass per unit final craft mass.
+    """
+    length = float(np.log((v_b - v_ri) / (v_b - v_rf)))
+    beta = (1.0 + np.sqrt(1.0 + k)) / k
+    return float(np.exp(length / (recovery * beta)) - 1.0)
+
+
 def _priced(
     k: float,
     sigma: float,
@@ -442,6 +506,8 @@ def _priced(
     cycle: float,
     wave_to_growth: float,
     reversal_factor: float,
+    growth_slug_ratio: float = 0.0,
+    growth_sigma: float = 0.0,
 ) -> NozzlePricing:
     """Assemble a NozzlePricing from a solved recurrence point."""
     doubling = float("inf") if growth <= 1.0 else cycle * np.log(2.0) / np.log(growth)
@@ -456,6 +522,8 @@ def _priced(
         parked_to_slug=reversal_factor * sigma / (1.0 + sigma),
         parked_to_reversal=1.0 - reversal_factor,
         delivered_fraction=1.0 / (1.0 + sigma),
+        growth_slug_ratio=growth_slug_ratio,
+        growth_sigma=growth_sigma,
     )
 
 
@@ -484,7 +552,7 @@ def parked_nozzle(
     Returns:
         The pricing at the given (or optimal) slug ratio.
     """
-    v_rf1 = float(puffsat_cycle_periapsis_speed().to_value(u.km / u.s))
+    v_rf1 = _cycle_v_rf()
     v_rf2 = v_rf1 + departure_dv
     # payload_mass_ratio can hand back a dimensionless Quantity despite its
     # float annotation; coerce at the boundary.
@@ -519,6 +587,8 @@ def same_cycle_nozzle(
     slug_ratio: Optional[float] = None,
     fudge: float = STD_FUDGE_FACTOR,
     reversal_period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+    growth_slug_ratio: Optional[float] = None,
+    growth_recovery: Optional[float] = None,
 ) -> NozzlePricing:
     """Price the two-wave same-cycle nozzle architecture.
 
@@ -543,20 +613,44 @@ def same_cycle_nozzle(
             through, which sizes the apoapsis reversal.  It is also the gap by
             which the growth wave must lead the nozzle wave, so a caller
             varying one must vary the other.
+        growth_slug_ratio: Put a magnetic nozzle on the growth push too, at
+            this slug ratio, instead of the paper's pusher plate.  Requires
+            ``growth_recovery``; ``fudge`` is then unused.
+        growth_recovery: Impulse recovery of that growth-push nozzle.
 
     Returns:
         The pricing; ``wave_to_growth`` is the batch fraction on the powered
         bend.
+
+    Raises:
+        ValueError: If only one of the growth-push nozzle arguments is given.
     """
-    v_rf1 = float(puffsat_cycle_periapsis_speed().to_value(u.km / u.s))
+    if (growth_slug_ratio is None) != (growth_recovery is None):
+        raise ValueError("growth_slug_ratio and growth_recovery must be given together")
+    v_rf1 = _cycle_v_rf()
     v_rf2 = v_rf1 + departure_dv
-    mass_ratio = float(
-        payload_mass_ratio(
-            v_rf=v_rf1 * u.km / u.s,
-            v_b=growth_collision_speed * u.km / u.s,
-            fudge_factor=fudge,
+    if growth_slug_ratio is None:
+        # Pusher plate: nothing is consumed on the growth push, so the parked
+        # payload is the whole of what the wave lifted.
+        growth_sigma = 0.0
+        parked_per_impactor = float(
+            payload_mass_ratio(
+                v_rf=v_rf1 * u.km / u.s,
+                v_b=growth_collision_speed * u.km / u.s,
+                fudge_factor=fudge,
+            )
         )
-    )
+    else:
+        assert growth_recovery is not None  # narrowed by the pairing check
+        growth_sigma = _sigma_overtaking(
+            growth_slug_ratio,
+            growth_recovery,
+            growth_collision_speed,
+            0.0,
+            v_rf1,
+        )
+        parked_per_impactor = growth_slug_ratio / growth_sigma
+    mass_ratio = parked_per_impactor
     rev = float(
         np.exp(
             -apoapsis_reversal_dv(reversal_period).to_value(u.km / u.s) / exhaust_speed
@@ -574,7 +668,16 @@ def same_cycle_nozzle(
         slug_ratio = float(ks[int(np.argmax([solve(k)[0] for k in ks]))])
     g, sigma = solve(slug_ratio)
     phi = 1.0 - (sigma / slug_ratio) * g
-    return _priced(slug_ratio, sigma, g, cycle, phi, rev)
+    return _priced(
+        slug_ratio,
+        sigma,
+        g,
+        cycle,
+        phi,
+        rev,
+        growth_slug_ratio=0.0 if growth_slug_ratio is None else growth_slug_ratio,
+        growth_sigma=growth_sigma,
+    )
 
 
 def corrected_incumbent(
@@ -591,7 +694,7 @@ def corrected_incumbent(
     Returns:
         ``(growth, doubling_years)``.
     """
-    v_rf1 = float(puffsat_cycle_periapsis_speed().to_value(u.km / u.s))
+    v_rf1 = _cycle_v_rf()
     mass_ratio = float(
         payload_mass_ratio(v_rf=v_rf1 * u.km / u.s, v_b=collision_speed * u.km / u.s)
     )

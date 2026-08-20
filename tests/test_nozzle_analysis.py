@@ -124,3 +124,59 @@ def test_powered_split_10_day_burn():
     burn, vb1 = found
     assert burn == pytest.approx(0.326, abs=0.02)
     assert vb1 == pytest.approx(61.46, abs=0.1)
+
+
+def test_growth_nozzle_reduces_to_the_plate_as_slug_vanishes() -> None:
+    """``k1 -> 0`` reproduces ``payload_mass_ratio`` with recovery as ``f``.
+
+    Formal, not physical: the ignition window's lower root sits well above
+    zero, so a real nozzle cannot be run there.
+    """
+    common = dict(
+        growth_collision_speed=59.29,
+        growth_wave_burn=0.0,
+        nozzle_collision_speed=55.45,
+        departure_dv=5.329,
+        cycle=3.276,
+        exhaust_speed=VE_METHALOX,
+        recovery=0.6,
+        slug_ratio=8.0,
+    )
+    plate = same_cycle_nozzle(fudge=0.7, **common)
+    nozzle = same_cycle_nozzle(growth_slug_ratio=1e-8, growth_recovery=0.7, **common)
+    assert np.isclose(plate.growth, nozzle.growth, rtol=1e-6)
+    assert np.isclose(plate.mass_multiplier, nozzle.mass_multiplier, rtol=1e-6)
+
+
+def test_growth_nozzle_costs_launch_mass_that_the_plate_does_not() -> None:
+    """A plate consumes nothing on the push; a nozzle spends slug for it."""
+    common = dict(
+        growth_collision_speed=59.29,
+        growth_wave_burn=0.0,
+        nozzle_collision_speed=55.45,
+        departure_dv=5.329,
+        cycle=3.276,
+        exhaust_speed=VE_METHALOX,
+        recovery=0.6,
+        slug_ratio=8.0,
+    )
+    plate = same_cycle_nozzle(fudge=0.8, **common)
+    nozzle = same_cycle_nozzle(growth_slug_ratio=6.0, growth_recovery=0.8, **common)
+    assert plate.growth_sigma == 0.0
+    assert nozzle.growth_sigma > 0.0
+    assert nozzle.mass_multiplier > plate.mass_multiplier
+    assert nozzle.growth > plate.growth
+
+
+def test_pairing_of_the_growth_nozzle_arguments_is_enforced() -> None:
+    """A slug ratio without a recovery is not a specification."""
+    with pytest.raises(ValueError):
+        same_cycle_nozzle(
+            growth_collision_speed=59.29,
+            growth_wave_burn=0.0,
+            nozzle_collision_speed=55.45,
+            departure_dv=5.329,
+            cycle=3.276,
+            exhaust_speed=VE_METHALOX,
+            growth_slug_ratio=4.0,
+        )
