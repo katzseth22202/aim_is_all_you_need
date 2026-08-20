@@ -130,22 +130,25 @@ applied per flown cycle, since `r` and `d1` vary across the chain.
 - **The fleet-wide slug ratio is set by the three-synodic cycles.** One nozzle
   loading flies the whole chain (`price_chain`'s convention), so the admissible
   window is the intersection over cycles. The 3S returns close slowest
-  (`v_b` 58.4-59.3 against the 2S cycles' 63.6-66.8) and therefore run coldest,
-  capping `k1` at 10.21 where a 2S cycle alone would allow 16.2. Letting each
+  (growth-wave `v_b` 56.5-57.4 against the 2S cycles' 61.8-65.1) and therefore
+  run coldest, capping `k1` at 10.21 where a 2S cycle alone would allow 15.32.
+  Letting each
   cycle pick its own `k` recovers only 0.6-3.2% of rate, which does not justify
   a per-cycle loading.
 
 - **ADR 0013 still reproduces, but only where the new floor is slack.** At
   `e = 0.6, f = 0.8` the plate returns 1/10.8 of liftoff and the floor does not
-  bind, so 0.3989 e-foldings/yr stands unchanged. At `e2 <= 0.4` the floor bites
-  the incumbent too (`f = 0.5, e = 0.25` moves from -0.083 to -0.159): the
-  ground-launch charge is new information about the plate as well.
+  bind, so 0.3989 e-foldings/yr stands unchanged. At `e2 <= 0.3` it bites the
+  incumbent too, and hard enough to change its sign: at `f = 0.8, e2 = 0.25` the
+  plate goes from +0.0212 e-foldings/yr to **-0.0994**, growing to shrinking.
+  The ground-launch charge is new information about the plate as well.
 
 ### Considered and rejected
 
 - **Tapering `k1` through the burn to ride the ignition ceiling.** The window's
-  ceiling moves with `w`, which falls 59.8 -> 48.8 km/s across the push, so a
-  schedule `k(w)` could start at 18.9 and end at 11.9. Integrating the variable-
+  ceiling moves with `w`, which falls 59.8 -> 48.8 km/s across the push at
+  ADR 0009's reference point, so a schedule `k(w)` could start at 18.9 and end
+  at 11.9. Integrating the variable-
   `k` push gives +1% to +6% parked mass, bought with a 15% larger mass
   multiplier — and under a binding launch floor that trade is negative. Not
   worth the loss of a closed form.
@@ -172,8 +175,9 @@ applied per flown cycle, since `r` and `d1` vary across the chain.
 
 - `e1` and `e2` are swept independently with no imposed relation. Two effects
   point opposite ways and neither is derivable here: the wrong-way bulk drift an
-  overtaking nozzle must reverse is only `1/(1+k1)` of the blob energy (7.8% at
-  `k1 = 11.9`, arguing `e1 ~ e2`), but the overtaking geometry puts impactor
+  overtaking nozzle must reverse is only `1/(1+k1)` of the blob energy (8.9% at
+  the fleet ceiling `k1 = 10.21`, arguing `e1 ~ e2`), but the overtaking geometry
+  puts impactor
   entry and exhaust exit at the *same* end of the vehicle, so each impactor
   flies up the previous shot's plume (arguing `e1 < e2`). The equivalent-plate
   table is published instead of a penalty factor so a reader can place their own
