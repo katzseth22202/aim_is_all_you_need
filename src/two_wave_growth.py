@@ -57,7 +57,10 @@ _DEFAULT_THRESHOLD_M_S = 50.0
 # The split gap is the parking-orbit period: the growth wave pushes the payload
 # up from 200 km, the payload coasts one full orbit, and the nozzle wave departs
 # it at the next periapsis.  So this same number sizes the apoapsis reversal.
-_DEFAULT_SPLIT_DAYS = 20.0
+# ADR 0013 decided the gap is 10 days, so that is the default here and the one
+# ``two_leg_nozzle_sweep`` imports; the two must not drift apart, because the
+# chain a caller gets silently depends on it (ADR 0015, item 4).
+DEFAULT_SPLIT_DAYS = 10.0
 # Methalox vacuum exhaust speed, the currency every correction burn is paid in.
 VE_METHALOX = float((METHALOX_VACUUM_ISP * g0).to_value(u.km / u.s))
 # Slug-ratio search box for the chain optimum, recorded per the ADR 0007 lesson.
@@ -128,7 +131,7 @@ def adaptive_two_wave_cycles(
     start: str = _DEFAULT_START,
     years: float = _DEFAULT_HORIZON_YEARS,
     threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
-    split_days: float = _DEFAULT_SPLIT_DAYS,
+    split_days: float = DEFAULT_SPLIT_DAYS,
 ) -> List[TwoWaveCycle]:
     """Fly the adaptive 2S/3S cadence and return its cycles.
 

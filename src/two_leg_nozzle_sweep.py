@@ -47,6 +47,7 @@ from src.astro_constants import STD_FUDGE_FACTOR
 from src.nozzle_analysis import NozzlePricing, apoapsis_reversal_dv, same_cycle_nozzle
 from src.plume_thermal import NOZZLE_FLOOR_TEMPERATURE, slug_ratio_window
 from src.two_wave_growth import (
+    DEFAULT_SPLIT_DAYS,
     VE_METHALOX,
     TwoWaveCycle,
     _cycle_periapsis_speed,
@@ -91,7 +92,8 @@ DEFAULT_RECOVERIES: Tuple[float, ...] = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9
 #: unphysical and is reported as such rather than clipped.
 _PLATE_BRACKET = (0.02, 4.0)
 #: Split gap the comparison is flown at, matching ADR 0013's headline table.
-DEFAULT_SPLIT_DAYS = 10.0
+#: Re-exported from ``two_wave_growth`` rather than restated, so the sweep and a
+#: direct ``adaptive_two_wave_cycles()`` call can never fly different chains.
 
 
 def coldest_closing_speeds(cycle: TwoWaveCycle) -> Tuple[float, float]:

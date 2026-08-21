@@ -11,6 +11,7 @@ import pytest
 
 from src.nozzle_analysis import same_cycle_nozzle
 from src.plume_thermal import slug_ratio_window
+from src.two_leg_nozzle_sweep import DEFAULT_SPLIT_DAYS as SWEEP_SPLIT_DAYS
 from src.two_leg_nozzle_sweep import (
     PAYLOAD_FRACTION_AT_INTERCEPT,
     RETURN_FLOOR,
@@ -20,6 +21,7 @@ from src.two_leg_nozzle_sweep import (
     price_chain_two_leg,
     returned_launch_fraction,
 )
+from src.two_wave_growth import DEFAULT_SPLIT_DAYS as CHAIN_SPLIT_DAYS
 from src.two_wave_growth import TwoWaveCycle, adaptive_two_wave_cycles, price_chain
 
 VE_METHALOX = 3.7265
@@ -133,3 +135,50 @@ def test_crossover_against_the_paper_plate() -> None:
     assert f_below is not None and f_above is not None and f_perfect is not None
     assert f_below < 0.8 < f_above
     assert f_perfect > 1.0
+
+
+def test_both_modules_fly_the_same_split_gap() -> None:
+    """The sweep and a bare chain call must not silently fly different chains.
+
+    ``adaptive_two_wave_cycles`` once defaulted to a 20-day gap while the sweep
+    ran at 10, so calling the chain builder directly gave growth-wave closing
+    speeds about 2 km/s hotter than any published table.  ADR 0013 decided the
+    gap is 10 days; both modules now read one constant.
+    """
+    assert CHAIN_SPLIT_DAYS == SWEEP_SPLIT_DAYS == 10.0
+
+
+@pytest.mark.slow
+def test_matched_recovery_reverses_the_plate_verdict() -> None:
+    """ADR 0015's headline: at ``e1 = e2 = f`` the two-leg nozzle wins.
+
+    Pins the ends and the crossover of ADR 0015's matched-recovery table.  The
+    nozzle loses at ``e = 0.25``, ties near 0.30, and is 8.5x the plate by 0.60.
+    """
+    cycles = adaptive_two_wave_cycles(split_days=CHAIN_SPLIT_DAYS)
+
+    for recovery, nozzle_growth, plate_growth in (
+        (0.25, 1.33e-4, 3.09e-4),
+        (0.30, 2.95e-2, 2.91e-2),
+        (0.60, 6.632e4, 7.827e3),
+    ):
+        nozzle = price_chain_two_leg(cycles, recovery, recovery)
+        plate = price_chain_two_leg(cycles, recovery, None, recovery)
+        assert nozzle is not None and plate is not None
+        assert np.isclose(nozzle.total_growth, nozzle_growth, rtol=3e-3)
+        assert np.isclose(plate.total_growth, plate_growth, rtol=3e-3)
+
+    # The verdict flips between 0.25 and 0.30 and compounds above it.
+    loses = price_chain_two_leg(cycles, 0.25, 0.25)
+    loses_plate = price_chain_two_leg(cycles, 0.25, None, 0.25)
+    wins = price_chain_two_leg(cycles, 0.60, 0.60)
+    wins_plate = price_chain_two_leg(cycles, 0.60, None, 0.60)
+    assert loses is not None and loses_plate is not None
+    assert wins is not None and wins_plate is not None
+    assert loses.total_growth < loses_plate.total_growth
+    assert wins.total_growth > 8.0 * wins_plate.total_growth
+
+    # As a rate the same gap is only ~24%, which is why ADR 0015 insists the
+    # currency be named: 0.3910 e-foldings/yr against 0.3158.
+    assert np.isclose(wins.rate, 0.3910, atol=5e-4)
+    assert np.isclose(wins_plate.rate, 0.3158, atol=5e-4)
