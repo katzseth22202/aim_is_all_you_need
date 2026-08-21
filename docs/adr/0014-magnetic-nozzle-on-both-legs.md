@@ -1,6 +1,6 @@
 # A magnetic nozzle on the growth push needs ~0.6 recovery just to draw level with the plate
 
-Status: accepted
+Status: accepted; verdict superseded by ADR 0015 (the arithmetic stands)
 
 Date: 2026-08-20
 
@@ -113,6 +113,9 @@ applied per flown cycle, since `r` and `d1` vary across the chain.
   paraboloid at 0.31, so the overtaking nozzle must be roughly twice as good as
   the leg that already exists merely to replace a device that carries no
   propellant. **That is the finding, and it is why the plate stays.**
+  ADR 0015 revisits this against a plate at matched recovery rather than at
+  `f = 0.8` and reaches the opposite verdict from the same numbers. The
+  equivalent-plate table above is unchanged and is what both ADRs turn on.
 
 - **The ground-launch floor binds almost everywhere; the plume floor almost
   nowhere.** Across the 8x8 grid the returned fraction sits pinned at exactly

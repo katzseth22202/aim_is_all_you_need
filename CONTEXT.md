@@ -777,6 +777,10 @@ need Lambert arcs against actual planet positions).
   calibrates either. ADR 0013 now sweeps both independently (`f` 0.5–0.8, `e`
   0.25–0.9) and finds them worth comparable amounts, so neither should be
   quoted without the other. Unresolved.
+  The `f = 0.8` extrapolation is now load-bearing for a *decision*, not just a
+  number: ADR 0014 and ADR 0015 reach opposite verdicts purely from whether the
+  plate is benchmarked at 0.8 or at the nozzle's own recovery. Any future
+  measurement of plate restitution above ~20 km/s settles the leg-1 device choice.
 - **The two-wave split's cost is a DSM proxy, not a deep-space maneuver.** ADR
   0013's headline — 8 of 11 flown cycles buy their **split gap** for under
   1 m/s — is priced as an exact velocity match at the Jupiter patched-conic
