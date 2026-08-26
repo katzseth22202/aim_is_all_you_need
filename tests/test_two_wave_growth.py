@@ -12,11 +12,14 @@ import astropy.units as u
 import pytest
 
 from src.nozzle_analysis import same_cycle_nozzle
+from src.plume_thermal import NOZZLE_FLOOR_TEMPERATURE, NOZZLE_GATE_TEMPERATURE
 from src.two_wave_growth import (
     VE_METHALOX,
     TwoWaveCycle,
     adaptive_two_wave_cycles,
     analyze_two_wave_growth,
+    fleet_ignition_windows,
+    headon_slug_ratio_bounds,
     price_chain,
     price_cycle,
 )
@@ -165,3 +168,43 @@ def test_chain_reports_a_continuous_annual_rate_and_a_horizon_projection():
     assert chain.mass_after(chain.horizon_years) == pytest.approx(
         chain.total_growth, rel=1e-12
     )
+
+
+def test_search_box_is_intersected_with_the_ignition_window() -> None:
+    """The bare ceiling of 80 admitted slug ratios no plume can supply.
+
+    ``k_max`` is 36.88 even at the 75 km/s head-on anchor and 26.9 across the
+    flown fleet, so the old box ran six times past where the nozzle has a
+    plasma to grip.  It never changed an answer -- the optimum sits near 8.5 --
+    but a recorded search box that is not the admissible set is the ADR 0007
+    failure mode.
+    """
+    cycles = [CYCLE]
+    low, high = headon_slug_ratio_bounds(cycles)
+    window = fleet_ignition_windows(cycles, NOZZLE_GATE_TEMPERATURE)[1]
+    assert window is not None
+    assert high == pytest.approx(min(window[1], 80.0))
+    assert high < 80.0
+    assert low == pytest.approx(max(window[0], 0.2))
+
+
+def test_the_gate_admits_more_slug_than_the_design_floor() -> None:
+    """10 000 K is the physics gate; 15 000 K is the design intent."""
+    cycles = [CYCLE]
+    gated = headon_slug_ratio_bounds(cycles, NOZZLE_GATE_TEMPERATURE)
+    floored = headon_slug_ratio_bounds(cycles, NOZZLE_FLOOR_TEMPERATURE)
+    assert gated[1] > floored[1]
+
+
+def test_charging_the_toll_costs_growth_and_lowers_the_optimal_slug_ratio() -> None:
+    """Both directions matter: less growth, and less slug is worth carrying.
+
+    ``eta_chem`` falls with ``k`` -- more slug means more water to pull apart
+    per unit of collision energy -- so the toll pulls the optimum down as well
+    as pushing the growth down.
+    """
+    cycles = [CYCLE]
+    plain = price_chain(cycles, 1.0, 0.8, geometric_efficiency=None)
+    tolled = price_chain(cycles, 1.0, 0.8, geometric_efficiency=1.0)
+    assert tolled.total_growth < plain.total_growth
+    assert tolled.slug_ratio < plain.slug_ratio

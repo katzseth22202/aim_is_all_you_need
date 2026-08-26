@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import astropy.units as u
 import numpy as np
@@ -41,6 +41,12 @@ from src.nozzle_analysis import (
     NozzlePricing,
     apoapsis_reversal_dv,
     same_cycle_nozzle,
+)
+from src.plume_thermal import (
+    NOZZLE_FLOOR_TEMPERATURE,
+    NOZZLE_GATE_TEMPERATURE,
+    chemistry_efficiency,
+    slug_ratio_window,
 )
 from src.real_orbit_resonance import (
     _DAYS_PER_YEAR,
@@ -63,7 +69,14 @@ _DEFAULT_THRESHOLD_M_S = 50.0
 DEFAULT_SPLIT_DAYS = 10.0
 # Methalox vacuum exhaust speed, the currency every correction burn is paid in.
 VE_METHALOX = float((METHALOX_VACUUM_ISP * g0).to_value(u.km / u.s))
-# Slug-ratio search box for the chain optimum, recorded per the ADR 0007 lesson.
+# Outer slug-ratio search box for the chain optimum, recorded per the ADR 0007
+# lesson.  It is only the *box*: the admissible set is this intersected with
+# the fleet ignition window (:func:`fleet_ignition_windows`), which is a closed
+# interval on both sides because the dissipated energy ``w^2 k/(2(1+k)^2)``
+# peaks at ``k = 1`` and falls away on both.  The old bare ceiling of 80 ran
+# the optimiser six times past where the plume stops being a plasma the field
+# can grip -- ``k_max`` is 36.88 even at the 75 km/s head-on leg, and 12.29 on
+# the overtake's cold end (``puffsat_impact_simulation``, ``make analysis-toll``).
 _K_SEARCH_MIN = 0.2
 _K_SEARCH_MAX = 80.0
 _K_SAMPLES = 60
@@ -208,6 +221,7 @@ def price_cycle(
     fudge: float,
     slug_ratio: Optional[float] = None,
     reversal_period: Optional[u.Quantity] = None,
+    geometric_efficiency: Optional[float] = None,
 ) -> NozzlePricing:
     """Price one flown cycle on the two-wave same-cycle nozzle ledger.
 
@@ -223,11 +237,33 @@ def price_cycle(
         slug_ratio: Fix ``k``; None optimizes it.
         reversal_period: Override the parking-orbit period; defaults to the
             cycle's own split gap.
+        geometric_efficiency: Charge the frozen-dissociation toll, sweeping
+            this as the *remaining* jet efficiency.  None (the default) leaves
+            ``eta_jet = 1`` and reproduces the published arithmetic, with
+            ``recovery`` doing all the derating from outside the momentum
+            debit.  Given a value, the head-on nozzle is priced at
+            ``eta_jet = eta_chem * geometric_efficiency`` acting on the gross
+            jet, and callers sweeping the ledger's way should pass
+            ``recovery = 1.0`` so the derating is not applied twice.
 
     Returns:
         The cycle's pricing, including its growth factor and mass fractions.
+
+    Note:
+        ``eta_chem`` is evaluated at the *coldest instant* of the head-on burn,
+        which is its start -- the vehicle accelerates into the stream, so ``w``
+        and hence ``eta_chem`` only rise from there.  Holding it there through
+        the burn understates ``beta`` and so overstates the slug spent, which
+        is the conservative direction and the same anchor
+        :func:`fleet_ignition_windows` already uses.
     """
     period = cycle.split_days * u.day if reversal_period is None else reversal_period
+    jet = 1.0
+    if geometric_efficiency is not None:
+        jet = geometric_efficiency * chemistry_efficiency(
+            coldest_closing_speeds(cycle)[1] * u.km / u.s,
+            1.0 if slug_ratio is None else slug_ratio,
+        )
     return same_cycle_nozzle(
         growth_collision_speed=cycle.growth_wave_v_b,
         growth_wave_burn=cycle.growth_wave_burn + cycle.nozzle_wave_dsm,
@@ -239,10 +275,66 @@ def price_cycle(
         slug_ratio=slug_ratio,
         fudge=fudge,
         reversal_period=period,
+        jet_efficiency=jet,
     )
 
 
-def _best_slug_ratio(score: Callable[[float], float]) -> float:
+def coldest_closing_speeds(cycle: TwoWaveCycle) -> Tuple[float, float]:
+    """The closing speed at the coldest instant of each of the cycle's burns.
+
+    The overtaking push starts fast and slows as the vehicle runs away from the
+    stream, so its cold end is the *finish*.  The head-on burn does the
+    opposite -- the vehicle accelerates into the stream -- so its cold end is
+    the *start*.  Those are the two speeds the ignition window must hold at.
+
+    Args:
+        cycle: The flown cycle.
+
+    Returns:
+        ``(growth_push_end, departure_burn_start)`` in km/s.
+    """
+    v_rf = _cycle_periapsis_speed()
+    return cycle.growth_wave_v_b - v_rf, cycle.nozzle_wave_v_b + v_rf
+
+
+def fleet_ignition_windows(
+    cycles: Sequence[TwoWaveCycle],
+    temperature: u.Quantity = NOZZLE_FLOOR_TEMPERATURE,
+) -> Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]:
+    """Slug-ratio windows a single fleet-wide loading must satisfy every cycle.
+
+    One nozzle design flies the whole chain (``price_chain``'s convention), so
+    the admissible set is the *intersection* of the per-cycle windows.  The
+    binding cycles are the three-synodic ones: they close slowest, so they run
+    coldest and set the ceiling for everyone.
+
+    Args:
+        cycles: The flown cycles.
+        temperature: Plume temperature the nozzles require.
+
+    Returns:
+        ``(leg1_window, leg2_window)``; either is None if some cycle admits no
+        slug ratio at all.
+    """
+    legs: List[Optional[Tuple[float, float]]] = []
+    for index in (0, 1):
+        low, high = 0.0, float("inf")
+        for cycle in cycles:
+            window = slug_ratio_window(
+                coldest_closing_speeds(cycle)[index] * u.km / u.s, temperature
+            )
+            if window is None:
+                low, high = 1.0, 0.0
+                break
+            low, high = max(low, window[0]), min(high, window[1])
+        legs.append((low, high) if low < high else None)
+    return legs[0], legs[1]
+
+
+def _best_slug_ratio(
+    score: Callable[[float], float],
+    bounds: Tuple[float, float] = (_K_SEARCH_MIN, _K_SEARCH_MAX),
+) -> float:
     """Slug ratio maximizing ``score``, by coarse grid then continuous refinement.
 
     The growth-versus-``k`` curve is smooth and single-peaked, so a log-spaced
@@ -251,11 +343,15 @@ def _best_slug_ratio(score: Callable[[float], float]) -> float:
 
     Args:
         score: Chain growth as a function of the slug ratio.
+        bounds: Slug ratios to search between.  Defaults to the bare recorded
+            box; callers that know which leg they are pricing should pass the
+            fleet ignition window intersected with it, since the box alone
+            admits ratios whose plume the nozzle cannot grip.
 
     Returns:
-        The maximizing slug ratio, inside the recorded search box.
+        The maximizing slug ratio, inside the supplied bounds.
     """
-    grid = np.logspace(np.log10(_K_SEARCH_MIN), np.log10(_K_SEARCH_MAX), _K_SAMPLES)
+    grid = np.logspace(np.log10(bounds[0]), np.log10(bounds[1]), _K_SAMPLES)
     values = [score(float(k)) for k in grid]
     peak = int(np.argmax(values))
     low = float(grid[max(0, peak - 1)])
@@ -323,12 +419,63 @@ class ChainGrowth:
         return float(np.exp(self.rate * years))
 
 
+def headon_slug_ratio_bounds(
+    cycles: Sequence[TwoWaveCycle],
+    gate: u.Quantity = NOZZLE_GATE_TEMPERATURE,
+) -> Tuple[float, float]:
+    """Slug ratios the head-on departure nozzle may actually be built to.
+
+    The recorded search box is a *search* convenience; the physics is the fleet
+    ignition window, and the admissible set is their intersection.  The window
+    is closed on both sides because the dissipated energy ``w^2 k/(2(1+k)^2)``
+    peaks at ``k = 1``: too much slug spreads the energy thin, too little
+    dissipates nothing in the merge, and a magnetic nozzle needs a plasma
+    either way.
+
+    **Why the gate is looser than the design floor, which reads backwards at
+    first.** :data:`NOZZLE_FLOOR_TEMPERATURE` is 15 000 K, the temperature the
+    nozzle is *designed* around, and ``two_leg_nozzle_sweep`` holds its legs to
+    it.  The gate here is 10 000 K, and it answers a different question --
+    below what stagnation temperature does the plume stop being something the
+    toll calculation even applies to.  ``puffsat_impact_simulation`` answered
+    it by solving the surface: what fails below 10 000 K is *dissociation*, not
+    conduction, because the potassium seed keeps supplying electrons long after
+    the water stops.  Using the gate rather than the floor here therefore
+    bounds the search by what is physical rather than by what is intended.
+
+    Args:
+        cycles: The flown cycles.  One nozzle flies all of them, so the window
+            is the intersection over the fleet, and the three-synodic cycles
+            bind because they close slowest and so run coldest.
+        gate: Stagnation temperature the plume must reach at the coldest
+            instant of the head-on burn.
+
+    Returns:
+        ``(k_min, k_max)`` to search between.
+
+    Raises:
+        ValueError: If no slug ratio serves every cycle at this gate.
+    """
+    window = fleet_ignition_windows(cycles, gate)[1]
+    if window is None:
+        raise ValueError(f"no slug ratio reaches {gate} on every cycle's head-on burn")
+    low, high = max(_K_SEARCH_MIN, window[0]), min(_K_SEARCH_MAX, window[1])
+    if low >= high:
+        raise ValueError(
+            f"ignition window {window} does not meet the search box "
+            f"[{_K_SEARCH_MIN}, {_K_SEARCH_MAX}]"
+        )
+    return low, high
+
+
 def price_chain(
     cycles: List[TwoWaveCycle],
     recovery: float,
     fudge: float,
     slug_ratio: Optional[float] = None,
     reversal_period: Optional[u.Quantity] = None,
+    gate: u.Quantity = NOZZLE_GATE_TEMPERATURE,
+    geometric_efficiency: Optional[float] = None,
 ) -> ChainGrowth:
     """Compound a flown chain's cycles into one growth figure.
 
@@ -343,6 +490,10 @@ def price_chain(
         slug_ratio: Fix ``k``; None searches the chain optimum.
         reversal_period: Override the parking-orbit period; defaults per cycle
             to its own split gap.
+        gate: Stagnation temperature the head-on plume must reach, which bounds
+            the search (see :func:`headon_slug_ratio_bounds`).
+        geometric_efficiency: Charge the frozen-dissociation toll and sweep
+            this as the remaining jet efficiency; see :func:`price_cycle`.
 
     Returns:
         The chain's compounded growth and its per-year rate.
@@ -357,12 +508,17 @@ def price_chain(
         product = 1.0
         for cycle in cycles:
             product *= price_cycle(
-                cycle, recovery, fudge, slug_ratio=k, reversal_period=reversal_period
+                cycle,
+                recovery,
+                fudge,
+                slug_ratio=k,
+                reversal_period=reversal_period,
+                geometric_efficiency=geometric_efficiency,
             ).growth
         return product
 
     if slug_ratio is None:
-        slug_ratio = _best_slug_ratio(total)
+        slug_ratio = _best_slug_ratio(total, headon_slug_ratio_bounds(cycles, gate))
     product = total(slug_ratio)
     horizon = sum(cycle.period_years for cycle in cycles)
     rate = float(np.log(product) / horizon)

@@ -15,6 +15,7 @@ from src.two_leg_nozzle_sweep import DEFAULT_SPLIT_DAYS as SWEEP_SPLIT_DAYS
 from src.two_leg_nozzle_sweep import (
     PAYLOAD_FRACTION_AT_INTERCEPT,
     RETURN_FLOOR,
+    _score,
     coldest_closing_speeds,
     equivalent_plate_elasticity,
     fleet_ignition_windows,
@@ -182,3 +183,36 @@ def test_matched_recovery_reverses_the_plate_verdict() -> None:
     # currency be named: 0.3910 e-foldings/yr against 0.3158.
     assert np.isclose(wins.rate, 0.3910, atol=5e-4)
     assert np.isclose(wins_plate.rate, 0.3158, atol=5e-4)
+
+
+def test_the_toll_penalises_the_two_leg_nozzle_more_than_the_plate() -> None:
+    """A plate owes no chemistry, so the toll is not symmetric between options.
+
+    This is the finding that puts ADR 0014/0015 back in play: the frozen
+    dissociation reaches ``tab:space_mortgage_growth`` only through the head-on
+    leg, but reaches ``tab:two_leg_growth`` through both -- and the growth
+    push's 45-56 km/s is where ``eta_chem`` is harshest.
+    """
+    cycles = [_cycle(0), _cycle(1, growth_v_b=57.43, nozzle_v_b=56.53)]
+    plate_hit = (
+        _score(cycles, None, 0.8, 1.0, 0.0, 8.5, 0.8)[0]
+        - _score(cycles, None, 0.8, 0.8, 0.0, 8.5)[0]
+    )
+    nozzle_hit = (
+        _score(cycles, 0.8, 0.8, 1.0, 8.5, 8.5, 0.8)[0]
+        - _score(cycles, 0.8, 0.8, 0.8, 8.5, 8.5)[0]
+    )
+    assert nozzle_hit < plate_hit < 0.0
+
+
+def test_a_plate_leg_is_never_charged_the_chemistry() -> None:
+    """``growth_recovery=None`` means leg 1 is a plate, and a plate cannot freeze.
+
+    Isolated by varying ``k1``, which a plate ignores: if the toll had leaked
+    onto the plate leg it would have made ``k1`` load-bearing there.  Leg 2 is
+    tolled in both calls, so only the plate leg is under test.
+    """
+    cycles = [_cycle()]
+    quiet = _score(cycles, None, 0.8, 1.0, 0.5, 8.5, 0.8)[0]
+    loud = _score(cycles, None, 0.8, 1.0, 40.0, 8.5, 0.8)[0]
+    assert np.isclose(quiet, loud, rtol=1e-12)

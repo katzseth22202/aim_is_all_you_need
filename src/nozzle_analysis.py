@@ -445,30 +445,66 @@ class NozzlePricing:
         return (1.0 + self.growth_sigma) * (1.0 + self.sigma)
 
 
-def _sigma(k: float, recovery: float, v_b: float, v_rf1: float, v_rf2: float) -> float:
+def _sigma(
+    k: float,
+    recovery: float,
+    v_b: float,
+    v_rf1: float,
+    v_rf2: float,
+    jet_efficiency: float = 1.0,
+) -> float:
     """Slug consumed per unit final craft mass for the head-on nozzle burn.
 
     Integrates ``dv/(v_b + v) = recovery * beta(k) * (-dm/m)`` with
-    ``beta = (sqrt(1+k) - 1)/k`` (Appendix D's impulse per projectile kg,
-    divided by the slug spent with it).
+    ``beta = (eta_jet sqrt(1+k) - 1)/k`` (Appendix D's impulse per projectile
+    kg, divided by the slug spent with it).
+
+    **The two efficiencies act at different places and are not
+    interchangeable.**  ``jet_efficiency`` is the paper's ``eta_jet``: it
+    scales the *gross* jet, inside ``sqrt(1+k)``, because that is where
+    ``eq:ve_general`` puts it -- effective exhaust velocity is what remains
+    *after* debiting the incoming momentum.  ``recovery`` scales the net
+    impulse after the debit, which is what ``e_2`` was defined to absorb.  The
+    ``-1`` is the merged blob's bulk drift, pure momentum conservation, and no
+    efficiency of either kind may touch it (Seth, 2026-08-25).
+
+    That distinction has a consequence the outer form cannot express: the
+    head-on leg has a **forward-thrust floor** at ``eta_jet = 1/sqrt(1+k)``,
+    0.324 at ``k = 8.5``.  Below it the burn produces net backward impulse and
+    no amount of slug buys the delta-v, so this returns infinity rather than a
+    finite (and meaningless) mass ratio.  ``recovery`` has no such floor,
+    which is exactly why the chemistry may not be charged through it.
 
     Args:
         k: Slug mass per projectile mass.
-        recovery: Fraction of the ideal impulse recovered (1.0 = ideal).
+        recovery: Fraction of the *net* impulse recovered after the momentum
+            debit (1.0 = ideal).
         v_b: Nozzle wave's collision speed (km/s).
         v_rf1: Periapsis speed at the start of the burn (km/s).
         v_rf2: Periapsis speed at the end of the burn (km/s).
+        jet_efficiency: Fraction of the ideal one-directional *gross* jet the
+            nozzle delivers, ``eta_jet``.  The default 1.0 reproduces the
+            published ADR 0013/0014/0015 arithmetic exactly; pass
+            ``eta_chem * eta_geom`` to charge the frozen-dissociation toll.
 
     Returns:
-        Slug mass per unit final craft mass.
+        Slug mass per unit final craft mass, or infinity below the
+        forward-thrust floor.
     """
     length = float(np.log((v_b + v_rf2) / (v_b + v_rf1)))
-    beta = (np.sqrt(1.0 + k) - 1.0) / k
+    beta = (jet_efficiency * np.sqrt(1.0 + k) - 1.0) / k
+    if beta <= 0.0:
+        return float("inf")
     return float(np.exp(length / (recovery * beta)) - 1.0)
 
 
 def _sigma_overtaking(
-    k: float, recovery: float, v_b: float, v_ri: float, v_rf: float
+    k: float,
+    recovery: float,
+    v_b: float,
+    v_ri: float,
+    v_rf: float,
+    jet_efficiency: float = 1.0,
 ) -> float:
     """Slug consumed per unit final craft mass for the overtaking growth push.
 
@@ -486,16 +522,23 @@ def _sigma_overtaking(
 
     Args:
         k: Slug mass per impactor mass.
-        recovery: Fraction of the ideal impulse recovered (1.0 = ideal).
+        recovery: Fraction of the *net* impulse recovered after the momentum
+            bonus (1.0 = ideal).
         v_b: Growth wave's collision speed (km/s).
         v_ri: Vehicle speed at the start of the push (km/s).
         v_rf: Vehicle speed at the end of the push (km/s).
+        jet_efficiency: Fraction of the ideal one-directional *gross* jet,
+            ``eta_jet``.  Scales ``sqrt(1+k)`` only; the ``+1`` is the
+            arriving blob's own momentum and is untouchable.  Default 1.0
+            reproduces the published arithmetic.  Unlike the head-on leg this
+            has no floor -- the bonus is already forward -- which is why the
+            toll levers the two legs by different amounts.
 
     Returns:
         Slug mass per unit final craft mass.
     """
     length = float(np.log((v_b - v_ri) / (v_b - v_rf)))
-    beta = (1.0 + np.sqrt(1.0 + k)) / k
+    beta = (1.0 + jet_efficiency * np.sqrt(1.0 + k)) / k
     return float(np.exp(length / (recovery * beta)) - 1.0)
 
 
@@ -534,6 +577,7 @@ def parked_nozzle(
     exhaust_speed: float,
     recovery: float = 0.8,
     slug_ratio: Optional[float] = None,
+    jet_efficiency: float = 1.0,
 ) -> NozzlePricing:
     """Price the one-wave parked nozzle architecture.
 
@@ -546,8 +590,11 @@ def parked_nozzle(
         departure_dv: Periapsis delta-v of the departure burn (km/s).
         cycle: Departure-to-departure cycle (yr).
         exhaust_speed: Methalox exhaust speed for the reversal charge (km/s).
-        recovery: Nozzle impulse recovery fraction (1.0 = ideal ceiling).
+        recovery: Net impulse recovery fraction, after the momentum debit
+            (1.0 = ideal ceiling).
         slug_ratio: Fix ``k``; None optimizes it.
+        jet_efficiency: ``eta_jet``, scaling the gross jet inside
+            ``sqrt(1+k)``.  Default 1.0 reproduces the published arithmetic.
 
     Returns:
         The pricing at the given (or optimal) slug ratio.
@@ -562,7 +609,7 @@ def parked_nozzle(
     rev = float(np.exp(-apoapsis_reversal_dv().to_value(u.km / u.s) / exhaust_speed))
 
     def solve(k: float) -> Tuple[float, float]:
-        sigma = _sigma(k, recovery, collision_speed, v_rf1, v_rf2)
+        sigma = _sigma(k, recovery, collision_speed, v_rf1, v_rf2, jet_efficiency)
         quad = (1.0 + sigma) / (rev * mass_ratio)
         lin = sigma / k
         g = float((-lin + np.sqrt(lin * lin + 4.0 * quad)) / (2.0 * quad))
@@ -589,6 +636,8 @@ def same_cycle_nozzle(
     reversal_period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
     growth_slug_ratio: Optional[float] = None,
     growth_recovery: Optional[float] = None,
+    jet_efficiency: float = 1.0,
+    growth_jet_efficiency: float = 1.0,
 ) -> NozzlePricing:
     """Price the two-wave same-cycle nozzle architecture.
 
@@ -617,6 +666,15 @@ def same_cycle_nozzle(
             this slug ratio, instead of the paper's pusher plate.  Requires
             ``growth_recovery``; ``fudge`` is then unused.
         growth_recovery: Impulse recovery of that growth-push nozzle.
+        jet_efficiency: ``eta_jet`` on the head-on departure burn, scaling the
+            gross jet inside ``sqrt(1+k)``.  Default 1.0 reproduces the
+            published arithmetic; pass ``eta_chem * eta_geom`` to charge the
+            frozen-dissociation toll.
+        growth_jet_efficiency: The same, for the overtaking growth push.  The
+            two legs are different devices at different closing speeds, so
+            they carry different tolls -- and a *plate* on the growth push
+            owes no chemistry at all, so this is unused when
+            ``growth_slug_ratio`` is None.
 
     Returns:
         The pricing; ``wave_to_growth`` is the batch fraction on the powered
@@ -648,6 +706,7 @@ def same_cycle_nozzle(
             growth_collision_speed,
             0.0,
             v_rf1,
+            growth_jet_efficiency,
         )
         parked_per_impactor = growth_slug_ratio / growth_sigma
     mass_ratio = parked_per_impactor
@@ -659,7 +718,9 @@ def same_cycle_nozzle(
     delivered1 = float(np.exp(-growth_wave_burn / exhaust_speed))
 
     def solve(k: float) -> Tuple[float, float]:
-        sigma = _sigma(k, recovery, nozzle_collision_speed, v_rf1, v_rf2)
+        sigma = _sigma(
+            k, recovery, nozzle_collision_speed, v_rf1, v_rf2, jet_efficiency
+        )
         g = 1.0 / ((1.0 + sigma) / (rev * mass_ratio * delivered1) + sigma / k)
         return float(g), sigma
 

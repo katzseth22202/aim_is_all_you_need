@@ -10,7 +10,9 @@ from astropy import units as u
 
 from src.plume_thermal import (
     NOZZLE_FLOOR_TEMPERATURE,
+    NOZZLE_GATE_TEMPERATURE,
     WATER_ATOMISATION_ENTHALPY,
+    chemistry_efficiency,
     plume_ignition_energy,
     plume_temperature,
     slug_ratio_window,
@@ -97,3 +99,58 @@ def test_pinned_windows_at_the_chain_extremes() -> None:
 def test_temperature_reports_zero_when_the_blob_cannot_dissociate() -> None:
     """Below the chemical bill the caloric model no longer applies."""
     assert plume_temperature(48.82 * u.km / u.s, 1000.0).to_value(u.K) == 0.0
+
+
+def test_chemistry_efficiency_reproduces_the_solved_toll_surface() -> None:
+    """Cross-repo pin against ``puffsat_impact_simulation``'s ``eta_chem.csv``.
+
+    That surface is solved on ``eos_water`` through the expansion and the
+    fireball freeze; this is a closed form.  They must agree, or one of the two
+    repositories is charging the atomisation store differently.
+    """
+    assert np.isclose(
+        chemistry_efficiency(45.58 * u.km / u.s, 8.5, 0.926955), 0.753759, rtol=2e-3
+    )
+    assert np.isclose(
+        chemistry_efficiency(75.0 * u.km / u.s, 8.5, 0.999979), 0.909910, rtol=2e-3
+    )
+
+
+def test_unit_bond_fraction_is_a_floor_on_the_solved_value() -> None:
+    """``phi <= 1`` and ``eta_chem`` falls with ``phi``, so ``phi = 1`` cannot overstate."""
+    for w, k, phi in ((45.58, 8.5, 0.926955), (56.53, 8.5, 1.0), (75.0, 20.0, 0.99)):
+        floor = chemistry_efficiency(w * u.km / u.s, k)
+        assert floor <= chemistry_efficiency(w * u.km / u.s, k, phi) + 1e-12
+
+
+def test_the_toll_is_worse_on_the_cold_leg_and_at_high_slug_ratio() -> None:
+    """Both monotonicities, since the design's whole exposure follows from them."""
+    cold = chemistry_efficiency(45.58 * u.km / u.s, 8.5)
+    hot = chemistry_efficiency(75.0 * u.km / u.s, 8.5)
+    assert cold < hot
+    assert chemistry_efficiency(56.53 * u.km / u.s, 16.0) < chemistry_efficiency(
+        56.53 * u.km / u.s, 4.0
+    )
+
+
+def test_no_jet_survives_a_toll_larger_than_the_one_axis_budget() -> None:
+    """At 45.58 km/s the chemistry forbids ``k`` above ~19.4 at ``phi = 1``."""
+    assert chemistry_efficiency(45.58 * u.km / u.s, 20.0) == 0.0
+    assert chemistry_efficiency(45.58 * u.km / u.s, 19.0) > 0.0
+
+
+def test_the_gate_is_looser_than_the_design_floor() -> None:
+    """10 000 K admits more slug than 15 000 K, which reads backwards until named.
+
+    The gate asks where the plume stops dissociating, not where the nozzle
+    wants to start; the seed keeps conductivity up well below it.
+    """
+    gate = slug_ratio_window(45.58 * u.km / u.s, NOZZLE_GATE_TEMPERATURE)
+    floor = slug_ratio_window(45.58 * u.km / u.s, NOZZLE_FLOOR_TEMPERATURE)
+    assert gate is not None and floor is not None
+    assert gate[1] > floor[1]
+    assert gate[0] < floor[0]
+    # Pinned against the impact sim's solved [0.081, 12.29] and the paper's
+    # own [0.098, 10.21] at its 85.1 MJ/kg bill.
+    assert np.isclose(gate[1], 11.94, rtol=5e-3)
+    assert np.isclose(floor[1], 10.21, rtol=5e-3)

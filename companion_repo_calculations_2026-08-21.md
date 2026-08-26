@@ -949,10 +949,11 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
 - [ ] Leave the 26 existing bare cites alone
 
 ## Documentation in the companion repo
-- [ ] **ADR 0016**: the plume state is solved, not assumed. Records that Saha allows only
+- [ ] **ADR 0017** *(renumbered 2026-08-26; 0016 was taken by the toll decision)*: the
+      plume state is solved, not assumed. Records that Saha allows only
       5.9% ionisation at 15 000 K, that the temperature must therefore run to 26 200 K at the
       hottest pulse, and that the original 15 000 K is the *coldest-pulse* answer.
-- [ ] **ADR 0017**: the slug bag is an axial capsule with an ice plug. Records the
+- [ ] **ADR 0018** *(renumbered 2026-08-26)*: the slug bag is an axial capsule with an ice plug. Records the
       bore-for-conductor trade and the aperture argument.
 - [ ] **Amend ADR 0015**: today's finding *strengthens* it. A slugged plate delivers `2 f m w`
       exactly as an unslugged one does, because `(1+k)` in the mass cancels `1/(1+k)` in the
@@ -1004,7 +1005,14 @@ later competitor, because the benefit rises steeply with efficiency. So the bar 
 -- not "is this number final." Where a question is honestly open, say so; where simulation can
 settle it cheaply, say that too, and say how cheaply.
 
-## Q-A. Which plate does the growth push fly? *(blocks a paper number)*
+## Q-A. Which plate does the growth push fly? **ANSWERED 2026-08-26: the heavy block.**
+**Seth, 2026-08-26.** The growth push, when it is done by a plate, flies the **heavy
+block**, not the paper's 5 m plate. So `STD_FUDGE_FACTOR = 0.8` is defensible
+**unchanged** (`f` = 0.817-0.820 measured across 45-63 km/s), no plate-side revision is
+owed, and the `rf/R` box-widening question below is not on the critical path for this
+number. It also makes ADR 0015's premise fail harder, exactly as the plate-transfer
+check predicted it would if the chain scales the vehicle.
+
 `STD_FUDGE_FACTOR = 0.8` is defensible **unchanged** on the 15 m heavy plate (`f = 0.817-0.820`)
 and needs to become ~0.78-0.80 on the paper's 5 m plate. The two are a real 0.02-0.05 apart and
 the gap widens with `v`. **Cost to settle: zero simulation** -- it is a statement about what the
@@ -1832,7 +1840,33 @@ published form is quoted with `T` in **eV**; reading it as kelvin changes the ra
 inverts the verdict, so it is pinned in the tests by an independent Thomson estimate as well as by
 the literal.
 
-## Q-N. The nozzle exhaust speed is not the momentum-sharing speed, and the paper uses one number.
+## Q-N. **ANSWERED 2026-08-26 from the paper's own text: it uses both, correctly, for different jobs.**
+**The premise of this item is wrong, and checking it was worth the ten minutes.** The
+paper does *not* rest its Isp on `w/(1+k)`. It uses that number once, in
+`sec:two_leg_nozzle`, as **the drift the nozzle's reflecting surface faces**: "It faces
+5.9 km/s of drift with a thermal spread on top of it ... so material reaches the field at
+roughly 11-23 km/s. That is the regime a plate is tested in." That is a survivability
+argument about what hits the field, not a thrust claim.
+
+The Isp rests on `eq:ve_general`, which is the gross jet debited by the incoming
+momentum, with its floor at `eta_jet = sqrt(m_rp)`. That is exactly what
+`nozzle_analysis._sigma` implements via `sqrt(1+k) -/+ 1`.
+
+**`w/(1+k)` could never have been the Isp, and the paper says so itself** in
+`sec:minimum_nozzle`: "The bulk quarter already travels retrograde and needs no field,
+but it carries exactly the momentum the incoming projectile brought in, **so by itself it
+cancels to zero thrust.**" A blob of `(1+k)m` leaving at `w/(1+k)` carries exactly `mw`
+-- the momentum that arrived. It is the *zero-thrust reference point* the thrust is
+measured against, not a candidate exhaust speed. The assumption it would be true under is
+a nozzle that does no work at all: catch the blob, release it as a bulk lump, recover
+none of the thermal energy. Under that assumption there is no propulsion to compute.
+
+**So Q-P's frozen-flow loss *is* charged against the Isp claim** -- the load-bearing
+branch this item flagged. That is what makes the ADR 0016 work necessary rather than
+tidy. One published number moves directly: `sqrt(2u)` = 17 km/s becomes **14.1 km/s**.
+
+### Superseded framing, kept for the record
+
 The solve gives an exhaust of **9.9-16.2 km/s** relative to the ship. The paper's `v_out =
 w/(1+k)` gives **5.26-7.89 km/s**. These are different quantities -- one is the merged slug's bulk
 speed from momentum sharing, the other is what the nozzle converts thermal energy back into -- and
@@ -2104,6 +2138,34 @@ the upper half of the pulse's own delivery box clears it. **"PuffSat" means a pu
 slug of ice** -- the compact reading was mine, and it is probably not what the design intends.
 
 ### What is actually owed
+> **COMPUTED IN `aim` 2026-08-26, and the relation is exact and quadratic.** The
+> snowplow's swept mass is `rho pi r^2 L`, so at fixed column length
+>
+>     k_eff / k_full = (r_arrival / R_bore)^2
+>
+> and `k = 8.5` is just the statement *the front sweeps the whole bag*: the volume it
+> needs is 658.1 m^3 against the bag's 659.6. A compact 25 kg ice sphere is **0.187 m**
+> (0.062 of the 3 m bore), which delivers `k_eff` = **0.034** with no spreading -- four
+> thousandths of the design value, and **below the ignition window's lower root** (0.084
+> at 45.58 km/s), so it is not a weak plume but no plasma at all.
+>
+> The growing-front integration (`dr/dx = c_exp/v`, momentum shared inelastically)
+> reproduces this repo's forward table exactly -- 1.48 / 3.85 / 5.49 at 45.58 km/s for
+> `c_exp` = 3/5/8, and 1.52 / 3.73 at 75 -- which is an independent check of the model,
+> not just of the arithmetic. Working it backwards for `k = 8.5`:
+>
+> | `c_exp` | arrival radius, 45.58 km/s | at 75.00 km/s |
+> | ---: | ---: | ---: |
+> | 0 | 2.97 m (0.99 R) | 2.97 m (0.99 R) |
+> | 3 km/s | 2.61 m (0.87 R) | 2.69 m (0.90 R) |
+> | 5 | 2.51 m (0.84 R) | 2.61 m (0.87 R) |
+> | 8 | 2.39 m (0.80 R) | 2.52 m (0.84 R) |
+>
+> Slightly tighter than this section's 0.74-0.83, and in the same place: **0.80-0.99 of
+> the bore.** The quadratic is why there is no shallow region -- half the bore radius
+> delivers a quarter of `k`. **Still owed by the design, not by either repo: the stated
+> arrival radius and its delivery dispersion.**
+
 **A stated projectile arrival radius, and the delivery dispersion around it.** `k = 8.5` is
 currently load-bearing for the vehicle (item 10's bag sizing, the whole Isp story) and rests on a
 geometric premise nobody has written down. **Cost to settle: zero simulation** -- it is a statement
@@ -2416,9 +2478,25 @@ debit back out of a shrinking jet.
 
 #### The checklist
 
-- [ ] move the `recovery` scaling inside `sqrt(1+k)` in `nozzle_analysis._sigma` and
-      `_sigma_overtaking`, per the two expressions above;
-- [ ] **replace `two_wave_growth._K_SEARCH_MAX = 80` with the per-speed interval below.**
+- [x] move the `recovery` scaling inside `sqrt(1+k)` in `nozzle_analysis._sigma` and
+      `_sigma_overtaking`, per the two expressions above; **DONE 2026-08-26**, ADR 0016.
+      Done as a *second* knob rather than a relabel: `jet_efficiency` acts inside the
+      debit, `recovery` is retained acting outside it, because the paper genuinely has
+      both -- `eq:ve_general` puts `eta_jet` before the debit and `e_2` after it. Both
+      default to the published behaviour, so ADR 0013/0014/0015 reproduce bit-identically
+      and the toll is opt-in. `eta_chem` lives in `plume_thermal.chemistry_efficiency`,
+      beside the 917 kJ/mol it is computed from; fed the CSV's `bond_fraction` it
+      reproduces the solved surface to four figures.
+- [x] **replace `two_wave_growth._K_SEARCH_MAX = 80` with the per-speed interval below.**
+      **DONE 2026-08-26** as `headon_slug_ratio_bounds`, intersecting the recorded box
+      with the fleet ignition window at a new `NOZZLE_GATE_TEMPERATURE = 10 000 K`.
+      **It changes nothing published**, and that is worth stating: the fleet ceiling is
+      26.9 (not 36.88 -- that is the 75 km/s anchor, and the *fleet* intersection binds
+      on the coldest head-on burn start across all 11 cycles), while the optimum sits at
+      7.3-9.5 either way. The box was wrong; the answer never lived out there. Note also
+      that `coldest_closing_speeds` and `fleet_ignition_windows` moved down from
+      `two_leg_nozzle_sweep` into `two_wave_growth`, where `TwoWaveCycle` is defined --
+      they were an inverted dependency, and `two_leg_nozzle_sweep` re-imports them.
       *(An earlier draft of this item said to cap it at the `eta_chem = 0` boundary. That was
       written before the surface was built and is **wrong** -- that boundary assumes `phi = 1`
       and is far too pessimistic, because a plume that never dissociates cannot strand the store.
@@ -2432,7 +2510,11 @@ debit back out of a shrinking jet.
 
       Gate is `T_0 >= 10 000 K` (Seth, 2026-08-25). Compare the paper's own [0.098, 10.21] at
       45.58 km/s for its 85.1 MJ/kg bill -- same shape, slightly tighter, as expected.
-- [ ] re-optimise **two** slug ratios against **30-year growth** -- `k_headon` and `k_overtake`.
+- [x] re-optimise **two** slug ratios against **30-year growth** -- `k_headon` and `k_overtake`.
+      **DONE 2026-08-26.** Numbers and the A/B/C decomposition are in ADR 0016. Headline:
+      the optimum *falls* under the toll (`k2` 9.25 -> 7.77 at `e` = 0.8; `k1` 8.19 ->
+      4.81 on the two-leg chain), because `eta_chem` falls with `k`. Both stay far inside
+      the gate, so the interval above is not what binds -- the toll is.
       Seth, 2026-08-25: `k` may differ between legs but **cannot be reconfigured per pulse**, so
       each is one number for the whole chain and must serve every closing speed its leg sees.
       **The coldest pulse binds:** `k_overtake <= 12.29` from the 3-synodic burn's cold end at

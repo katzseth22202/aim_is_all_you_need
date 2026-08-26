@@ -45,13 +45,19 @@ from scipy.optimize import brentq
 
 from src.astro_constants import STD_FUDGE_FACTOR
 from src.nozzle_analysis import NozzlePricing, apoapsis_reversal_dv, same_cycle_nozzle
-from src.plume_thermal import NOZZLE_FLOOR_TEMPERATURE, slug_ratio_window
+from src.plume_thermal import (
+    NOZZLE_FLOOR_TEMPERATURE,
+    chemistry_efficiency,
+    slug_ratio_window,
+)
 from src.two_wave_growth import (
     DEFAULT_SPLIT_DAYS,
     VE_METHALOX,
     TwoWaveCycle,
     _cycle_periapsis_speed,
     adaptive_two_wave_cycles,
+    coldest_closing_speeds,
+    fleet_ignition_windows,
 )
 
 # --- Ground-launch ledger -------------------------------------------------
@@ -94,58 +100,6 @@ _PLATE_BRACKET = (0.02, 4.0)
 #: Split gap the comparison is flown at, matching ADR 0013's headline table.
 #: Re-exported from ``two_wave_growth`` rather than restated, so the sweep and a
 #: direct ``adaptive_two_wave_cycles()`` call can never fly different chains.
-
-
-def coldest_closing_speeds(cycle: TwoWaveCycle) -> Tuple[float, float]:
-    """The closing speed at the coldest instant of each of the cycle's burns.
-
-    The overtaking push starts fast and slows as the vehicle runs away from the
-    stream, so its cold end is the *finish*.  The head-on burn does the
-    opposite -- the vehicle accelerates into the stream -- so its cold end is
-    the *start*.  Those are the two speeds the ignition window must hold at.
-
-    Args:
-        cycle: The flown cycle.
-
-    Returns:
-        ``(growth_push_end, departure_burn_start)`` in km/s.
-    """
-    v_rf = _cycle_periapsis_speed()
-    return cycle.growth_wave_v_b - v_rf, cycle.nozzle_wave_v_b + v_rf
-
-
-def fleet_ignition_windows(
-    cycles: Sequence[TwoWaveCycle],
-    temperature: u.Quantity = NOZZLE_FLOOR_TEMPERATURE,
-) -> Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]:
-    """Slug-ratio windows a single fleet-wide loading must satisfy every cycle.
-
-    One nozzle design flies the whole chain (``price_chain``'s convention), so
-    the admissible set is the *intersection* of the per-cycle windows.  The
-    binding cycles are the three-synodic ones: they close slowest, so they run
-    coldest and set the ceiling for everyone.
-
-    Args:
-        cycles: The flown cycles.
-        temperature: Plume temperature the nozzles require.
-
-    Returns:
-        ``(leg1_window, leg2_window)``; either is None if some cycle admits no
-        slug ratio at all.
-    """
-    legs: List[Optional[Tuple[float, float]]] = []
-    for index in (0, 1):
-        low, high = 0.0, float("inf")
-        for cycle in cycles:
-            window = slug_ratio_window(
-                coldest_closing_speeds(cycle)[index] * u.km / u.s, temperature
-            )
-            if window is None:
-                low, high = 1.0, 0.0
-                break
-            low, high = max(low, window[0]), min(high, window[1])
-        legs.append((low, high) if low < high else None)
-    return legs[0], legs[1]
 
 
 def returned_launch_fraction(cycle: TwoWaveCycle, pricing: NozzlePricing) -> float:
@@ -216,6 +170,7 @@ def _score(
     recovery: float,
     k1: float,
     k2: float,
+    geometric_efficiency: Optional[float] = None,
 ) -> Tuple[float, float]:
     """Chain log-growth and worst-cycle return fraction at one ``(k1, k2)``.
 
@@ -226,12 +181,27 @@ def _score(
         recovery: Head-on leg recovery.
         k1: Growth-push slug ratio (ignored for a plate).
         k2: Departure-burn slug ratio.
+        geometric_efficiency: Charge the frozen-dissociation toll, sweeping
+            this as the remaining jet efficiency.  None reproduces the
+            published arithmetic.  **A plate owes no chemistry**, so leg 1 is
+            tolled only when it carries a nozzle -- which is exactly why the
+            toll penalises the two-leg option and not the plate one.
 
     Returns:
         ``(sum of log growth, worst per-cycle returned fraction)``.
     """
     total, worst = 0.0, float("inf")
     for cycle in cycles:
+        jet1 = jet2 = 1.0
+        if geometric_efficiency is not None:
+            push_end, burn_start = coldest_closing_speeds(cycle)
+            jet2 = geometric_efficiency * chemistry_efficiency(
+                burn_start * u.km / u.s, k2
+            )
+            if growth_recovery is not None:
+                jet1 = geometric_efficiency * chemistry_efficiency(
+                    push_end * u.km / u.s, k1
+                )
         priced = same_cycle_nozzle(
             growth_collision_speed=cycle.growth_wave_v_b,
             growth_wave_burn=cycle.growth_wave_burn + cycle.nozzle_wave_dsm,
@@ -245,7 +215,15 @@ def _score(
             reversal_period=cycle.split_days * u.day,
             growth_slug_ratio=None if growth_recovery is None else k1,
             growth_recovery=growth_recovery,
+            jet_efficiency=jet2,
+            growth_jet_efficiency=jet1,
         )
+        if priced.growth <= 0.0:
+            # Below the head-on leg's forward-thrust floor the burn produces
+            # net *backward* impulse, so no slug ratio buys the delta-v and the
+            # cycle delivers nothing.  Report it as such rather than letting
+            # log(0) raise a warning on every grid point of a dead corner.
+            return float("-inf"), 0.0
         total += float(np.log(priced.growth))
         worst = min(worst, returned_launch_fraction(cycle, priced))
     return total, worst
@@ -258,6 +236,7 @@ def price_chain_two_leg(
     fudge: float = STD_FUDGE_FACTOR,
     temperature: u.Quantity = NOZZLE_FLOOR_TEMPERATURE,
     return_floor: float = RETURN_FLOOR,
+    geometric_efficiency: Optional[float] = None,
 ) -> Optional[TwoLegChain]:
     """Search the fleet-wide slug ratios that maximise the chain's growth rate.
 
@@ -276,6 +255,9 @@ def price_chain_two_leg(
         fudge: Plate elasticity, used only when ``growth_recovery`` is None.
         temperature: Plume temperature both nozzles require.
         return_floor: Minimum returned mass per kilogram of liftoff mass.
+        geometric_efficiency: Charge the frozen-dissociation toll on whichever
+            legs carry a nozzle, sweeping this as the remaining jet efficiency;
+            see :func:`_score`.
 
     Returns:
         The best admissible chain, or None if no slug ratios are admissible.
@@ -308,7 +290,13 @@ def price_chain_two_leg(
         for k1 in grid1:
             for k2 in grid2:
                 total, worst = _score(
-                    cycles, growth_recovery, fudge, recovery, float(k1), float(k2)
+                    cycles,
+                    growth_recovery,
+                    fudge,
+                    recovery,
+                    float(k1),
+                    float(k2),
+                    geometric_efficiency,
                 )
                 if worst < return_floor:
                     continue

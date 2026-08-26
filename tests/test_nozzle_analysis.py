@@ -10,6 +10,8 @@ import pytest
 from astropy import units as u
 
 from src.nozzle_analysis import (
+    _sigma,
+    _sigma_overtaking,
     aim_geometry,
     apoapsis_reversal_dv,
     corrected_incumbent,
@@ -180,3 +182,58 @@ def test_pairing_of_the_growth_nozzle_arguments_is_enforced() -> None:
             exhaust_speed=VE_METHALOX,
             growth_slug_ratio=4.0,
         )
+
+
+def test_jet_efficiency_defaults_reproduce_the_published_arithmetic() -> None:
+    """``eta_jet = 1`` must leave ADR 0013/0014/0015's numbers bit-identical."""
+    assert _sigma(8.5, 0.6, 60.0, 10.0, 15.0) == _sigma(
+        8.5, 0.6, 60.0, 10.0, 15.0, jet_efficiency=1.0
+    )
+    assert _sigma_overtaking(8.5, 0.6, 56.53, 0.0, 10.9) == _sigma_overtaking(
+        8.5, 0.6, 56.53, 0.0, 10.9, jet_efficiency=1.0
+    )
+
+
+def test_the_two_efficiencies_are_not_interchangeable() -> None:
+    """Inside and outside the momentum debit are different places to charge.
+
+    This is the whole point of the split: ``recovery`` scales the net impulse
+    after the ``-1`` bulk-drift debit, ``jet_efficiency`` scales the gross jet
+    before it.  If they were interchangeable the frozen-dissociation toll could
+    have been charged through ``recovery`` and no change would be owed.
+    """
+    outside = _sigma(8.5, 0.8, 60.0, 10.0, 15.0)
+    inside = _sigma(8.5, 1.0, 60.0, 10.0, 15.0, jet_efficiency=0.8)
+    assert not np.isclose(outside, inside)
+    assert inside > outside
+
+
+def test_head_on_leg_has_a_forward_thrust_floor_the_overtake_lacks() -> None:
+    """Forward thrust vanishes at ``eta_jet = 1/sqrt(1+k)``, 0.324 at k = 8.5.
+
+    ``recovery`` has no such floor, which is exactly why the chemistry may not
+    be charged through it.  The overtake has none either -- its ``+1`` is a
+    bonus, not a debit -- so the toll levers the two legs differently.
+    """
+    floor = 1.0 / np.sqrt(9.5)
+    assert np.isclose(floor, 0.3244, rtol=1e-3)
+    assert _sigma(8.5, 1.0, 60.0, 10.0, 15.0, jet_efficiency=floor * 0.99) == float(
+        "inf"
+    )
+    assert np.isfinite(_sigma(8.5, 1.0, 60.0, 10.0, 15.0, jet_efficiency=floor * 1.10))
+    # No floor on the overtake at any efficiency, however poor.
+    assert np.isfinite(
+        _sigma_overtaking(8.5, 1.0, 56.53, 0.0, 10.9, jet_efficiency=0.01)
+    )
+
+
+def test_efficiency_never_scales_the_bulk_drift_term() -> None:
+    """The ``-1`` and ``+1`` are momentum conservation; no chemistry touches them.
+
+    Checked by construction: at ``k -> 0`` the overtake's impulse per slug kg
+    must still carry the arriving momentum whatever the jet does, so ``sigma``
+    stays finite as ``jet_efficiency -> 0``.
+    """
+    starved = _sigma_overtaking(0.5, 1.0, 56.53, 0.0, 10.9, jet_efficiency=1e-9)
+    ideal = _sigma_overtaking(0.5, 1.0, 56.53, 0.0, 10.9, jet_efficiency=1.0)
+    assert np.isfinite(starved) and starved > ideal

@@ -63,6 +63,17 @@ SEED_IONISATION_ENERGY = 4.34 * u.eV
 #: is the post-merge peak, and holding it at the *coldest* instant of a burn is
 #: what the window below enforces.
 NOZZLE_FLOOR_TEMPERATURE = 15000 * u.K
+#: Stagnation temperature below which the plume is not realistically hot, set
+#: by Seth 2026-08-25 and used to bound the slug ratio.  It is *looser* than
+#: :data:`NOZZLE_FLOOR_TEMPERATURE`, not tighter: 15 000 K is the design point
+#: the nozzle is built around, 10 000 K is the gate below which
+#: ``puffsat_impact_simulation``'s solved surface stops dissociating the water
+#: at all (its seven excluded nodes sit at bond fractions 0.38-0.75).  The
+#: seed is what makes the looser gate safe -- potassium keeps supplying
+#: electrons long after the water stops, so conductivity is 1480 S/m here and
+#: still 403 S/m at 4500 K, and it is dissociation rather than conduction that
+#: fails first.
+NOZZLE_GATE_TEMPERATURE = 10000 * u.K
 
 
 def _particle_counts() -> Tuple[float, float]:
@@ -191,3 +202,52 @@ def slug_ratio_window(
     lower = (peak_scale - 2.0 * required - root) / (2.0 * required)
     upper = (peak_scale - 2.0 * required + root) / (2.0 * required)
     return max(lower, 0.0), upper
+
+
+def chemistry_efficiency(
+    closing_speed: u.Quantity,
+    slug_ratio: float,
+    bond_fraction: float = 1.0,
+) -> float:
+    """Ceiling ``eta_chem`` that frozen dissociation puts on the jet efficiency.
+
+    The plume leaves the nozzle chemically frozen: ``puffsat_impact_simulation``
+    (Q-P, ``make analysis-fireball``) finds the three-body recombination rate
+    crosses ``Da = 1`` at the *first station past the lip*, with 90-100% of the
+    atomisation store still held.  The paper's own rate check is not wrong, it
+    is evaluated at the wrong station -- at 1 kg/m^3 recombination really is
+    ~0.01 us, but there the plume is fully atomised and has nothing to give
+    back yet.  By the time it does, it sits at ~0.02 kg/m^3 and past the lip.
+
+    So the loan does not come back, and the energy that pays it is unavailable
+    to the jet.  The ideal gross jet places the whole collision energy
+    ``w^2/2`` on one axis of the ``1+k`` kilograms of blob, giving
+    ``w/sqrt(1+k)``; paying the toll first leaves
+    ``sqrt(w^2/(1+k) - 2 E_a phi)``, and the ratio is what this returns.
+
+    **This is a component of the paper's own ``eta_jet``, not a new term.**
+    ``sec:jet_efficiency`` already defines ``eta_jet^2`` to include "frozen
+    ionization or dissociation energy", so charging this separately as an
+    energy debit would double-count.  Multiply it into the jet efficiency and
+    sweep the remainder (divergence, exhaust-speed spread, radiative escape,
+    and mass the field fails to grip) as the geometric factor.
+
+    Args:
+        closing_speed: Impactor speed relative to the vehicle, ``w``.
+        slug_ratio: Kilograms of slug per kilogram of impactor, ``k``.
+        bond_fraction: Share of the atomisation store still held at the
+            freeze, ``phi``.  The default 1.0 is a *floor* on the true
+            efficiency and can never overstate it, because ``phi <= 1`` and
+            ``eta_chem`` falls with ``phi``; across the 74 conducting nodes of
+            the solved surface it understates by at most 0.057.  Pass the
+            solved ``bond_fraction`` from ``data/results/eta_chem.csv`` when
+            that slack matters.
+
+    Returns:
+        ``eta_chem`` in [0, 1], or 0.0 where the toll exceeds the whole
+        one-axis budget and no jet survives it.
+    """
+    w = float(closing_speed.to_value(u.m / u.s))
+    toll = float((WATER_ATOMISATION_ENTHALPY / WATER_MOLAR_MASS).to_value(u.J / u.kg))
+    remaining = 1.0 - 2.0 * toll * bond_fraction * (1.0 + slug_ratio) / (w * w)
+    return float(np.sqrt(remaining)) if remaining > 0.0 else 0.0
