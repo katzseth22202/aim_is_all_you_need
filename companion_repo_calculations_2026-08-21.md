@@ -1090,9 +1090,13 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
 - [x] The 2026-08-21 burn sweep reproduces -- **2026-08-26**, to 1-3% and in the explained direction
 
 ## Paper edits (rule 3)
-- [ ] Add "Reproduce with `make <target>`" to the caption of `tab:bag_sizing`,
+- [>] **Routed to the paper repo 2026-08-26**, `docs/paper_corrections.md` section E, which
+      names the target for all six computed tables. Add "Reproduce with `make <target>`" to the
+      caption of `tab:bag_sizing`,
       `tab:bag_state`, `tab:axial_bag`, `tab:seed_window`
-- [ ] Leave the 26 existing bare cites alone
+- [x] Leave the 26 existing bare cites alone -- **confirmed 2026-08-26**: still exactly 26 in
+      `templateArxiv.tex`, and the reproduction-line convention is additive. Recorded in
+      `docs/paper_corrections.md` section F ("do not change").
 
 ## Documentation in the companion repo
 - [x] **ADR 0017** *(renumbered 2026-08-26; 0016 was taken by the toll decision)*:
@@ -1111,7 +1115,7 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
       exactly as an unslugged one does, because `(1+k)` in the mass cancels `1/(1+k)` in the
       drift speed. So the plate genuinely cannot buy its way out of the 46 km/s objection, and
       0015's argument holds with one fewer escape route. Add to Consequences.
-- [ ] ~~`CONTEXT.md`: note that `f = 0.8` now has a second unmeasured companion, the leak
+- [x] ~~`CONTEXT.md`: note that `f = 0.8` now has a second unmeasured companion, the leak
       fraction~~ **-- premise superseded 2026-08-24. The leak is no longer unmeasured.** Q-L
       solved it (0.11-2.5% on the equilibrium branch, residence-weighted) and Q-M collapsed the
       bracket that made it a range. What is still true is the *consequence* -- the leak decides
