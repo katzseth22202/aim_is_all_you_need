@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom cruise-thermal all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -51,6 +51,9 @@ nozzle-geom:  ## Snowplow sweep, mirror trade and two-term nozzle mass (items 11
 
 cruise-thermal:  ## Ice sublimation equilibrium for the projectile (ledger item 14)
 	python -m src.cruise_thermal
+
+plume-state:  ## Burn envelope, bag consequence and tab:seed_window (items 1, 3)
+	python -m src.plume_state
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse

@@ -83,6 +83,13 @@ nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that deci
 bag_state.py                 ← plume_thermal only: the waste-heat cascade behind
                                 tab:bag_state, and the field-leak bracket that
                                 sizes the slug bag (ledger items 5-8 and 10)
+
+cruise_thermal.py            ← plume_thermal only: ice sublimation equilibrium
+                                for the projectile (ledger item 14)
+
+plume_state.py               ← bag_state + plume_thermal: the burn envelope and
+                                the bag consequence, consuming the vendored
+                                data/plume_state.csv (ledger items 1 and 3)
 ```
 
 One edge runs opposite the diagram: `retrograde_return_legs.py` imports

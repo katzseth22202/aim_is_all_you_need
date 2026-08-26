@@ -619,10 +619,12 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
 # Checklist
 
 ## Modules
-- [ ] `src/plume_state.py` + `make plume-state` -- items 1, 3. **Rescoped 2026-08-21:** a thin
-      consumer of an impact-sim plume-state table, *not* a Saha implementation. `eos_water.py`
-      already solves `(rho, e) -> (T, f, P)` better than the spec in item 1 does. What stays
-      here is the burn-envelope sweep and `P/P0`, `B/B0`, `E_B`. See the audit section above.
+- [x] `src/plume_state.py` + `make plume-state` -- items 1, 3. **DONE 2026-08-26**, as the
+      rescope specified: a thin consumer of the vendored `data/plume_state.csv`, not a second
+      Saha. The burn envelope reproduces exactly (264.9 / 199.0 / 150.5 / 97.8 MJ/kg) and the
+      solved states run 1-3% *warmer* than the paper's hand figures for the reason the audit
+      predicted -- the hand solve charged 54 MJ/kg where the real bond energy is 50.9.
+      `P/P0`, `B/B0` and `E_B` follow to within 3%.
 - [x] `src/bag_state.py` + `make bag-state` -- items 4-10. **DONE 2026-08-26.**
       `tab:bag_state` reproduces both columns to every printed digit, `tab:bag_sizing`'s
       density and both field columns and the radiative column all reproduce (24 of 24
@@ -1050,9 +1052,14 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
 - [x] `tab:bag_sizing` reproduces to three figures, both columns -- **2026-08-26**
 - [x] `tab:bag_state` reproduces both columns -- **2026-08-26**, all eight rows
 - [x] `tab:axial_bag` reproduces all five rows -- **2026-08-26**, every cell
-- [ ] `tab:seed_window` reproduces all six rows
+- [x] `tab:seed_window` -- **2026-08-26, and it does NOT reproduce, which is the finding.**
+      The paper's `Rm` column implies a `v L` that varies **12.9x across its own six rows**
+      (7.6e4 at 2000 K, rising to 5.3e5 at 6000 K, collapsing to 4.1e4 at 15 000 K). If it
+      were one expansion sampled at several temperatures every row would imply the same
+      product. No single `v L` reproduces it, so the column has to be regenerated rather than
+      cited. Paper correction A9.
 - [x] `E_B = n Rg T` holds across a 15x radius sweep -- **2026-08-26**, radius does not enter the expression
-- [ ] The 2026-08-21 burn sweep reproduces (26 200 K / 0.573 down to 14 700 K / 0.053)
+- [x] The 2026-08-21 burn sweep reproduces -- **2026-08-26**, to 1-3% and in the explained direction
 
 ## Paper edits (rule 3)
 - [ ] Add "Reproduce with `make <target>`" to the caption of `tab:bag_sizing`,

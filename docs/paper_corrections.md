@@ -175,6 +175,31 @@ mark the two outer rows as outside the band the correction is calibrated for.
 inside the region that reproduces.
 **Reproduce:** `make bag-state`.
 
+### A9. `tab:seed_window`'s `Rm` column is not one expansion
+**Now:** an `Rm` column running 0.1 / 9.2 / 76.5 / 238 / 400 / 361 at
+2000-15 000 K, with **neither `sigma` nor `v` nor `L` stated**.
+**Problem:** `Rm = mu0 sigma v L`, and `v` and `L` enter only as their product.
+Taking `sigma(T)` from the solved conductivity model, the `v L` each row implies
+is:
+
+| `T` [K] | 2000 | 3000 | 4000 | 5000 | 6000 | 15000 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| implied `v L` | 7.6e4 | 1.2e5 | 2.1e5 | 3.9e5 | 5.3e5 | 4.1e4 |
+
+**A factor of 12.9, and non-monotone** -- rising through the window then
+collapsing at the hot end. If the column were one flow sampled at several
+temperatures, every row would imply the same product. **No single `v L`
+reproduces it.**
+**Should be:** regenerated from a stated `sigma(T)` at a stated `v L`. The
+solved expansion now supplies one: `v L` = 5.5e4-9.7e4 (Q-L), which is the first
+time either quantity has been an output rather than a guess. At the middle of
+that band the column becomes 0.1 / 5.9 / 26.6 / 45.8 / 55.8 / 650.
+**Why it matters beyond the table:** the paper itself points out that this
+column "prices the field leak that `tab:bag_state` charges the slug for ...
+Those are the same number". So an `Rm` column that cannot be reproduced is also
+a leak fraction that cannot be.
+**Reproduce:** `make plume-state`.
+
 ---
 
 ## D. Citation mechanism (the ledger's rule 3)
