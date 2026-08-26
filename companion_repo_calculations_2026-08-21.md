@@ -2166,6 +2166,32 @@ slug of ice** -- the compact reading was mine, and it is probably not what the d
 > delivers a quarter of `k`. **Still owed by the design, not by either repo: the stated
 > arrival radius and its delivery dispersion.**
 
+> **DECIDED 2026-08-26 (Seth): the front spans 0.8 of the bore, and recombination on
+> escape is assumed unsound and zero (`phi = 1`).** Both are now design assumptions
+> rather than brackets, recorded in ADR 0016's addendum with `src/nozzle_geometry.py`
+> and `tests/test_nozzle_geometry.py` behind them.
+>
+> **The rigid front at 0.8 delivers `k` = 5.563**, and 36% of the bag is launched but
+> never swept. **The sensitivity is the finding**: chain growth at the `k` each arrival
+> radius delivers runs 0.46 / 0.75 / 0.95 / 1.00 / 0.97 of peak for `r/R` =
+> 0.6 / 0.7 / 0.8 / 0.9 / 0.95 at `eta_geom` = 1, and 0.13 / 0.42 / 0.77 / 0.98 / 1.00
+> at `eta_geom` = 0.8. **The difference between 0.8 and 0.9 is a quarter of the
+> delivered growth at realistic efficiency**, which is the case for naming the arrival
+> radius in the paper.
+>
+> **Two things that were not expected.** The optimum is **interior at `r/R` = 0.88-0.95**
+> -- sweeping the whole bore is 3-9% *worse*, because `k_full` = 8.69 overshoots the
+> tolled optimum of 6.75-7.77. And **the toll made this requirement easier**: before it
+> the optimum wanted `k` ~ 9.25 and `r/R` = 0.97; after it, 0.88-0.95. Q-Q's original
+> "74% to 97% of the bore" was computed against `k` = 8.5, which is no longer the number
+> the chain wants.
+>
+> **The caveat still decides how much this matters**, and it is unchanged: all of the
+> above is the *rigid-front* bound. At `c_exp` = 3-8 km/s a front arriving at even 0.6
+> recovers to `k` = 7.3-8.0, because it has 23.8 m of column to close a 1.2 m gap. So
+> `c_exp` -- the 2D hydro question this repo owns and has not solved -- is what decides
+> whether the arrival radius is load-bearing at all.
+
 **A stated projectile arrival radius, and the delivery dispersion around it.** `k = 8.5` is
 currently load-bearing for the vehicle (item 10's bag sizing, the whole Isp story) and rests on a
 geometric premise nobody has written down. **Cost to settle: zero simulation** -- it is a statement

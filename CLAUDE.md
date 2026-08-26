@@ -75,6 +75,10 @@ jovian_flyby.py                assist_chain.py imports from jovian_flyby.py too
 assist_chain.py
       ↓
 main.py / nozzle_analysis.py  ← both import from every module above
+
+nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
+                                what slug ratio the projectile's arrival radius
+                                actually delivers (ADR 0016 addendum, ledger item 11)
 ```
 
 One edge runs opposite the diagram: `retrograde_return_legs.py` imports

@@ -152,3 +152,136 @@ intersects the recorded box `[0.2, 80.0]` with the fleet ignition window at
 `puffsat_impact_simulation` (81 nodes, 74 conducting), regenerated there with
 `make analysis-toll`; `chemistry_efficiency`'s `phi = 1` default needs no part
 of it.
+
+---
+
+## Addendum, 2026-08-26: two design assumptions fixed, and the ceiling they give
+
+Seth settled the two inputs this ADR had left open.
+
+### 1. Recombination on escape is assumed unsound and zero (`phi = 1`)
+
+The `phi = 1` default was introduced above as a *conservative floor* on a solved
+surface that reports `phi` = 0.86-1.00. It is now the **design assumption**: the
+store is taken to stay locked, and no credit is taken for the water that
+re-forms. This is deliberately more pessimistic than the solve at the cold
+anchor, where the plume is cool enough at the lip that `phi` falls to 0.927.
+
+Nothing in `src/` changes -- `chemistry_efficiency` already defaults this way,
+so every tolled number already published in this ADR was computed under it.
+What changes is its status: the numbers are the **design ceiling**, not a bound.
+
+**Maximum `eta_jet` under that assumption**, i.e. what the architecture can
+reach with perfect geometry (`eta_geom` = 1, no divergence, no spread, no
+radiative escape, nothing ungripped):
+
+| `k` | overtake leg (45.58 km/s) | head-on leg (65.44 km/s) |
+| ---: | ---: | ---: |
+| 2 | 0.9236 | 0.9637 |
+| 4 | 0.8689 | 0.9387 |
+| **5.563** | **0.8237** | **0.9187** |
+| 6.750 | 0.7998 | 0.9032 |
+| 8.5 | 0.7311 | 0.8798 |
+| 12 | 0.6025 | 0.8312 |
+
+The **absolute ceiling on the chain** (plate on the growth push, `eta_geom` = 1)
+is `k*` = **6.750**, growth **1.218e6** over the 28.39-year chain, doubling
+**1.405 yr**. Every real `eta_geom` below 1 comes off that.
+
+### 2. The projectile arrives spanning 0.8 of the bore
+
+`k` was never a free design variable; it is an output of the snowplow geometry,
+and the relation is exact for a rigid front:
+
+    k_eff / k_full = (r_arrival / R_bore)^2      k_full = 8.692
+
+Now in `src/nozzle_geometry.py` (ledger item 11; items 12 and 13 are still
+owed). **At 0.8 of the bore a rigid front delivers `k` = 5.563**, and 36% of the
+bag is launched but never swept.
+
+**The sensitivity, which is the reason this parameter deserves naming in the
+paper.** Chain growth at the `k` each arrival radius delivers, rigid front:
+
+| `r/R` | `k` | growth, `eta_geom` = 1 | growth, `eta_geom` = 0.8 |
+| ---: | ---: | ---: | ---: |
+| 0.60 | 3.129 | 5.562e5 (0.46) | 8 257 (0.13) |
+| 0.70 | 4.259 | 9.153e5 (0.75) | 2.659e4 (0.42) |
+| **0.80** | **5.563** | **1.156e6 (0.95)** | **4.827e4 (0.77)** |
+| 0.90 | 7.041 | **1.214e6 (1.00)** | 6.143e4 (0.98) |
+| 0.95 | 7.845 | 1.178e6 (0.97) | **6.288e4 (1.00)** |
+| 1.00 | 8.692 | 1.108e6 (0.91) | 6.100e4 (0.97) |
+
+### Why a wider sweep is not simply better
+
+Stated plainly, because the shape of this trade is not obvious and the paper
+never says it.
+
+Picture pushing a boat along by throwing rocks off the back. Each throw has a
+fixed amount of arm energy -- here, the projectile's kinetic energy, which the
+closing speed fixes and the slug cannot change. Throwing a *heavier* rock with
+that fixed energy does move the boat more, because the push is mass times speed
+and the speed only falls as the square root of the mass: doubling the rock costs
+you a factor 1.41 in speed and gains you a factor 2 in mass. That is the
+`sqrt(1+k)` in the impulse law, and it is why carrying slug helps at all.
+
+Two things stop it.
+
+**You had to haul the rocks.** Every kilogram of slug was launched from Earth
+and is charged against the same mass budget as the payload. The push grows like
+`sqrt(k)`; the bill grows like `k`. Past some load the boat is mostly rocks.
+
+**The rocks are frozen together and must be melted apart before they can be
+thrown, out of the same arm energy.** That is the dissociation toll, and it is a
+flat 50.9 MJ per kilogram of slug, whatever the closing speed. The energy
+available per kilogram of blob, meanwhile, is `w^2/(2(1+k))` -- it *falls* as
+slug is added. So the tax per kilogram is constant while the income per kilogram
+shrinks, and the fraction eaten grows without limit. **At 45.58 km/s, `k` = 19.4
+is where the toll consumes the entire one-axis budget and the plume produces no
+exhaust at all.** The optimum sits well below that, because the hauling bill
+binds first.
+
+So there are three curves -- push rising as `sqrt(k)`, launch cost rising as
+`k`, and an energy tax whose bite rises as `k` -- and one peak where they
+balance. Here that peak is `k` = 6.75-7.77, which is `r/R` = 0.88-0.95. Sweeping
+more of the bore than that is buying slug past the point where it pays.
+
+**Three things fall out of this that were not obvious.**
+
+- **The optimum is interior, at `r/R` = 0.88-0.95.** Sweeping the *whole* bore
+  is worse than sweeping 0.9 of it, by 3% at `eta_geom` = 0.8 and 9% at 1.0,
+  because `k_full` = 8.69 overshoots the tolled optimum of 6.75-7.77. So a
+  design need not chase the last few percent of the bore -- that is improbable
+  precision *and* slightly counterproductive.
+- **The toll made this requirement easier, not harder.** Before the toll the
+  optimum wanted `k` ~ 9.25, which needs `r/R` = 0.97. Charging the chemistry
+  drops the optimum to 6.75-7.77, which needs **0.88-0.95**. The two findings
+  push in opposite directions and the geometry one is the beneficiary.
+- **At 0.8 the geometry binds the optimiser**, costing 5% of the ceiling at
+  `eta_geom` = 1 and 23% at 0.8. At 0.9 it very nearly does not. **That is the
+  whole case for stating the arrival radius as a design parameter**: the
+  difference between 0.8 and 0.9 is a quarter of the delivered growth at
+  realistic efficiency, and it is currently unwritten anywhere.
+
+**The caveat that decides how much any of this matters.** All of the above is
+the **rigid-front** bound. Letting the front grow as `dr/dx = c_exp/v` with
+momentum shared inelastically, it has 23.8 m of column to close a 1.2 m gap:
+
+| `r/R` | rigid | `c_exp` = 3 km/s | 5 | 8 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.60 | 3.129 | 7.259 | 7.721 | 8.026 |
+| 0.80 | 5.563 | 8.277 | 8.414 | 8.503 |
+| 0.90 | 7.041 | 8.572 | 8.613 | 8.640 |
+
+With any spreading at all the arrival radius stops mattering and `k` returns to
+~8.3-8.6 regardless. **So the honest statement is not "the front must arrive
+wide" but "the arrival radius matters exactly insofar as the front is rigid"** --
+and whether a real front spreads at 3, 5 or 8 km/s is a 2D hydro question
+neither repository solves (`puffsat_impact_simulation`, Q-Q). Note also that
+spreading pushes `k` back toward 8.5, which is *past* the tolled optimum, so a
+strongly spreading front wants a smaller bag rather than a wider one.
+
+## Reproducing the addendum
+
+`nozzle_geometry.swept_slug_ratio` and `arrival_fraction_for` for the geometry;
+`price_chain(cycles, 1.0, 0.8, slug_ratio=k, geometric_efficiency=g)` for each
+row, with `k = full_bore_slug_ratio() * (r/R)**2`.
