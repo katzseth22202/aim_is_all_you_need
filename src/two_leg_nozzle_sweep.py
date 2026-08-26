@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import astropy.units as u
 import numpy as np
@@ -382,6 +382,12 @@ class TwoLegSweep:
         grid: One row per ``(e1, e2)`` pair, with both slug ratios, the growth
             it delivers, which limit bound it, and the plate it is worth.
         plate: One row per ``(f, e2)`` pair for the incumbent, same cycles.
+        tolled: The matched diagonal ``e1 = e2 = eta_geom`` re-priced with the
+            ADR 0016 dissociation toll, against a plate chain on the same
+            ``eta_geom``.  This is what ``tab:two_leg_growth`` regenerates to,
+            and the column that matters is ``nozzle_over_plate``: the toll
+            reaches the two-leg option through *both* legs and the plate option
+            through only one, so it is not a wash between architectures.
         windows: Fleet-wide ignition windows on each leg.
         split_days: Split gap the chain was flown at.
         horizon_years: Length of the flown chain.
@@ -390,6 +396,7 @@ class TwoLegSweep:
 
     grid: pd.DataFrame
     plate: pd.DataFrame
+    tolled: pd.DataFrame
     windows: Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]
     split_days: float
     horizon_years: float
@@ -471,14 +478,60 @@ def analyze_two_leg_nozzle(
                     ),
                 }
             )
+    tolled_rows = []
+    for geometric in recoveries:
+        nozzle = price_chain_two_leg(cycles, 1.0, 1.0, geometric_efficiency=geometric)
+        plate = price_chain_two_leg(
+            cycles, 1.0, None, STD_FUDGE_FACTOR, geometric_efficiency=geometric
+        )
+        published = price_chain_two_leg(cycles, geometric, geometric)
+        tolled_rows.append(
+            {
+                "eta_geom": geometric,
+                "k1": float("nan") if nozzle is None else nozzle.growth_slug_ratio,
+                "k2": float("nan") if nozzle is None else nozzle.slug_ratio,
+                "nozzle_growth": (
+                    float("nan") if nozzle is None else nozzle.total_growth
+                ),
+                "plate_growth": float("nan") if plate is None else plate.total_growth,
+                "nozzle_over_plate": (
+                    float("nan")
+                    if nozzle is None or plate is None or plate.total_growth <= 0.0
+                    else nozzle.total_growth / plate.total_growth
+                ),
+                "published_nozzle_growth": (
+                    float("nan") if published is None else published.total_growth
+                ),
+            }
+        )
+
     return TwoLegSweep(
         grid=pd.DataFrame(rows),
         plate=pd.DataFrame(plate_rows),
+        tolled=pd.DataFrame(tolled_rows),
         windows=windows,
         split_days=split_days,
         horizon_years=sum(c.period_years for c in cycles),
         cycles=list(cycles),
     )
+
+
+def _format_plain(frame: pd.DataFrame, formats: Dict[str, str]) -> str:
+    """Render a flat table with per-column format specs.
+
+    Args:
+        frame: The table to render.
+        formats: Column name to format spec.
+
+    Returns:
+        The rendered table.
+    """
+    shown = frame.copy()
+    for column, spec in formats.items():
+        shown[column] = shown[column].map(
+            lambda v, s=spec: "--" if pd.isna(v) else format(v, s)
+        )
+    return str(shown.to_string(index=False))
 
 
 def _pivot(frame: pd.DataFrame, value: str, spec: str) -> str:
@@ -507,6 +560,27 @@ def main() -> None:
 
     sweep = analyze_two_leg_nozzle(split_days=args.split_days)
     window1, window2 = sweep.windows
+    print("=== ADR 0016: the matched diagonal with the dissociation toll charged ===")
+    print(
+        "    eta_geom is swept; eta_jet = eta_chem * eta_geom on each nozzle leg.\n"
+        "    The plate column pays the toll on its head-on leg only, because a\n"
+        "    plate owes no chemistry -- which is why the ratio column falls."
+    )
+    print(
+        _format_plain(
+            sweep.tolled,
+            {
+                "eta_geom": ".2f",
+                "k1": ".2f",
+                "k2": ".2f",
+                "nozzle_growth": ".4g",
+                "plate_growth": ".4g",
+                "nozzle_over_plate": ".2f",
+                "published_nozzle_growth": ".4g",
+            },
+        )
+    )
+    print()
     print("Magnetic nozzle on both legs, against the pusher plate on the first")
     print(
         f"chain: {len(sweep.cycles)} cycles / {sweep.horizon_years:.4f} yr / "

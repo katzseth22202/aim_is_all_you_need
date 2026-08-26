@@ -1,6 +1,7 @@
 # A magnetic nozzle on the growth push needs ~0.6 recovery just to draw level with the plate
 
-Status: accepted; verdict superseded by ADR 0015 (the arithmetic stands)
+Status: accepted; verdict superseded by ADR 0015, whose own basis is weakened
+by ADR 0016 (the arithmetic of all three stands)
 
 Date: 2026-08-20
 

@@ -2520,13 +2520,40 @@ debit back out of a shrinking jet.
       **The coldest pulse binds:** `k_overtake <= 12.29` from the 3-synodic burn's cold end at
       45.58 km/s; `k_headon <= 36.88` at 75 km/s. The flown `k` = 8.5 is inside both, and the
       head-on leg has headroom the overtake does not.
-- [ ] regenerate `tab:space_mortgage_growth` and `tab:two_leg_growth`, with the `e` axes relabelled
+- [x] regenerate `tab:space_mortgage_growth` and `tab:two_leg_growth`, with the `e` axes relabelled
       as `eta_geom` and the chemistry ceiling shown, so a reader can see which rows are reachable.
       **Expect the two tables to move by different amounts:** the first keeps a *plate* on the
       growth push and a plate owes no chemistry, so the toll reaches only `e_2` at ~75 km/s where
       `eta_chem` is 0.910; the second puts a nozzle on both legs and also eats 0.754-0.835 on the
       growth push.
-- [ ] revisit **ADR 0014/0015**. ADR 0015 compares nozzle against plate at matched quality
+
+      **DONE 2026-08-26 on the `aim` side; the LaTeX edit is still owed to the paper repo.**
+      Both tables are emitted by their existing targets rather than by a new one, which is what
+      rule 3 wants: `make two-wave` prints the tolled grid with `eta_chem_floor` and `eta_jet`
+      columns beside `eta_geom`, and `make two-leg` prints the matched diagonal with a
+      `nozzle_over_plate` ratio. **The predicted asymmetry is confirmed and is roughly 3x**: at
+      `eta_geom` = 0.8 the plate chain falls 12.4x and the two-leg chain 36.7x.
+
+      Two things the regeneration turned up that the item did not ask about:
+      - **The head-on leg's forward-thrust floor is now visible in the table.** The
+        `eta_geom` = 0.25 and 0.30 rows deliver *zero* growth, not small growth, because
+        `eta_jet` = 0.246 and 0.296 sit under `1/sqrt(1+k)`. Under the old outer-`recovery`
+        form those cells returned finite numbers, which is the specific way the wrong insertion
+        point flattered the low-`eta` corner.
+      - **The published `_DEFAULT_RECOVERIES` grid starts at 0.25**, i.e. below that floor. The
+        bottom two rows of the swept axis were never reachable and the sweep did not say so.
+- [x] revisit **ADR 0014/0015**. **DONE 2026-08-26 as amendments; neither verdict reversed --
+      that is Seth's call, not a consequence an amendment can draw.** ADR 0015's status line now
+      records that its recombination escape is retired and its matched-pair method doubtful;
+      ADR 0014's records that its successor's basis is weakened. **The finding worth reading:
+      ADR 0015 computed this toll correctly and then argued it away.** Its "Recombination is
+      assumed recovered" section predicted "a ceiling of 0.675 on `e1` at `k = 10.21` and 0.870
+      at `k = 4.02`", which reproduces from `chemistry_efficiency` at the growth push's cold end
+      as **0.6713 and 0.8683** -- agreement to 0.004. The arithmetic was never the weak part;
+      the sentence "It does come back" was. Its own conclusion therefore stands as written:
+      **the `e1 >= 0.8` cells are unreachable.**
+
+      Original item text, still accurate: ADR 0015 compares nozzle against plate at matched quality
       `f = e_1`. That is now doubtful for two independent reasons: its stated premise (that
       `f = 0.8` sits outside the validated envelope) was already addressed -- `puffsat_impact_sim`
       measured `f` inside the growth push's own speed range -- and `f` and `e_1` **cannot be swept

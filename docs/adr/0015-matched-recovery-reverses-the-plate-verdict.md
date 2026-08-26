@@ -1,6 +1,7 @@
 # Compared at matched recovery, the two-leg nozzle wins, and f = 0.8 is why 0014 said otherwise
 
-Status: accepted
+Status: accepted; its recombination escape is retired by ADR 0016, and its
+matched-pair method is now doubtful (the verdict is *not* revisited here)
 
 Date: 2026-08-20
 
@@ -97,6 +98,48 @@ plume stores 84 MJ/kg while pressing with only its 31 MJ/kg of translation.
 
 **The fireball density decides this and is computed nowhere.** Same gap the paper
 defers to a radiation-hydrodynamic calculation.
+
+> **Amendment, 2026-08-26. The density was computed, and this section's escape does
+> not hold. Its arithmetic, however, was right.**
+>
+> `puffsat_impact_simulation` computed the fireball density (`make analysis-fireball`,
+> `make analysis-toll`). The plume freezes at **1.1e-2 to 2.4e-2 kg/m^3**, at the first
+> station past the nozzle lip, with **90-100% of the store still held**. The rate check
+> above is not wrong, it is evaluated at the wrong station: at 1 kg/m^3 recombination
+> really is ~0.01 us, but there the plume is fully atomised and has nothing to give back
+> yet. By the time it does, it is past the lip and the expansion clock has stepped down
+> 8x.
+>
+> **This section predicted the consequence almost exactly and then dismissed it.** Its
+> "ceiling of 0.675 on `e1` at `k = 10.21` and 0.870 at `k = 4.02`" reproduces from
+> `plume_thermal.chemistry_efficiency` at the growth push's cold end as **0.6713** and
+> **0.8683** -- agreement to 0.004. So the numbers here were never the weak part; the
+> escape sentence was. **The `e1 >= 0.8` cells are unreachable, exactly as this section
+> said they would be if the energy stayed locked.**
+>
+> ADR 0016 carries the consequence for the growth tables. Two things follow for *this*
+> ADR specifically:
+>
+> - **`f` and `e1` can no longer be swept as a matched pair**, which is the method the
+>   Decision rests on. They now carry different physical ceilings: `f` is a plate
+>   restitution carrying the impact sim's ADR-0026 frozen bracket, `e1` is a nozzle
+>   recovery carrying the `eta_chem` ceiling above. Matching them numerically compares
+>   the plate at a value it can reach against a nozzle at one it may not.
+> - **The margin the Decision won is much smaller.** Charging the toll on both legs, the
+>   nozzle beats the plate by **12.3x** at the matched 0.80 rather than the 36.2x in the
+>   table above, and below `eta_geom = 0.7` the two-leg chain is inadmissible outright.
+>
+> **The Context paragraph is also stale for an unrelated reason**, recorded here so a
+> reader does not have to find it elsewhere: its premise that `f = 0.8` sits outside the
+> validated envelope was already false when this ADR was written. The impact sim extended
+> `f(v)` to 63 km/s on 2026-08-17, three days earlier, and measures 0.817-0.820 on the
+> heavy plate. Seth confirmed 2026-08-26 that **the growth push flies the heavy plate**,
+> so `STD_FUDGE_FACTOR = 0.8` stands unchanged and "nothing rebounds elastically at
+> 46 km/s" is simply wrong.
+>
+> **The verdict is deliberately not revisited here.** Retiring an escape and weakening a
+> method is not the same as reversing a decision, and which architecture the paper leads
+> with is a call for Seth, not a consequence this amendment can draw on its own.
 
 ## Reproducing
 

@@ -565,7 +565,18 @@ class TwoWaveGrowthAnalysis:
     Attributes:
         cycles: One row per flown cycle, at the selected split gap.
         sweep: One row per ``(recovery, fudge)`` pair, with the chain optimum
-            slug ratio and the growth it delivers.
+            slug ratio and the growth it delivers.  This is the *published*
+            column: ``e`` derates the net impulse from outside the momentum
+            debit and no chemistry is charged.
+        tolled: The same grid re-priced with the frozen-dissociation toll of
+            ADR 0016, so the swept axis is ``eta_geom`` and the jet efficiency
+            actually flown is ``eta_chem * eta_geom``.  ``eta_chem`` is
+            reported per row because it is the *ceiling* on ``eta_jet``: a row
+            asking for ``eta_geom = 0.9`` is really asking the nozzle for
+            ``0.9 eta_chem``, which is what tells a reader whether the row is
+            reachable.  This is what ``tab:space_mortgage_growth`` regenerates
+            to, since its growth push keeps a plate and a plate owes no
+            chemistry.
         split_trade: One row per candidate split gap, showing the perijove
             burn it costs against the apoapsis reversal it saves.
         split_days: The split gap the ``cycles`` and ``sweep`` tables use.
@@ -575,6 +586,7 @@ class TwoWaveGrowthAnalysis:
 
     cycles: pd.DataFrame
     sweep: pd.DataFrame
+    tolled: pd.DataFrame
     split_trade: pd.DataFrame
     split_days: float
     horizon_years: float
@@ -652,6 +664,30 @@ def analyze_two_wave_growth(
                 }
             )
 
+    tolled_rows = []
+    for fudge in fudges:
+        for geometric in recoveries:
+            chain = price_chain(cycles, 1.0, fudge, geometric_efficiency=geometric)
+            ceiling = min(
+                chemistry_efficiency(
+                    coldest_closing_speeds(cycle)[1] * u.km / u.s, chain.slug_ratio
+                )
+                for cycle in cycles
+            )
+            tolled_rows.append(
+                {
+                    "eta_geom": geometric,
+                    "fudge": fudge,
+                    "eta_chem_floor": ceiling,
+                    "eta_jet": ceiling * geometric,
+                    "slug_ratio": chain.slug_ratio,
+                    "total_growth": chain.total_growth,
+                    "e_foldings_per_year": chain.rate,
+                    "doubling_years": chain.doubling,
+                    "mass_after_30_yr": chain.mass_after(_PROJECTION_YEARS),
+                }
+            )
+
     cycle_rows = []
     for cycle in cycles:
         priced = price_cycle(cycle, _REFERENCE_RECOVERY, _REFERENCE_FUDGE)
@@ -675,6 +711,7 @@ def analyze_two_wave_growth(
     return TwoWaveGrowthAnalysis(
         cycles=pd.DataFrame(cycle_rows),
         sweep=pd.DataFrame(sweep_rows),
+        tolled=pd.DataFrame(tolled_rows),
         split_trade=split_trade,
         split_days=best_split,
         horizon_years=sum(c.period_years for c in cycles),
@@ -766,7 +803,32 @@ def main() -> None:
     )
     print(f"\nflown span {analysis.horizon_years:.4f} yr\n")
 
-    print("=== Growth over the flown chain, by recovery e and elasticity f ===")
+    print(
+        "=== Growth with the ADR 0016 dissociation toll charged, by eta_geom "
+        "and elasticity f ==="
+    )
+    print(
+        "    eta_jet = eta_chem * eta_geom; eta_chem is the ceiling, so a row's\n"
+        "    eta_geom is only reachable if the nozzle can deliver eta_jet."
+    )
+    print(
+        _format(
+            analysis.tolled,
+            {
+                "eta_geom": ".2f",
+                "fudge": ".2f",
+                "eta_chem_floor": ".4f",
+                "eta_jet": ".4f",
+                "slug_ratio": ".2f",
+                "total_growth": ".4g",
+                "e_foldings_per_year": ".4f",
+                "doubling_years": ".3f",
+                "mass_after_30_yr": ".4g",
+            },
+        )
+    )
+
+    print("\n=== Growth over the flown chain, by recovery e and elasticity f ===")
     print(
         _format(
             analysis.sweep,

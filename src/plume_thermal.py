@@ -157,6 +157,22 @@ def plume_temperature(closing_speed: u.Quantity, slug_ratio: float) -> u.Quantit
         closing_speed: Impactor speed relative to the vehicle, ``w``.
         slug_ratio: Kilograms of slug per kilogram of impactor, ``k``.
 
+    Warning:
+        **This overshoots badly at high specific energy and is a diagnostic, not
+        a number to quote.**  The caloric model has no ionisation sink -- the
+        seed is charged 4.34 eV and the water is charged nothing, per the module
+        docstring -- so every joule past dissociation goes into translation.
+        Against ``puffsat_impact_simulation``'s ``eos_water``, which carries the
+        full ``O+ .. O8+`` ladder, this reads 99 985 K at (74.26 km/s, k = 8.5)
+        where the solve gives ~26 500 K.  ``eos_water``'s own docstring warns of
+        exactly this.
+
+        :func:`slug_ratio_window` is far more robust despite sharing the model,
+        because it solves for an *energy* threshold rather than mapping energy
+        to a temperature: its ``k_max`` agrees with the solved surface to ~3%
+        (11.94 against 12.29 at 45.58 km/s).  Trust the window; do not trust the
+        temperature above the design point.
+
     Returns:
         Plume temperature (astropy Quantity, K), or 0 K if the collision cannot
         even dissociate and seed-ionise the blob.
