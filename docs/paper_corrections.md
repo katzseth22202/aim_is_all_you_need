@@ -127,6 +127,22 @@ into the second than exists.
 `eta_jet = 1/sqrt(1+k)`, which is 0.324 at `k` = 8.5, so the bottom two rows of
 the published axis were never reachable and the table did not say so.
 
+### A6. `sec:two_leg_nozzle`'s mirror passage cannot be checked as written
+**Now:** "Their ratio is `Mv^2/(gamma-1)E` ... The ratio is 6.7, the wall sees
+1.26 GPa, and it would take 56 T."
+**Problem:** neither `gamma` nor the closing speed is stated, and both are needed
+to reproduce it. They are recoverable -- `gamma` = **1.2** back-solves from the
+6.7, and the closing speed is **56 km/s** from the momentum the two cases share
+(62.5 x 22.4 = 238 x 5.9 = 1400 kg km/s) -- but a reader should not have to.
+**Should be:** state both. `gamma` = 1.2 rather than the monatomic 5/3 is itself
+worth a clause, since dissociation and ionisation are absorbing energy a
+monatomic gas would put into translation.
+**Also worth adding:** the mechanism. A throat-end plug dissipates *more* energy
+(35.1 GJ against 23.5) yet needs a seventh of the field, because the ram term
+falls faster than the static term rises. That is the non-obvious part and the
+passage states only the outcome.
+**Reproduce:** `nozzle_geometry.mirror_stagnation`.
+
 ---
 
 ## D. Citation mechanism (the ledger's rule 3)

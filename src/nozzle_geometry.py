@@ -50,8 +50,7 @@ See :func:`self_consistent_slug_ratio`.
 See CONTEXT.md, "Plume ignition window", and
 ``docs/adr/0016-frozen-dissociation-is-charged-inside-the-momentum-debit.md``.
 
-This module covers the ledger's items 11 and 13.  Item 12 (mirror stagnation
-pressure) is still owed and is not here.
+This module covers the ledger's items 11, 12 and 13.
 """
 
 from __future__ import annotations
@@ -410,3 +409,108 @@ def two_term_nozzle_mass(
         virial_structure_mass(stored_energy, VIRIAL_STRENGTH_RANGE[0]),
         conductor_mass(field, column_length, tape_current, volume),
     )
+
+
+# --- Item 12: mirror stagnation pressure versus plug position --------------
+#
+# The field is a wall and the condition is pressure: it holds if ``B^2/2mu0``
+# exceeds the plume's static pressure plus its ram pressure.  Where the plug
+# sits decides which of those the wall sees, and the two answers differ by 7x
+# in field -- 56 T against 7.6 T -- which is the difference between impossible
+# and already-built.
+
+#: Adiabatic index of the dissipated plume, back-solved from the paper's own
+#: ratio of 6.7 at the ship-end plug (1.2, not the monatomic 5/3, because
+#: dissociation and ionisation are soaking energy that a monatomic gas would
+#: put into translation).
+PLUME_GAMMA = 1.2
+#: Ice plug at the projectile's entrance, half again the projectile's mass so
+#: the residual jet does not punch through into the mist.
+PLUG_MASS = 37.5
+
+
+def mirror_stagnation(
+    added_mass: float,
+    dissipated_volume: float,
+    closing_speed: float = 56.0,
+    impactor_mass: float = IMPACTOR_MASS,
+    gamma: float = PLUME_GAMMA,
+) -> Tuple[float, float, float]:
+    """Ram-to-static ratio, wall pressure and field for one plug position.
+
+    Momentum is conserved through the merge, so ``M v = m_p w`` sets the
+    post-merge speed and the dissipated energy is whatever kinetic energy that
+    leaves behind.  **Sweeping more mass dissipates more energy but leaves it
+    moving slower**, and the ram term falls faster than the static term rises,
+    which is the whole result: a plug at the throat end faces a seventh of the
+    field a plug at the ship end does.
+
+    Args:
+        added_mass: Mass swept before the plume meets the wall (kg).  The plug
+            alone for a ship-end plug; the plug plus the whole slug column for
+            a throat-end one.
+        dissipated_volume: Volume the dissipated energy occupies at the wall
+            (m^3) -- one bore-length for a ship-end plug, the whole bag for a
+            throat-end one.
+        closing_speed: Impactor speed relative to the vehicle (km/s).
+        impactor_mass: Projectile mass (kg).
+        gamma: Adiabatic index of the plume.
+
+    Returns:
+        ``(ram_to_static_ratio, wall_pressure_Pa, field_T)``.
+    """
+    speed = closing_speed * 1000.0
+    merged = impactor_mass + added_mass
+    drift = impactor_mass * speed / merged
+    dissipated = 0.5 * impactor_mass * speed**2 - 0.5 * merged * drift**2
+    static = (gamma - 1.0) * dissipated / dissipated_volume
+    ram = merged * drift**2 / dissipated_volume
+    pressure = static + ram
+    return ram / static, pressure, float(np.sqrt(2.0 * _MU_0 * pressure))
+
+
+def main() -> None:
+    """Print the snowplow geometry, the mirror trade and the nozzle mass."""
+    print("=== Item 11: what slug ratio the arrival radius delivers ===")
+    print(f"full-bore sweep k_full = {full_bore_slug_ratio():.3f}")
+    print(f"{'r/R':>8}{'r [m]':>9}{'% open':>9}{'k rigid':>10}{'k self-widening':>18}")
+    for fraction in (DESIGN_ARRIVAL_FRACTION, 0.3, 0.5, 0.8, 0.9, 1.0):
+        print(
+            f"{fraction:>8.3f}{fraction * BORE_RADIUS:>9.2f}"
+            f"{100 * fraction**2:>8.2f}%{swept_slug_ratio(fraction):>10.3f}"
+            f"{self_consistent_slug_ratio(fraction):>18.3f}"
+        )
+    print(
+        f"\nc_s of the shocked plume at 45.58 km/s is "
+        f"{shocked_sound_speed(45.58):.1f} km/s, a "
+        f"{np.degrees(np.arctan(shocked_sound_speed(45.58) / 45.58)):.1f} deg half-angle."
+    )
+
+    print("\n=== Item 12: mirror stagnation pressure versus plug position ===")
+    print(f"{'plug position':<28}{'ram/static':>12}{'wall':>14}{'field':>10}")
+    for label, added, volume in (
+        ("ship end (1 m of bore)", PLUG_MASS, np.pi * BORE_RADIUS**2),
+        ("throat end (whole bag)", 213.0, BAG_VOLUME),
+    ):
+        ratio, pressure, field = mirror_stagnation(added, volume)
+        print(f"{label:<28}{ratio:>12.2f}{pressure / 1e6:>11.1f} MPa{field:>8.1f} T")
+    print("The plug therefore sits at the projectile's entrance on both legs.")
+
+    print("\n=== Item 13: two-term nozzle mass ===")
+    print(f"{'E_B [GJ]':>9}{'B [T]':>8}{'structure':>20}{'conductor':>12}{'total':>18}")
+    for energy in (4.427e9, 12.15e9):
+        low, high, tape = two_term_nozzle_mass(energy)
+        print(
+            f"{energy / 1e9:>9.2f}{confinement_field(energy):>8.2f}"
+            f"{low / 1000:>12.1f} -{high / 1000:>6.1f} t{tape / 1000:>10.1f} t"
+            f"{(low + tape) / 1000:>12.1f} -{(high + tape) / 1000:>5.1f} t"
+        )
+    print(
+        "\nThe paper quotes the structure term only. The conductor exceeds its\n"
+        "optimistic end, so the floor is ~8 t rather than 3.7 t. Tape operating\n"
+        "current is the dominant uncertainty and the paper does not state one."
+    )
+
+
+if __name__ == "__main__":
+    main()

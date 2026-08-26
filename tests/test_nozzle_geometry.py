@@ -9,14 +9,17 @@ import numpy as np
 import pytest
 
 from src.nozzle_geometry import (
+    BAG_VOLUME,
     BORE_RADIUS,
     DESIGN_ARRIVAL_FRACTION,
     IMPACTOR_MASS,
+    PLUG_MASS,
     arrival_fraction_for,
     bag_density,
     conductor_mass,
     confinement_field,
     full_bore_slug_ratio,
+    mirror_stagnation,
     self_consistent_slug_ratio,
     shocked_sound_speed,
     swept_slug_ratio,
@@ -226,3 +229,38 @@ def test_structure_mass_is_indifferent_to_shape() -> None:
         lo, hi, _ = two_term_nozzle_mass(4.427e9, column_length=length)
         assert np.isclose(lo, two_term_nozzle_mass(4.427e9)[0], rtol=1e-12)
         assert np.isclose(hi, two_term_nozzle_mass(4.427e9)[1], rtol=1e-12)
+
+
+def test_mirror_stagnation_reproduces_both_plug_positions() -> None:
+    """6.7 / 1.26 GPa / 56 T at the ship end, 1.17 / 23 MPa / 7.6 T at the throat."""
+    ratio, pressure, field = mirror_stagnation(PLUG_MASS, 28.27)
+    assert np.isclose(ratio, 6.7, rtol=1e-2)
+    assert np.isclose(pressure / 1e9, 1.26, rtol=2e-2)
+    assert np.isclose(field, 56.0, rtol=2e-2)
+
+    ratio, pressure, field = mirror_stagnation(213.0, BAG_VOLUME)
+    assert np.isclose(ratio, 1.17, rtol=1e-2)
+    assert np.isclose(pressure / 1e6, 23.0, rtol=2e-2)
+    assert np.isclose(field, 7.6, rtol=2e-2)
+
+
+def test_sweeping_more_mass_dissipates_more_energy_but_lowers_the_wall() -> None:
+    """The result in one line, and it is not obvious.
+
+    A throat-end plug lets the fireball snowplow the whole column first, which
+    dissipates *more* energy -- but leaves it moving slower and spread through
+    a far larger volume, and the ram term falls faster than the static term
+    rises.  Seven times less field for more dissipated energy.
+    """
+    near = mirror_stagnation(PLUG_MASS, 28.27)
+    far = mirror_stagnation(213.0, BAG_VOLUME)
+    assert far[0] < near[0]
+    assert far[2] < near[2] / 7.0 * 1.02
+
+
+def test_momentum_is_conserved_through_the_merge() -> None:
+    """``M v = m_p w`` is what sets the post-merge drift, at any swept mass."""
+    for added in (10.0, 37.5, 213.0):
+        merged = IMPACTOR_MASS + added
+        drift = IMPACTOR_MASS * 56000.0 / merged
+        assert np.isclose(merged * drift, IMPACTOR_MASS * 56000.0, rtol=1e-12)

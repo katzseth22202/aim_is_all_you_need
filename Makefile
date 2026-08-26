@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -45,6 +45,9 @@ two-leg:  ## Compare a magnetic nozzle on both legs against the pusher plate (AD
 
 bag-state:  ## Reproduce tab:bag_state and close the leak bracket (ledger items 5-10)
 	python -m src.bag_state
+
+nozzle-geom:  ## Snowplow sweep, mirror trade and two-term nozzle mass (items 11-13)
+	python -m src.nozzle_geometry
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse

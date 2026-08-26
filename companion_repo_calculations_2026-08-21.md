@@ -485,6 +485,26 @@ to position `x` is `(1/2) m_imp v_0^2 (1 - m_imp/m(x))`; pressure `0.2 E(x)/(A x
 
 *Results.* ~20 T at 1 m, 12 T at 3 m, 9 T at 6 m, 5 T at the exit.
 
+### 12. Mirror stagnation pressure -- **DONE 2026-08-26. Both cases reproduce exactly.**
+
+> `nozzle_geometry.mirror_stagnation`, `make nozzle-geom`, 3 tests. Ship end 6.67 /
+> 1.276 GPa / 56.6 T against the paper's 6.7 / 1.26 GPa / 56 T; throat end 1.17 /
+> 23.1 MPa / 7.6 T against 1.17 / 23 MPa / 7.6 T.
+>
+> **The model had to be reconstructed, and two of its inputs are not stated in the
+> paper.** `gamma` = **1.2**, back-solved from the ship-end ratio -- not the monatomic
+> 5/3, because dissociation and ionisation are absorbing energy a monatomic gas would
+> put into translation. And the closing speed is **56 km/s**, recovered from the
+> momentum the two cases share (62.5 x 22.4 = 238 x 5.9 = 1400 kg km/s). Both are worth
+> stating in the paper; a reader cannot currently check this passage.
+>
+> **The mechanism is worth a sentence the paper does not give it.** A throat-end plug
+> lets the fireball snowplow the whole column first, which dissipates *more* energy --
+> 35.1 GJ against 23.5 -- but leaves it slower and spread through 660 m^3 rather than
+> 28. The ram term falls faster than the static term rises, so **more dissipated energy
+> arrives at a seventh of the field.** That is the non-obvious part and it is what
+> decides the plug position.
+
 ### 12. Mirror stagnation pressure versus plug position
 **Paper:** `sec:two_leg_nozzle`, closing run.
 **Why coded:** it is the number that decides where the plug sits on the overtake leg, and the
@@ -587,8 +607,7 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       `tab:bag_state` reproduces both columns to every printed digit. **Items 4 and 9
       (`tab:bag_sizing`, `tab:axial_bag`) are still owed** -- they are separate tables,
       not part of the cascade.
-- [~] `src/nozzle_geometry.py` -- **items 11 and 13 DONE 2026-08-26**; item 12 (mirror
-      stagnation pressure) still owed, and `make nozzle-geom` not yet wired.
+- [x] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13. **DONE 2026-08-26.**
 - [ ] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14
 - [ ] Extend `src/plume_thermal.py` with the ionisation term
 
