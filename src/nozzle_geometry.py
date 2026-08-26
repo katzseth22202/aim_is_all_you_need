@@ -23,7 +23,11 @@ honest statement is not "the arrival radius must be large" but "the arrival
 radius matters exactly insofar as the front is rigid", and ``c_exp`` is a 2D
 hydro question neither repository solves (``puffsat_impact_simulation``, Q-Q).
 
-Seth, 2026-08-26: **the design assumption is a front spanning 0.8 of the bore.**
+**The design arrival is compact, and the chain arithmetic is why.**  Because the
+front widens itself, a 0.15 m arrival still sweeps most of the bag -- ``k`` =
+7.21, which is *inside* ADR 0016's tolled optimum band, where the 8.60 a wide
+arrival delivers overshoots it.  Compact therefore wins on delivered growth
+before any aperture argument is made.  See :data:`DESIGN_ARRIVAL_FRACTION`.
 
 **And then the rigid front turned out to be unphysical, 2026-08-26.** ``c_exp``
 was being swept at 3-8 km/s because nobody had computed it. It is computable
@@ -46,11 +50,13 @@ See :func:`self_consistent_slug_ratio`.
 See CONTEXT.md, "Plume ignition window", and
 ``docs/adr/0016-frozen-dissociation-is-charged-inside-the-momentum-debit.md``.
 
-This module covers the ledger's item 11 only.  Items 12 (mirror stagnation
-pressure) and 13 (two-term nozzle mass) are still owed and are not here.
+This module covers the ledger's items 11 and 13.  Item 12 (mirror stagnation
+pressure) is still owed and is not here.
 """
 
 from __future__ import annotations
+
+from typing import Tuple
 
 import numpy as np
 
@@ -64,8 +70,34 @@ BORE_RADIUS = 3.0
 COLUMN_LENGTH = 23.8
 #: Projectile mass (kg).
 IMPACTOR_MASS = 25.0
-#: Arrival radius as a fraction of the bore, decided by Seth 2026-08-26.
-DESIGN_ARRIVAL_FRACTION = 0.8
+#: Aperture the compact projectile enters through (m).  ``sec:needle_through_fog``
+#: sizes it at 0.15 m into a 28 m^2 bore, which is **0.25% open**.
+ENTRY_APERTURE_RADIUS = 0.15
+#: Arrival radius as a fraction of the bore.
+#:
+#: **Corrected 2026-08-26 from the 0.8 set on 2026-08-25, and the calculation is
+#: the reason, not the paper.**  Self-widening
+#: (:func:`self_consistent_slug_ratio`) delivers ``k`` = 7.21 from a 0.15 m
+#: arrival against 8.60 from 0.8 of the bore.  **7.21 sits inside ADR 0016's
+#: tolled optimum band of 6.75-7.77; 8.60 overshoots it.**  So the compact
+#: arrival delivers 99.4% of the achievable chain growth at ``eta_geom`` = 1
+#: against the wide front's 91.7%.  On the chain arithmetic alone, compact wins.
+#:
+#: That it also matches ``sec:needle_through_fog`` is corroboration, not the
+#: argument.  The paper's own reason is an aperture one -- a head-on nozzle is a
+#: mirror with a hole where the projectile came in, 0.15 m is 0.25% of the bore
+#: against 0.8's 64% -- and **that reason is weaker than the paper states**: a
+#: magnetic mirror's leak is set by its mirror ratio's loss cone, not by the
+#: physical open area, so "anything left open leaks it" is overstated for a
+#: field. What does leave ballistically through a physical hole is the
+#: **un-ionised** fraction, and at the cold leg that is most of the plume
+#: (``f`` = 0.06 at 15 170 K).  So the aperture argument survives, but through
+#: the neutrals rather than through the geometry the paper appeals to.  Recorded
+#: as a paper edit rather than resolved here.
+#:
+#: The 0.8 case stays reachable as a parameter; nothing about it is unsafe, it
+#: is simply dominated.
+DESIGN_ARRIVAL_FRACTION = ENTRY_APERTURE_RADIUS / BORE_RADIUS
 #: Integration steps down the column.  1e5 converges the sweep to <1e-3 in k.
 _STEPS = 100_000
 
@@ -250,3 +282,131 @@ def self_consistent_slug_ratio(
                 radius + (shocked_sound_speed(speed) / speed) * step,
             )
     return (mass - IMPACTOR_MASS) / IMPACTOR_MASS
+
+
+# --- Item 13: the two-term nozzle mass -------------------------------------
+#
+# ``sec:space_mortgages`` names this as the thing that has to settle the
+# nozzle's mass and says it "has not been run at this pulse".  Two terms:
+#
+#   structure   the virial floor, ``M >= E_B / sigma_eff``.  A magnet has to
+#               hold its own field pressure, and the mass needed to do that is
+#               set by the structure's specific strength alone.
+#   conductor   REBCO tape.  A solenoid of length ``l`` making field ``B`` needs
+#               ``NI = B l / mu0`` ampere-turns and each turn is ``2 pi r`` of
+#               tape, so the mass runs as ``B r l``.
+#
+# The paper quotes only the structure term (3.7-11 t at 4.43 GJ, 10-30 t at
+# 12.2 GJ) and calls it "tens of tonnes".  The conductor is what it left out.
+
+#: Specific strength of the coil structure [J/kg].  The low end is a plain
+#: build; the high end is bought by winding under pre-compression, so the
+#: assembly starts squeezed and has more room to stretch before the tape
+#: reaches its ~0.4% strain limit.  A magnet that comes apart between legs
+#: cannot hold pre-stress and returns to the low end.
+VIRIAL_STRENGTH_RANGE = (0.4e6, 1.2e6)
+
+#: Mass per unit length of thin-substrate REBCO tape [kg/m].  4 mm wide and
+#: ~60 um overall at ~8000 kg/m^3 gives ~1.9 g/m; 1.5 g/m is the thin-substrate
+#: figure the ledger's item 13 quotes.
+TAPE_LINEAR_DENSITY = 1.5e-3
+
+#: Operating current per tape [A].  **Not stated by the paper**, so it is a
+#: parameter here rather than a constant, and the band is what commercial REBCO
+#: delivers at magnet operating conditions rather than at 77 K self-field:
+#: roughly 300 A pessimistic, 500 A central, 1000 A for a well-cooled
+#: high-field winding.  The conductor term is exactly inversely proportional to
+#: it, so this is the dominant uncertainty in that term and it is reported as a
+#: band for that reason.
+TAPE_CURRENT_RANGE = (300.0, 500.0, 1000.0)
+
+_MU_0 = 4.0e-7 * np.pi
+
+
+def confinement_field(stored_energy: float, volume: float = BAG_VOLUME) -> float:
+    """Field strength that stores ``stored_energy`` in ``volume``.
+
+    Inverts ``E_B = B^2 V / (2 mu0)``.  At the standoff volume and the
+    dissociated-neutral 4.43 GJ this returns 4.11 T, which is the row of
+    ``tab:bag_sizing`` at that radius.
+
+    Args:
+        stored_energy: ``E_B`` the field must contain (J).
+        volume: Enclosed volume (m^3).
+
+    Returns:
+        Field strength (T).
+    """
+    return float(np.sqrt(2.0 * _MU_0 * stored_energy / volume))
+
+
+def virial_structure_mass(stored_energy: float, specific_strength: float) -> float:
+    """Structural mass needed to contain a field, ``M = E_B / sigma_eff``.
+
+    The virial theorem's floor: a magnet must react its own field pressure, and
+    no geometry escapes it.  **It tracks contained energy only**, which is why
+    reshaping the bag does not change it -- contained energy is the ``n R_g T``
+    that shape leaves alone.
+
+    Args:
+        stored_energy: ``E_B`` (J).
+        specific_strength: Structure's strength-to-density ratio (J/kg).
+
+    Returns:
+        Structural mass (kg).
+    """
+    return stored_energy / specific_strength
+
+
+def conductor_mass(
+    field: float,
+    column_length: float,
+    tape_current: float = 500.0,
+    volume: float = BAG_VOLUME,
+) -> float:
+    """REBCO tape mass for a solenoid of this field over this column.
+
+    ``NI = B l / mu0`` ampere-turns, each turn ``2 pi r`` of tape, with the bore
+    from ``eq:bore_from_length``.  Substituting makes the mass run as
+    ``B sqrt(V l / pi)``, so it grows as the **square root** of column length
+    while the bore falls as its inverse square root: bore and conductor trade
+    inversely, one for one, and halving the bore doubles the tape.
+
+    Args:
+        field: Confinement field (T).
+        column_length: Length of the solenoid (m).
+        tape_current: Operating current per tape (A).
+        volume: Enclosed volume, which sets the bore (m^3).
+
+    Returns:
+        Tape mass (kg).
+    """
+    bore = np.sqrt(volume / (np.pi * column_length))
+    turns = field * column_length / (_MU_0 * tape_current)
+    return float(turns * 2.0 * np.pi * bore * TAPE_LINEAR_DENSITY)
+
+
+def two_term_nozzle_mass(
+    stored_energy: float,
+    column_length: float = COLUMN_LENGTH,
+    tape_current: float = 500.0,
+    volume: float = BAG_VOLUME,
+) -> Tuple[float, float, float]:
+    """Structure plus conductor, the model ``sec:space_mortgages`` asks for.
+
+    Args:
+        stored_energy: ``E_B`` (J).
+        column_length: Solenoid length (m).
+        tape_current: Operating current per tape (A).
+        volume: Enclosed volume (m^3).
+
+    Returns:
+        ``(structure_low, structure_high, conductor)`` in kg, with the
+        structure band spanning :data:`VIRIAL_STRENGTH_RANGE`.
+    """
+    field = confinement_field(stored_energy, volume)
+    return (
+        virial_structure_mass(stored_energy, VIRIAL_STRENGTH_RANGE[1]),
+        virial_structure_mass(stored_energy, VIRIAL_STRENGTH_RANGE[0]),
+        conductor_mass(field, column_length, tape_current, volume),
+    )

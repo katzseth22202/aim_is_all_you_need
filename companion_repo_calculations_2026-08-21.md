@@ -495,6 +495,46 @@ at 22.4 km/s with 23.5 GJ in one metre of bore gives ratio 6.67 and **56 T**. Pl
 throat end after sweeping the full column: 238 kg at 5.88 km/s through 660 m^3 gives ratio
 1.17 and **7.6 T**.
 
+### 13. Two-term nozzle mass -- **RUN 2026-08-26. The conductor is what was missing.**
+
+> **First, this item's "open discrepancy" is stale and should not be acted on.** It says
+> "the paper's Jupiter nozzle is 1.5 t from linear Mini-Mag scaling ... and the paper
+> quotes the small one." The paper does the opposite. `sec:space_mortgages` puts the
+> linear rule at **37 t**, the virial floor at 3.7-11 t and 10-30 t, and says outright:
+> *"We take the virial figures, because the linear rule charges the magnet for energy
+> that never pushes on it ... Call it tens of tonnes."* The two rules were reconciled in
+> the paper and the larger, not the smaller, was rejected.
+>
+> **What the paper does say is owed, and it is this item's real content:** *"Neither
+> figure is a design. The two-term mass model ... virial structure plus conductor, is
+> what has to settle it, and it has not been run at this pulse."*
+>
+> **Run.** `nozzle_geometry.two_term_nozzle_mass`, 5 tests. The virial term reproduces
+> both published bands exactly. The conductor term is what the paper leaves out:
+>
+> | `E_B` | field | structure | conductor (500 A) | **two-term total** | paper (virial only) |
+> | ---: | ---: | ---: | ---: | ---: | ---: |
+> | 4.43 GJ | 4.11 T | 3.7-11.1 t | **4.4 t** | **8.0-15.4 t** | 3.7-11 t |
+> | 12.2 GJ | 6.80 T | 10.1-30.4 t | **7.2 t** | **17.3-37.6 t** | 10-30 t |
+>
+> **The conductor exceeds the optimistic structure floor**, so the paper's low end is not
+> reachable: the real floor is **~8 t, not 3.7 t**. "Tens of tonnes" survives as a
+> statement and the top end grows from 30 to 38 t. Against a 100 t craft the nozzle is
+> **8-38%** rather than the quoted "a tenth to a third".
+>
+> **The dominant uncertainty is tape current, which the paper never states.** 300 A gives
+> 7.3 t of tape, 1000 A gives 2.2 t -- the term is exactly inversely proportional to it.
+> That is a bigger lever than the structure's pre-compression band, and it is worth the
+> paper naming an operating current.
+>
+> **The length trade now carries masses** (item 9's `tab:axial_bag` had only ratios):
+> conductor runs 2.9 t at a 10.8 m column to 6.3 t at 50 m, exactly `sqrt(length)` while
+> the bore falls as its inverse square root. Structure is indifferent to shape, so
+> **shorter columns are strictly lighter** and the only thing arguing for a long one is
+> the bore the plume needs.
+>
+> Original item text follows.
+
 ### 13. Two-term nozzle mass at the revised `E_B`
 **Paper:** `sec:minimum_nozzle`; the "on the order of a tonne" claim in `sec:space_mortgages`.
 **Why coded:** the model exists in `todos/nozzle_rewrite_plan_2026-07-14.md` (gitignored
@@ -547,7 +587,8 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       `tab:bag_state` reproduces both columns to every printed digit. **Items 4 and 9
       (`tab:bag_sizing`, `tab:axial_bag`) are still owed** -- they are separate tables,
       not part of the cascade.
-- [ ] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13
+- [~] `src/nozzle_geometry.py` -- **items 11 and 13 DONE 2026-08-26**; item 12 (mirror
+      stagnation pressure) still owed, and `make nozzle-geom` not yet wired.
 - [ ] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14
 - [ ] Extend `src/plume_thermal.py` with the ionisation term
 

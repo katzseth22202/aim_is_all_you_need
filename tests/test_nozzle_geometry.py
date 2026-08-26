@@ -14,10 +14,13 @@ from src.nozzle_geometry import (
     IMPACTOR_MASS,
     arrival_fraction_for,
     bag_density,
+    conductor_mass,
+    confinement_field,
     full_bore_slug_ratio,
     self_consistent_slug_ratio,
     shocked_sound_speed,
     swept_slug_ratio,
+    two_term_nozzle_mass,
 )
 
 
@@ -36,14 +39,36 @@ def test_rigid_front_is_exactly_quadratic_in_arrival_radius() -> None:
     assert np.isclose(swept_slug_ratio(0.5), 0.25 * swept_slug_ratio(1.0), rtol=1e-9)
 
 
-def test_the_design_assumption_delivers_the_slug_ratio_it_does() -> None:
-    """Seth 2026-08-26: the front spans 0.8 of the bore.
+def test_the_design_arrival_is_the_compact_aperture_not_a_wide_front() -> None:
+    """``sec:needle_through_fog`` keeps the projectile compact, on purpose.
 
-    Rigid that is 5.56, and with any spreading at all it recovers to ~8.3.
-    Both numbers are quoted downstream, so both are pinned.
+    A head-on nozzle is a mirror with a hole where the projectile entered, so a
+    wide entry stops being a mirror.  0.15 m into 28 m^2 is 0.25% open; 0.8 of
+    the bore would be 64% open.
     """
-    assert np.isclose(swept_slug_ratio(DESIGN_ARRIVAL_FRACTION), 5.563, rtol=1e-3)
-    assert np.isclose(swept_slug_ratio(DESIGN_ARRIVAL_FRACTION, 3.0), 8.277, rtol=2e-3)
+    assert np.isclose(DESIGN_ARRIVAL_FRACTION * BORE_RADIUS, 0.15, rtol=1e-9)
+    open_fraction = (DESIGN_ARRIVAL_FRACTION * BORE_RADIUS) ** 2 / BORE_RADIUS**2
+    assert np.isclose(open_fraction, 0.0025, rtol=1e-9)
+    assert np.isclose(0.8**2, 0.64, rtol=1e-9)
+
+
+def test_the_compact_needle_beats_the_wide_front_on_k_as_well_as_aperture() -> None:
+    """It is not a compromise: 7.21 is inside ADR 0016's 6.75-7.77 optimum band.
+
+    The wide front's 8.60 overshoots it, so the compact projectile wins on
+    aperture, on slug ratio, and on chain growth at once.
+    """
+    compact = self_consistent_slug_ratio(DESIGN_ARRIVAL_FRACTION)
+    wide = self_consistent_slug_ratio(0.8)
+    assert 6.75 <= compact <= 7.77
+    assert wide > 7.77
+    assert np.isclose(compact, 7.214, rtol=5e-3)
+
+
+def test_wide_front_numbers_stay_reachable_for_comparison() -> None:
+    """The rigid-front bound at 0.8/0.9 is quoted in ADR 0016 addendum 1."""
+    assert np.isclose(swept_slug_ratio(0.8), 5.563, rtol=1e-3)
+    assert np.isclose(swept_slug_ratio(0.8, 3.0), 8.277, rtol=2e-3)
     assert np.isclose(swept_slug_ratio(0.9), 7.041, rtol=1e-3)
 
 
@@ -152,3 +177,52 @@ def test_the_delivered_ratio_overshoots_the_tolled_optimum() -> None:
     than the chain wants, and the fix is a smaller bag.
     """
     assert self_consistent_slug_ratio(0.8) > 7.77
+
+
+def test_virial_floor_reproduces_both_of_the_papers_bands() -> None:
+    """3.7-11 t at 4.43 GJ and 10-30 t at 12.2 GJ, which the paper quotes."""
+    for energy, low, high in ((4.427e9, 3.69, 11.07), (12.15e9, 10.13, 30.38)):
+        lo, hi, _ = two_term_nozzle_mass(energy)
+        assert np.isclose(lo / 1000.0, low, rtol=1e-2)
+        assert np.isclose(hi / 1000.0, high, rtol=1e-2)
+
+
+def test_confinement_field_matches_the_bag_sizing_row() -> None:
+    """``E_B = B^2 V / 2 mu0`` inverted gives 4.11 T at the standoff volume."""
+    assert np.isclose(confinement_field(4.427e9), 4.11, rtol=5e-3)
+
+
+def test_conductor_term_is_not_negligible_against_the_structure_floor() -> None:
+    """The finding of item 13: the paper quotes structure only.
+
+    At 500 A the tape is 4.4 t against a 3.7 t optimistic structure floor, so
+    the paper's low end is not reachable -- the two-term floor is ~8 t, not
+    3.7 t.  It stays significant across the whole plausible tape-current band.
+    """
+    lo, _, conductor = two_term_nozzle_mass(4.427e9)
+    assert conductor > lo
+    assert np.isclose((lo + conductor) / 1000.0, 8.05, rtol=2e-2)
+    for current, expected in ((300.0, 7.3), (1000.0, 2.2)):
+        _, _, tape = two_term_nozzle_mass(4.427e9, tape_current=current)
+        assert np.isclose(tape / 1000.0, expected, rtol=3e-2)
+
+
+def test_conductor_grows_as_the_square_root_of_column_length() -> None:
+    """Bore and conductor trade inversely, one for one.
+
+    ``m_tape ~ B sqrt(V l / pi)`` while ``r ~ 1/sqrt(l)``, so lengthening the
+    column 4.6x buys 2.15x the tape for 0.46x the bore -- the exact reciprocal
+    pair the paper asserts.
+    """
+    field = confinement_field(4.427e9)
+    short, long = conductor_mass(field, 10.8), conductor_mass(field, 50.0)
+    assert np.isclose(long / short, np.sqrt(50.0 / 10.8), rtol=1e-9)
+    assert np.isclose(long / short, 2.152, rtol=1e-2)
+
+
+def test_structure_mass_is_indifferent_to_shape() -> None:
+    """The virial floor tracks contained energy, which shape leaves alone."""
+    for length in (10.8, 23.8, 50.0):
+        lo, hi, _ = two_term_nozzle_mass(4.427e9, column_length=length)
+        assert np.isclose(lo, two_term_nozzle_mass(4.427e9)[0], rtol=1e-12)
+        assert np.isclose(hi, two_term_nozzle_mass(4.427e9)[1], rtol=1e-12)
