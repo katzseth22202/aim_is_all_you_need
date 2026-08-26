@@ -2625,8 +2625,17 @@ debit back out of a shrinking jet.
         point flattered the low-`eta` corner.
       - **The published `_DEFAULT_RECOVERIES` grid starts at 0.25**, i.e. below that floor. The
         bottom two rows of the swept axis were never reachable and the sweep did not say so.
-- [x] revisit **ADR 0014/0015**. **DONE 2026-08-26 as amendments; neither verdict reversed --
-      that is Seth's call, not a consequence an amendment can draw.** ADR 0015's status line now
+- [x] revisit **ADR 0014/0015**. **DONE 2026-08-26. Amendment 2 settles it with data:
+      the verdict survives and this ADR's argument is not why.** Compared at the same
+      `eta_geom`, with the toll charged on whichever legs carry a nozzle and the plate
+      granted its full measured `f` = 0.818, the nozzle wins **47x / 22x / 10x** at
+      `eta_geom` = 1.0 / 0.9 / 0.8. No matched diagonal and no claim that 0.8 is
+      indefensible -- the comparison is like-for-like and one-sided. **That is a stronger
+      position than the original**, which needed a reader to accept that benchmarking
+      against an unmeasured incumbent was unfair. What the toll did take is the *size* of
+      the margin: 36.2x before the chemistry was charged, 10.3x after.
+      **Still Seth's call, and it is not the verdict:** how `sec:two_leg_nozzle` frames the
+      `e1 ~ 0.6` crossover, which was written for the retired argument. ADR 0015's status line now
       records that its recombination escape is retired and its matched-pair method doubtful;
       ADR 0014's records that its successor's basis is weakened. **The finding worth reading:
       ADR 0015 computed this toll correctly and then argued it away.** Its "Recombination is

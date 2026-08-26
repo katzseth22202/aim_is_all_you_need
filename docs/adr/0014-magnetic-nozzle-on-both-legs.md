@@ -1,7 +1,8 @@
 # A magnetic nozzle on the growth push needs ~0.6 recovery just to draw level with the plate
 
-Status: accepted; verdict superseded by ADR 0015, whose own basis is weakened
-by ADR 0016 (the arithmetic of all three stands)
+Status: accepted; verdict superseded by ADR 0015, which ADR 0016 then re-grounded
+on a like-for-like comparison against the plate's measured f = 0.818 (the
+arithmetic of all three stands; only 0015's reasoning was replaced)
 
 Date: 2026-08-20
 

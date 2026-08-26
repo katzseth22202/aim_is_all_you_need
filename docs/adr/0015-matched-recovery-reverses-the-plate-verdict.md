@@ -1,7 +1,8 @@
 # Compared at matched recovery, the two-leg nozzle wins, and f = 0.8 is why 0014 said otherwise
 
-Status: accepted; its recombination escape is retired by ADR 0016, and its
-matched-pair method is now doubtful (the verdict is *not* revisited here)
+Status: accepted. Its **verdict survives on new grounds**; its recombination
+escape and its matched-pair method are both retired by ADR 0016. See the two
+amendments below -- the conclusion was right for the wrong reason.
 
 Date: 2026-08-20
 
@@ -145,3 +146,60 @@ defers to a radiation-hydrodynamic calculation.
 
 `make two-leg`, plus per-cell `price_chain_two_leg(cycles, e, e).total_growth` and
 `price_chain_two_leg(cycles, e, None, f).total_growth` for the matched diagonal.
+
+
+---
+
+## Amendment 2, 2026-08-26: the verdict survives, and this ADR's argument is not why
+
+Amendment 1 retired this ADR's recombination escape and left its Decision resting
+on a comparison method -- sweep `f` and `e1` as a matched pair -- that ADR 0016
+then showed is unsound, because the two carry different physical ceilings. That
+left the verdict standing on nothing in particular.
+
+**It does not need the method.** Comparing the two architectures at the *same*
+`eta_geom`, charging the frozen-dissociation toll on whichever legs carry a
+nozzle, and granting the plate its **full measured** `f = 0.818` -- the heavy
+plate value `puffsat_impact_simulation` measured across 45-63 km/s, which Seth
+confirmed 2026-08-26 is the plate the growth push flies:
+
+| `eta_geom` | nozzle on both legs | plate on the growth push, `f` = 0.818 | ratio |
+| ---: | ---: | ---: | ---: |
+| 1.0 | 6.931e7 | 1.464e6 | **47.4x** |
+| 0.9 | 9.520e6 | 4.244e5 | **22.4x** |
+| 0.8 | 7.723e5 | 7.486e4 | **10.3x** |
+
+**The nozzle wins outright, against the incumbent's best measured number, with
+the chemistry charged against the nozzle and not against the plate.** No matched
+diagonal, no claim that `f = 0.8` is indefensible, no methodological argument at
+all -- the comparison is now like-for-like and one-sided.
+
+**This is a stronger position than the original.** The old argument required a
+reader to accept that benchmarking against an unmeasured incumbent value was
+unfair. The new one requires nothing: it hands the plate its measurement and
+still loses to it by an order of magnitude.
+
+**What the toll did take away** is the *size* of the margin, and that is worth
+stating rather than burying: it was 36.2x at matched 0.80 before the chemistry
+was charged and is 10.3x after. The direction is unchanged; the headroom is not.
+
+**Both of this ADR's original factual claims remain wrong** and Amendment 1 stands
+on that. "Nothing rebounds elastically at 46 km/s" is false (`e_eff` ~ 0.66-0.67
+there), and `f = 0.8` was inside the validated envelope three days before this ADR
+was written. A reader should take the verdict from this amendment and the
+reasoning from nowhere in the Context section.
+
+### What is still Seth's call, and it is not the verdict
+
+**How the paper frames it.** `sec:two_leg_nozzle` currently states the `e1 ~ 0.6`
+crossover against `f = 0.8`, which invites a reader who believes the incumbent's
+number to reach the opposite conclusion. That framing was built for the old
+argument and no longer matches this one. Whether to rewrite it, and whether to
+lead with the nozzle at all given `eta_geom` is entirely unmeasured, is an
+editorial decision this ADR does not make.
+
+## Reproducing amendment 2
+
+`price_chain_two_leg(cycles, 1.0, 1.0, geometric_efficiency=g)` against
+`price_chain_two_leg(cycles, 1.0, None, fudge=0.818, geometric_efficiency=g)`
+on the 11-cycle, 28.3930 yr chain at a 10-day split.
