@@ -434,6 +434,34 @@ to the sphere; `F` from item 8; film as `2.8 x F/1.5`.
 
 *Results.* 5.40 m bore at 10.8 m length down to 2.05 m bore at 50 m, conductor 1.00 -> 1.76.
 
+### 10. The leak bracket -- **CLOSED 2026-08-26. The answer is neither number.**
+
+> **The bracket was never a real operating point, because it held the leak fixed while
+> moving `E_B`, and the two run in opposite directions with closing speed.** The hot leg
+> confines 12.2 GJ but leaks 0.11%; the cold leg leaks 2.54% but confines only 4.57 GJ.
+> Pairing each leg with its own values (rather than the worst of each) is what collapses
+> the bracket.
+>
+> | `w` [km/s] | `E_B` | leak | boil onset | margin | film, cold storage | film at the feared 4.4% |
+> | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+> | 75 | 12.2 GJ | 0.11% | 1.10% | 10.0x | **0 kg** | 23.2 kg |
+> | 65 | 9.06 | 0.17% | 1.48% | 8.7x | **0 kg** | 14.8 kg |
+> | 56.53 | 6.96 | 0.29% | 1.92% | 6.6x | **0 kg** | 9.4 kg |
+> | 45.58 | 4.57 | 2.54% | 2.93% | **1.2x** | **0 kg** | 3.4 kg |
+>
+> **From cold storage the bag boils nothing on any leg.** The waste heat does not even
+> finish melting the slug, so there is no vapour, no saturation pressure, and the film
+> stops being a mass item -- the bag becomes a containment membrane sized by handling
+> rather than by stress. **The 31 kg fear is retired and so is the 2.8 kg baseline.**
+>
+> **One number deserves watching and it is not the big store.** The cold leg sits at
+> 2.54% against a 2.93% onset -- **15% of margin**. The hot legs clear theirs 9-10x over.
+> If the leak model moves at all it moves there, and 122 K cold storage is what is
+> holding it: from Earth's 278 K the same leg boils (`x` = 0.18) and needs a 4.9 kg film.
+> **Cold storage is doing the work the bag would otherwise have to do.**
+>
+> Original item text follows.
+
 ### 10. The leak bracket -- 3.7 kg against 31 kg
 **Paper:** `sec:watering_it_down`, the paragraph after `tab:bag_state`.
 **Why coded:** **this is the highest-value item on the list.** It is the difference between a
@@ -515,7 +543,10 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       consumer of an impact-sim plume-state table, *not* a Saha implementation. `eos_water.py`
       already solves `(rho, e) -> (T, f, P)` better than the spec in item 1 does. What stays
       here is the burn-envelope sweep and `P/P0`, `B/B0`, `E_B`. See the audit section above.
-- [ ] `src/bag_state.py` + `make bag-state` -- items 4-10
+- [x] `src/bag_state.py` + `make bag-state` -- items 5-8 and **10 DONE 2026-08-26**.
+      `tab:bag_state` reproduces both columns to every printed digit. **Items 4 and 9
+      (`tab:bag_sizing`, `tab:axial_bag`) are still owed** -- they are separate tables,
+      not part of the cascade.
 - [ ] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13
 - [ ] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14
 - [ ] Extend `src/plume_thermal.py` with the ionisation term
@@ -937,10 +968,10 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
 
 ## Regression tests
 - [ ] `tab:bag_sizing` reproduces to three figures, both columns
-- [ ] `tab:bag_state` reproduces both columns
+- [x] `tab:bag_state` reproduces both columns -- **2026-08-26**, all eight rows
 - [ ] `tab:axial_bag` reproduces all five rows
 - [ ] `tab:seed_window` reproduces all six rows
-- [ ] `E_B = n Rg T` holds across a 15x radius sweep
+- [x] `E_B = n Rg T` holds across a 15x radius sweep -- **2026-08-26**, radius does not enter the expression
 - [ ] The 2026-08-21 burn sweep reproduces (26 200 K / 0.573 down to 14 700 K / 0.053)
 
 ## Paper edits (rule 3)

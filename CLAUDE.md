@@ -79,6 +79,10 @@ main.py / nozzle_analysis.py  ← both import from every module above
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius
                                 actually delivers (ADR 0016 addendum, ledger item 11)
+
+bag_state.py                 ← plume_thermal only: the waste-heat cascade behind
+                                tab:bag_state, and the field-leak bracket that
+                                sizes the slug bag (ledger items 5-8 and 10)
 ```
 
 One edge runs opposite the diagram: `retrograde_return_legs.py` imports
