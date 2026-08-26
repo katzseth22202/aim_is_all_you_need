@@ -155,6 +155,45 @@ of it.
 
 ---
 
+## Glossary
+
+Three terms this ADR leans on that appear nowhere in the paper.
+
+**`eta_jet`** -- the paper's own (`sec:jet_efficiency`): the fraction of the
+*ideal one-directional exhaust momentum* a real nozzle delivers, where "ideal"
+means every joule of collision energy placed on one axis pointing backwards.
+The paper says `eta_jet^2` bundles five losses: plume divergence (the exhaust
+sprays in a cone), exhaust-speed spread, radiative escape (energy leaving as
+light, which a magnetic field cannot steer and which pushes nothing), frozen
+ionisation or dissociation energy, and mass the field fails to grip.
+
+**`eta_chem`** -- the fourth of those five, computed by this ADR.
+
+**`eta_geom`** -- the other four, lumped, so `eta_jet = eta_chem * eta_geom`.
+**The name is loose** ("mass the field fails to grip" is not geometry) and it is
+**entirely unmeasured** -- nothing in either repository bounds it, which is why
+it stays a swept axis rather than becoming a number.
+
+**Rigid front** -- the snowplow assumption that the sweeping front keeps the
+radius it arrived with for the whole column. The slug bag is a puffed cloud
+(0.323 kg/m^3, about a quarter of sea-level air density), the projectile plows
+through it, and the mass it plows up *is* `k`. So the question the arrival
+radius asks is simply how wide the plow blade is, and "rigid" is the assumption
+that it never widens. It is the pessimistic bound, and every number in the
+addendum's sensitivity table is computed under it.
+
+**`c_exp`** -- how fast the blade widens (km/s), radially. Material at the nose
+is shock-heated to tens of thousands of kelvin and expands sideways; `c_exp` is
+essentially a sound speed in the shocked gas, hence the 3-8 km/s range swept.
+Since the front advances at `w` and widens at `c_exp`, the cone half-angle is
+`arctan(c_exp/w)` -- **3.8 to 10.0 degrees over 45.58 km/s**, which closes the
+0.6 m gap from `r/R` = 0.8 in 3.4 to 9.1 m of a 23.8 m column. That is why
+spreading swamps the arrival radius, and why `c_exp` rather than `r/R` is the
+quantity that decides whether the arrival radius is load-bearing at all.
+**`c_exp` cannot come from the snowplow model**, which is one-dimensional along
+the axis while this is radial by definition. It needs a 2D hydro solve, in
+`puffsat_impact_simulation`, and has not been run.
+
 ## Addendum, 2026-08-26: two design assumptions fixed, and the ceiling they give
 
 Seth settled the two inputs this ADR had left open.
