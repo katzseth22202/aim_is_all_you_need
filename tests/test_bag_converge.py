@@ -10,6 +10,7 @@ import numpy as np
 from src.bag_converge import (
     FLOWN_RADIATED_SHARE,
     FLOWN_RADIUS,
+    bag_for_fixed_field,
     converge,
     optical_depth,
     optically_thick_limit,
@@ -89,3 +90,34 @@ def test_the_gap_does_not_reach_the_film() -> None:
     for speed in (75.0, 45.58):
         *_, state, _ = converge(speed, SOLVED_LEAK_FRACTIONS["equilibrium"][speed])
         assert state.film_mass.to_value(u.kg) == 0.0
+
+
+def test_a_hotter_pulse_wants_a_bigger_bag_not_a_smaller_one() -> None:
+    """The counterintuitive direction, and the one a designer would get wrong.
+
+    Thinning the slug drops the pressure faster than the resulting temperature
+    rise raises it, so holding the confinement field fixed means *growing* the
+    bag on the hot legs.
+    """
+    hot = bag_for_fixed_field(75.0).to_value(u.m)
+    cold = bag_for_fixed_field(45.58).to_value(u.m)
+    assert hot > cold
+    assert np.isclose(hot, 7.40, rtol=2e-2)
+    assert np.isclose(cold, 5.52, rtol=2e-2)
+
+
+def test_per_speed_sizing_is_an_optimisation_not_a_fix() -> None:
+    """The flown single bag is comfortable on every axis at every leg.
+
+    Field 4.25-6.86 T against a ~20 T working point, optically thick throughout,
+    and 1-3.6% radiated.  Per-speed sizing buys ~6% of nozzle mass and spends
+    the whole optical-thickness margin doing it, so it is a lever rather than a
+    repair.
+    """
+    from src.bag_converge import _plume_field
+
+    fields = [_plume_field(s, FLOWN_RADIUS).to_value(u.T) for s in (75.0, 45.58)]
+    assert max(fields) < 20.0
+    assert optical_depth(FLOWN_RADIUS) > 1.0
+    # Holding the field instead pushes the hot leg onto the optical limit.
+    assert optical_depth(bag_for_fixed_field(75.0)) < 1.0

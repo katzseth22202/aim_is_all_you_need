@@ -216,9 +216,13 @@ def main() -> None:
             f"{optical_depth(radius):>8.2f}{state.film_mass.to_value(u.kg):>9.2f}kg"
         )
     print(
-        f"\nThe legs disagree by {max(radii) / min(radii):.1f}x in radius and "
-        f"{(max(radii) / min(radii)) ** 3:.0f}x in volume, and one bag has to serve\n"
-        "all of them. The flown 5.4 m is the cold leg's answer, not the hot leg's."
+        f"\nHolding the radiated share fixed, the legs disagree by "
+        f"{max(radii) / min(radii):.1f}x in radius. **That objective is the wrong\n"
+        "one**, and the spread is an artefact of it: it drives the hot leg to a 2 m\n"
+        "bag needing 32 T, well past the ~20 T commercial working point. Held at\n"
+        "constant *field* instead the spread is 1.3x and runs the other way -- a\n"
+        "hotter pulse wants a BIGGER bag, because thinning the slug drops pressure\n"
+        "faster than the temperature rises. See bag_for_fixed_field."
     )
     print(
         "\nSize of the gap, stated fairly: cut 1 costs a factor of 3 in a term that\n"
@@ -230,3 +234,56 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def _plume_field(closing_speed: float, radius: u.Quantity) -> u.Quantity:
+    """Confinement field a bag of this radius needs at this closing speed.
+
+    Args:
+        closing_speed: Impactor speed relative to the vehicle (km/s).
+        radius: Bag radius.
+
+    Returns:
+        Field strength (astropy Quantity, T).
+    """
+    from src.bag_state import DISSOCIATED_MOLAR_MASS
+
+    density = SLUG_MASS / ((4.0 / 3.0) * np.pi * radius**3)
+    temperature, ionised = plume_state(
+        closing_speed,
+        min(max(float(density.to_value(u.kg / u.m**3)), 0.05), 2.0),
+    )
+    molar = DISSOCIATED_MOLAR_MASS / (1.0 + ionised)
+    return np.sqrt(2.0 * const.mu0 * density * const.R * temperature / molar).to(u.T)
+
+
+def bag_for_fixed_field(
+    closing_speed: float, field: u.Quantity = 4.11 * u.T
+) -> u.Quantity:
+    """Bag radius that holds the confinement field at a chosen value.
+
+    **The counterintuitive direction, and it is worth stating.**  A *hotter*
+    pulse needs a *bigger* bag to hold the same field, because thinning the slug
+    drops the pressure faster than the temperature rises.  So per-speed bag
+    sizing grows the bag on the hot legs, not shrinks it.
+
+    Args:
+        closing_speed: Impactor speed relative to the vehicle (km/s).
+        field: Field to hold.
+
+    Returns:
+        Bag radius (astropy Quantity, m).
+    """
+    from scipy.optimize import brentq
+
+    target = field.to_value(u.T)
+    return (
+        float(
+            brentq(
+                lambda r: _plume_field(closing_speed, r * u.m).to_value(u.T) - target,
+                2.0,
+                12.0,
+            )
+        )
+        * u.m
+    )

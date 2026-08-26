@@ -1095,13 +1095,19 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
 - [ ] Leave the 26 existing bare cites alone
 
 ## Documentation in the companion repo
-- [ ] **ADR 0017** *(renumbered 2026-08-26; 0016 was taken by the toll decision)*: the
-      plume state is solved, not assumed. Records that Saha allows only
+- [x] **ADR 0017** *(renumbered 2026-08-26; 0016 was taken by the toll decision)*:
+      **written 2026-08-26.** The plume state is solved, not assumed. Records that Saha allows only
       5.9% ionisation at 15 000 K, that the temperature must therefore run to 26 200 K at the
       hottest pulse, and that the original 15 000 K is the *coldest-pulse* answer.
-- [ ] **ADR 0018** *(renumbered 2026-08-26)*: the slug bag is an axial capsule with an ice plug. Records the
+- [x] **ADR 0018** *(renumbered 2026-08-26)*: **written 2026-08-26.** The slug bag is an axial capsule with an ice plug. Records the
       bore-for-conductor trade and the aperture argument.
-- [ ] **Amend ADR 0015**: today's finding *strengthens* it. A slugged plate delivers `2 f m w`
+- [x] ~~**Amend ADR 0015**: today's finding *strengthens* it.~~ **RETIRED 2026-08-26 --
+      this item's own premise was withdrawn further down the same file.** The plate-transfer
+      section already records that "the audit's own prediction at 'Amend ADR 0015' (below) is
+      wrong: it says today's finding *strengthens* 0015. It does not." ADR 0015 was amended
+      twice on other grounds instead (see the Q-R checklist), and the slug-cancellation
+      argument below, whatever its merits, cannot rescue an objection the measurement had
+      already retired. Original text: A slugged plate delivers `2 f m w`
       exactly as an unslugged one does, because `(1+k)` in the mass cancels `1/(1+k)` in the
       drift speed. So the plate genuinely cannot buy its way out of the 46 km/s objection, and
       0015's argument holds with one fewer escape route. Add to Consequences.
