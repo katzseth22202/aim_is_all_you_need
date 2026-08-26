@@ -494,6 +494,12 @@ def price_chain(
             the search (see :func:`headon_slug_ratio_bounds`).
         geometric_efficiency: Charge the frozen-dissociation toll and sweep
             this as the remaining jet efficiency; see :func:`price_cycle`.
+            **Pass ``recovery = 1.0`` when sweeping it.**  ``recovery`` derates
+            from *outside* the momentum debit and this derates from inside, so
+            passing the same number to both charges it twice and silently
+            returns a much smaller growth -- 7282 rather than 6.289e4 on the
+            flown chain at 0.8.  The tolled grid holds ``recovery`` at 1.0 and
+            sweeps only this.
 
     Returns:
         The chain's compounded growth and its per-year rate.

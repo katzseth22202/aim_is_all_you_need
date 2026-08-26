@@ -9,6 +9,7 @@ import math
 from dataclasses import replace
 
 import astropy.units as u
+import numpy as np
 import pytest
 
 from src.nozzle_analysis import same_cycle_nozzle
@@ -208,3 +209,37 @@ def test_charging_the_toll_costs_growth_and_lowers_the_optimal_slug_ratio() -> N
     tolled = price_chain(cycles, 1.0, 0.8, geometric_efficiency=1.0)
     assert tolled.total_growth < plain.total_growth
     assert tolled.slug_ratio < plain.slug_ratio
+
+
+def test_double_charging_the_toll_silently_shrinks_the_chain() -> None:
+    """D3's trap: ``recovery`` derates from outside the debit, the toll inside.
+
+    Passing the same number to both is not an error and returns no warning --
+    it just returns a much smaller growth.  Pinned here so the two paths stay
+    distinguishable, and so nobody re-derives the C1 plate column by charging
+    ``eta_geom`` twice.
+    """
+    cycles = [CYCLE]
+    once = price_chain(cycles, 1.0, 0.818, geometric_efficiency=0.8)
+    twice = price_chain(cycles, 0.8, 0.818, geometric_efficiency=0.8)
+    # One cycle loses ~19%, which is small enough to look like a rounding
+    # difference; the flown chain compounds it over eleven cycles into a factor
+    # of nine (6.289e4 against 7282 at the target's own f = 0.80).
+    assert twice.total_growth < 0.85 * once.total_growth
+    assert (twice.total_growth / once.total_growth) ** 11 < 0.2
+
+
+@pytest.mark.slow
+def test_the_plate_column_reproduces_at_the_measured_elasticity() -> None:
+    """D3, resolved: the paper's plate column is quoted at ``f`` = 0.818.
+
+    ``0.818`` is the plate's full measured elasticity; the target's default is
+    ``0.800``, and the difference is the whole gap that made the column look
+    unreproducible.  Both are defensible -- they answer different questions --
+    so what is pinned is which one the published figures came from.
+    """
+    cycles = adaptive_two_wave_cycles()
+    published = {1.0: 1.464e6, 0.9: 4.244e5, 0.8: 7.486e4}
+    for eta_geom, growth in published.items():
+        chain = price_chain(cycles, 1.0, 0.818, geometric_efficiency=eta_geom)
+        assert np.isclose(chain.total_growth, growth, rtol=1e-3)

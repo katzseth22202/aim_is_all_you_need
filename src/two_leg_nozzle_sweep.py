@@ -257,7 +257,10 @@ def price_chain_two_leg(
         return_floor: Minimum returned mass per kilogram of liftoff mass.
         geometric_efficiency: Charge the frozen-dissociation toll on whichever
             legs carry a nozzle, sweeping this as the remaining jet efficiency;
-            see :func:`_score`.
+            see :func:`_score`.  **Pass ``recovery = 1.0`` (and
+            ``growth_recovery = 1.0``) when sweeping it**, since those derate
+            from outside the momentum debit and this derates from inside:
+            charging both applies the toll twice.
 
     Returns:
         The best admissible chain, or None if no slug ratios are admissible.

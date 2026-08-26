@@ -70,6 +70,15 @@ def vapour_pressure(temperature: u.Quantity) -> u.Quantity:
     ``log10(P/Pa) = -2663.5/T + 12.537``, fitted over 170-250 K, which brackets
     both the bare equilibrium and the shaded case.
 
+    **Do not evaluate this at a rounded temperature.**  ``d ln P / dT`` is
+    ``2663.5 ln 10 / T^2``, about 16% per kelvin near 194 K, so quoting the
+    equilibrium to the nearest kelvin and then re-evaluating the correlation
+    there moves the pressure by 7% and the evaporation rate with it.  That is
+    the whole of D5: the paper's 0.064 Pa and 7.4 kg/m^2/day are this
+    correlation at exactly 194.000 K, and the solved balance is at 194.42 K,
+    which gives 0.0688 Pa and 7.91 kg/m^2/day.  Round the answer, never the
+    input.
+
     Args:
         temperature: Ice temperature.
 
@@ -189,6 +198,16 @@ def main() -> None:
     print(
         f"{'free-evaporation rate':<40}"
         f"{daily.to_value(u.kg / u.m**2):>10.2f} kg/m^2/day"
+    )
+
+    rounded = round(temperature.to_value(u.K)) * u.K
+    print(
+        f"\nD5: at the rounded {rounded.to_value(u.K):.0f} K the same correlation "
+        f"gives {vapour_pressure(rounded).to_value(u.Pa):.4f} Pa and "
+        f"{(sublimation_flux(rounded) * u.day).to_value(u.kg / u.m**2):.2f} "
+        "kg/m^2/day,\nwhich is where the paper's 0.064 Pa and 7.4 kg/m^2/day came "
+        "from. Vapour pressure\nmoves ~16% per kelvin here, so the input must not "
+        "be rounded before it is used."
     )
 
     length, area, areal = rod_geometry()

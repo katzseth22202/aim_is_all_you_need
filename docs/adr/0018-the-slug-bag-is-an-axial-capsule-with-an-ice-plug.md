@@ -115,3 +115,60 @@ about holes is made** -- 99.4% of the achievable optimum against 91.7%.
 
 `make bag-state` for the axial table, `make nozzle-geom` for the sweep and the
 plug trade.
+
+## Addendum, 2026-08-26: the film has a floor, and it is not `F`
+
+**`eq:bag_film_mass` sizes a pressure vessel, and the solved leak leaves nothing
+for it to hold.** With the field leak at 0.11-2.54% rather than the assumed 4.4%,
+the slug boils nothing from cold storage: the vapour fraction `x` is zero, and a
+term linear in `x` returns zero film *wherever it is evaluated*. That is the
+right answer to the question the equation asks and the wrong answer to "what does
+the bag weigh". A bag still has to be manufactured, folded, packed, deployed and
+inflated.
+
+### The decision
+
+**The film that flies is `max(pressure vessel, handling floor)`**, where the
+floor is area times gauge times density and nothing else --
+`bag_state.handling_film_mass()`, quoted at 12.7 um over a 6-25 um band.
+
+At the flown 23 m column the two are the same size, 5.1 kg of handling floor
+against 6.2 kg of pressure vessel from Earth storage, which is why nothing
+downstream of the old 2.8 kg breaks. From *cold* storage the pressure term is
+0 kg and the floor is the whole answer, which is the case the paper now flies.
+
+### Why the scaling matters more than the number
+
+A capsule's membrane area is exactly `2 pi r L`: the hemispherical caps put back
+precisely what shortening the cylinder removed. With the volume fixed,
+`r ∝ 1/sqrt(L)`, so **area goes as `sqrt(L)` and never saturates**, while the
+shape factor `F = (2L + 2r)/(L + 4r/3)` saturates at 2.0. From 16 m to 50 m,
+`F` rises 8% and the area rises 77%.
+
+| length | area | film at 12.7 um | `F` |
+| ---: | ---: | ---: | ---: |
+| 10.8 m (sphere) | 366 m^2 | 4.3 kg | 1.50 |
+| 16.0 m | 364 m^2 | 4.3 kg | 1.82 |
+| **23.0 m** | 437 m^2 | **5.1 kg** | 1.90 |
+| 32.0 m | 515 m^2 | 6.0 kg | 1.94 |
+| 50.0 m | 644 m^2 | 7.5 kg | 1.97 |
+
+**This strengthens the bore-for-conductor trade rather than complicating it.**
+The trade above already said bore and conductor swap one for one; the film was
+treated as nearly flat across it because `F` is. Once the bag is gauge-limited
+the column pays a third cost that rises with length, so the launch envelope's
+choice of 23 m over 50 m is favoured on film mass too, not merely tolerated.
+
+### Open
+
+- **Seams, ripstop, metallisation and inflation hardware are all excluded**, so
+  the floor is a floor and not a bag design. A real membrane is heavier by
+  whatever those cost, and nothing here bounds them.
+- **The 12.7 um gauge is anchored on Echo 1**, which flew a 30 m sphere of
+  half-mil metallised PET, packed and inflated on orbit, in 1960. The anchor is a
+  precedent rather than a derivation; the conclusions hold across the whole
+  6-25 um band, which is why the band is carried.
+
+## Reproducing the addendum
+
+`make bag-state`, section "D4: the handling floor under the film".

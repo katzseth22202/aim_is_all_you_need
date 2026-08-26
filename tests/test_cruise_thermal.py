@@ -86,3 +86,26 @@ def test_the_sunshade_is_what_makes_ice_viable() -> None:
     bare = sublimation_flux(equilibrium_temperature())
     shaded = sublimation_flux(SHADED_TEMPERATURE)
     assert float(bare / shaded) > 1e3
+
+
+def test_rounding_the_equilibrium_before_using_it_moves_the_answer_7_percent() -> None:
+    """D5: the paper's 0.064 Pa and 7.4 kg/m^2/day, explained.
+
+    Both are this correlation at exactly 194.000 K rather than at the solved
+    194.42 K.  Nothing is wrong with either source -- the input was rounded
+    before it was used, and vapour pressure moves ~16% per kelvin here.
+    """
+    solved = equilibrium_temperature()
+    rounded = round(solved.to_value(u.K)) * u.K
+    assert np.isclose(solved.to_value(u.K), 194.42, atol=0.01)
+    assert np.isclose(vapour_pressure(rounded).to_value(u.Pa), 0.064, atol=0.0005)
+    assert np.isclose(vapour_pressure(solved).to_value(u.Pa), 0.0688, atol=0.0005)
+    ratio = float(vapour_pressure(solved) / vapour_pressure(rounded))
+    assert 1.06 < ratio < 1.08
+
+
+def test_the_five_day_survival_follows_from_the_unrounded_rate() -> None:
+    """41.1 / 7.91 is 5.2 days; 41.1 / 7.4 would be 5.6, and the paper prints 5."""
+    _, _, areal = rod_geometry()
+    daily = (sublimation_flux(equilibrium_temperature()) * u.day).to(u.kg / u.m**2)
+    assert np.isclose(float(areal / daily), 5.2, atol=0.05)

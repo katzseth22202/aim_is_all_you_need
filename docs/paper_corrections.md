@@ -91,7 +91,14 @@ caps `eta_jet`:
 
 | `w` [km/s] | 45.58 | 56.53 | 61.83 | 65.13 | 75.00 |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| `eta_chem` | 0.754 | 0.835 | 0.864 | 0.879 | 0.910 |
+| `eta_chem` | 0.731 | 0.835 | 0.864 | 0.879 | 0.910 |
+
+> **Corrected 2026-08-26 (D2).** The first cell read **0.754** when this list
+> was handed over, which is the value at `k` = 7.77, the *tolled optimum*
+> rather than the flown ratio; the other four are genuine `k` = 8.5 values.
+> `chemistry_efficiency(45.58 km/s, 8.5)` is **0.7311**. The cold leg is what
+> binds the fleet, so the difference is not decorative. The paper landed 0.731
+> and is right; this table was wrong.
 
 **Closed form**, if the paper wants to print one:
 
@@ -428,6 +435,16 @@ growth against 91.7%.
 ### B2. The recombination argument is checked at the wrong station
 
 **Locate:** `grep -n "They do, and quickly" templateArxiv.tex`
+
+> **Amended 2026-08-26 (D7).** The quoted sentence is *also an edit*, which
+> this item originally left implicit: A1 and A2 introduce `E_a` = 50.9 MJ/kg,
+> so leaving 50.4 in place would state two values for one quantity two
+> paragraphs apart. 50.9 is right — `WATER_ATOMISATION_ENTHALPY` is
+> 917 kJ/mol, and 917 / 18.015 g/mol = 50.90 MJ/kg — and 50.4 implies
+> 908 kJ/mol, 1.8% low. Both downstream claims survive: atomisation is still
+> "about 60%" of the 85.1 MJ/kg bill (59.8%), and the polyethylene
+> oxygen-scavenging penalty still "about nine percent" (9.0%). Landed in the
+> paper, cited to `crc_handbook`.
 
 **Now:** "Breaking water into its atoms takes \SI{50.4}{\mega\joule\per\kilogram}
 … It comes back only if the atoms find each other again as the plume cools and

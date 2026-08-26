@@ -10,10 +10,14 @@ import numpy as np
 import pytest
 
 from src.plume_state import (
+    CLIFF_TEMPERATURE,
     FLOWN_BAG_DENSITY,
     QUOTED_SPEEDS,
+    SOLVED_V_L,
+    _interpolated_cliff,
     burn_envelope,
     burn_stored_energy,
+    cliff_temperature,
     field_ratio,
     implied_v_l,
     leak_fraction,
@@ -111,3 +115,40 @@ def test_conductivity_rises_monotonically_through_the_window() -> None:
     conductivities = [row[2] for row in seed_window()]
     assert conductivities == sorted(conductivities)
     assert conductivities[-1] / conductivities[0] > 1000.0
+
+
+def test_the_cliff_is_solved_not_interpolated() -> None:
+    """D9: the crossing is an output of the conductivity model, not of its table.
+
+    ``_SEED_WINDOW_SIGMA`` samples every 1000 K and ``sigma`` climbs 60x
+    between its first two points, so interpolating the crossing out of it is
+    guessing at the shape of the steepest part of the curve.  It guesses high
+    by about 120 K, which is what put 2568 K into the paper's handoff where the
+    companion solves 2450 K.
+    """
+    assert cliff_temperature() == 2450.0
+    error = _interpolated_cliff() - cliff_temperature()
+    assert 100.0 < error < 140.0
+
+
+def test_a_faster_expansion_lowers_the_cliff() -> None:
+    """``Rm = mu0 sigma v L``, so more ``v L`` holds the field to colder plume."""
+    solved = [CLIFF_TEMPERATURE[v_l] for v_l in sorted(CLIFF_TEMPERATURE)]
+    assert solved == sorted(solved, reverse=True)
+    assert cliff_temperature(1.81e4) > cliff_temperature(SOLVED_V_L)
+
+
+def test_the_cliff_is_not_what_binds_the_seed_window() -> None:
+    """The leak floor the paper states, 3800 K, sits well above the cliff.
+
+    The gap is the argument: the slug runs out of capacity to absorb leaked
+    heat long before the field loses its grip, so the window's floor is a
+    thermal limit rather than a conductivity one.
+    """
+    assert 1300.0 < 3800.0 - cliff_temperature() < 1400.0
+
+
+def test_no_cliff_is_offered_for_an_unsolved_expansion() -> None:
+    """These are recorded solves, not a model; interpolating them is the bug."""
+    with pytest.raises(KeyError):
+        cliff_temperature(6.0e4)

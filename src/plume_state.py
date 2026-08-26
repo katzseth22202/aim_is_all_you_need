@@ -254,6 +254,70 @@ SOLVED_V_L = 7.4e4
 
 _MU_0 = 4.0e-7 * np.pi
 
+#: Temperature at which ``Rm`` falls through 1 -- the conductivity cliff --
+#: against the ``v L`` it is solved at [K].
+#:
+#: **Do not interpolate this out of** ``_SEED_WINDOW_SIGMA``.  Those six points
+#: are 1000 K apart and ``sigma`` climbs 60x between the first two, so any
+#: interpolation across that gap is guessing at the shape of the steepest part
+#: of the curve: log-linear interpolation puts the crossing at 2568 K where the
+#: model that owns ``sigma`` solves 2450 K, a 120 K error on a figure the paper
+#: quotes to three digits.  The cliff is an *output of the conductivity model*,
+#: not of its tabulation.
+#:
+#: **Provenance.**  ``puffsat_impact_simulation`` @ ``0216a09``,
+#: ``puffsat.conductivity.cliff_temperature(rho=0.3229, x_k=0.01, v_l=...)``,
+#: which bisects ``Rm(T) = 1`` on the continuous ``sigma``.  Re-run it there for
+#: any ``v L`` not listed; do not interpolate between these either, since they
+#: are recorded rather than modelled here.
+CLIFF_TEMPERATURE: Dict[float, float] = {
+    1.81e4: 2859.0,
+    5.5e4: 2524.0,
+    7.4e4: 2450.0,
+    9.7e4: 2386.0,
+}
+
+
+def cliff_temperature(v_l: float = SOLVED_V_L) -> float:
+    """Temperature at which the field stops being held, ``Rm = 1``.
+
+    Below it the field diffuses out of the plume faster than the plume expands,
+    so there is nothing left to steer.  It is not what binds the design: the
+    leak limit the paper sets its seed window at, 3800 K, sits some 1350 K
+    above it, so the slug runs out of capacity to absorb the leaked heat long
+    before the field loses its grip.  That gap is the whole point of quoting
+    the cliff, and it is 150 K wider than the interpolated crossing suggested.
+
+    Args:
+        v_l: Flow speed times flux-tube radius (m^2/s); must be one of the
+            solved points in :data:`CLIFF_TEMPERATURE`.
+
+    Returns:
+        The cliff temperature (K).
+
+    Raises:
+        KeyError: If the ``v L`` has not been solved in the companion.
+    """
+    return CLIFF_TEMPERATURE[v_l]
+
+
+def _interpolated_cliff(v_l: float = SOLVED_V_L) -> float:
+    """The cliff as log-interpolating the six tabulated points would give it.
+
+    **This is the wrong answer, kept deliberately.**  It is what this repository
+    reported before the crossing was taken from the model that owns ``sigma``,
+    and printing it beside the solved value is what stops it being re-derived.
+
+    Args:
+        v_l: Flow speed times flux-tube radius (m^2/s).
+
+    Returns:
+        The interpolated crossing temperature (K).
+    """
+    temperatures = sorted(_SEED_WINDOW_SIGMA)
+    log_rm = [np.log(magnetic_reynolds(t, v_l)) for t in temperatures]
+    return float(np.interp(0.0, log_rm, temperatures))
+
 
 def magnetic_reynolds(temperature: float, v_l: float = SOLVED_V_L) -> float:
     """``Rm = mu0 sigma v L`` at a tabulated temperature.
@@ -371,6 +435,24 @@ def main() -> None:
         f"\nThe paper's Rm column implies a v L that varies by {spread:.1f}x across\n"
         "its own rows, so it cannot be one expansion sampled at several\n"
         "temperatures. The solved expansion gives v L = 5.5e4-9.7e4 (Q-L)."
+    )
+
+    print("\n=== D9: the conductivity cliff, Rm = 1 ===")
+    print(f"{'v L [m^2/s]':>13}{'cliff [K]':>11}{'interpolated':>14}{'error':>9}")
+    for v_l in sorted(CLIFF_TEMPERATURE):
+        solved = cliff_temperature(v_l)
+        guessed = _interpolated_cliff(v_l)
+        print(f"{v_l:>13.3g}{solved:>11.0f}{guessed:>14.0f}{guessed - solved:>+9.0f}")
+    print(
+        f"\nAt the solved v L = {SOLVED_V_L:.3g} the cliff is "
+        f"{cliff_temperature():.0f} K, not the {_interpolated_cliff():.0f} K this\n"
+        "repository reported by interpolating the six tabulated sigmas: they are\n"
+        "1000 K apart and sigma climbs 60x between the first two, so the shape of\n"
+        "the steepest part of the curve is not in the table. The crossing is an\n"
+        "output of puffsat_impact_simulation's conductivity model\n"
+        "(cliff_temperature, which bisects Rm(T) = 1 on the continuous sigma).\n"
+        "The paper's 3800 K leak floor therefore sits ~1350 K above the cliff,\n"
+        "not ~1200 K."
     )
 
 

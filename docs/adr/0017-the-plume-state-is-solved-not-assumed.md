@@ -98,3 +98,50 @@ there for it to hide in.
 ## Reproducing
 
 `make plume-state`.
+
+## Addendum, 2026-08-26: the conductivity cliff is an output, not a row
+
+`tab:seed_window` sets the seed window's floor by where the field stops being
+held, `Rm = mu0 sigma v L = 1`. This repository quoted that crossing at 2568 K
+and the paper printed ~2570 K. **Both were wrong, and the mechanism is worth
+recording because the same trap is available everywhere else in this module.**
+
+**The six vendored conductivities are a tabulation of a model, not the model.**
+They sample every 1000 K, and `sigma` climbs from 1.05 to 63.28 S/m -- a factor
+of 60 -- between the first two. The crossing lies inside that gap, so
+interpolating it is guessing at the shape of the steepest part of the curve. The
+values themselves are fine: they agree with the model to 0.4%.
+
+**The decision: take the crossing from the model that owns `sigma`.**
+`puffsat_impact_simulation`'s `conductivity.cliff_temperature()` bisects
+`Rm(T) = 1` on the continuous function. At the stated `vL` = 7.4e4 the answer is
+**2450 K**:
+
+| `v L` [m^2/s] | 1.81e4 (retired) | 5.5e4 | **7.4e4** | 9.7e4 |
+| --- | ---: | ---: | ---: | ---: |
+| solved | 2859 K | 2524 K | **2450 K** | 2386 K |
+| interpolated | 2911 K | 2640 K | 2568 K | 2502 K |
+| error | +52 K | +116 K | +118 K | +116 K |
+
+`plume_state.CLIFF_TEMPERATURE` records the solved values with their provenance
+and refuses anything not in it -- **these are recorded solves, not a model, so
+interpolating between them is the same mistake one level up**.
+`_interpolated_cliff()` is kept deliberately, and `make plume-state` prints the
+wrong answer beside the right one, so the 2568 is not re-derived by someone who
+notices the table is right there.
+
+**The conclusion moves in the argument's favour.** The leak limit sits at
+3800 K, so the gap above the cliff is ~1350 K rather than ~1200: the slug runs
+out of capacity to absorb leaked heat well before the field loses grip, and the
+cliff is not what binds the design.
+
+### Still owed by the companion
+
+`conductivity.REF_V_L` is 1.81e4, the retired expansion speed, so
+`make analysis-conductivity` regenerates the table and its cliff at a `v L` the
+paper no longer states. Until that moves, the values above are a paste from a
+one-off call rather than something that repo's own target prints.
+
+## Reproducing the addendum
+
+`make plume-state`, section "D9: the conductivity cliff, Rm = 1".

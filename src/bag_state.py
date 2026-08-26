@@ -429,6 +429,42 @@ def main() -> None:
         )
     print("Bore and conductor trade one for one; the launch envelope picks 23 m.")
 
+    print("\n=== D4: the handling floor under the film ===")
+    thin, thick = HANDLING_GAUGE_BAND
+    coldest = 45.58
+    temperature, ionised = LEG_PLUME_STATES[coldest]
+    earth_film = BagState(
+        SOLVED_LEAK_FRACTIONS["equilibrium"][coldest],
+        stored_field_energy(temperature * u.K, ionised),
+        "earth",
+    ).film_mass
+    print(
+        f"{'length':>9}{'area':>10}{'6 um':>9}{'12.7 um':>10}{'25 um':>9}"
+        f"{'pressure':>11}{'governs':>10}"
+    )
+    for length in AXIAL_BAG_LENGTHS:
+        metres = length * u.m
+        factor = shape_factor(metres)
+        pressure = earth_film * factor / SPHERE_SHAPE_FACTOR
+        governing = governing_film_mass(pressure, metres)
+        governs = "handling" if governing > pressure else "pressure"
+        print(
+            f"{length:>8.1f}m"
+            f"{bag_surface_area(metres).to_value(u.m**2):>9.0f}m2"
+            f"{handling_film_mass(metres, thin).to_value(u.kg):>8.1f}kg"
+            f"{handling_film_mass(metres).to_value(u.kg):>9.1f}kg"
+            f"{handling_film_mass(metres, thick).to_value(u.kg):>8.1f}kg"
+            f"{pressure.to_value(u.kg):>10.1f}kg{governs:>10}"
+        )
+    print(
+        "The pressure column is the coldest leg from Earth storage, the only\n"
+        "case left that still boils; from cold storage it is 0 kg everywhere.\n"
+        "The handling floor is not, so the bag never weighs nothing -- and a\n"
+        "capsule's area is 2 pi r L, so a longer column costs film as well as\n"
+        "conductor. Seams, ripstop, metallisation and inflation hardware are\n"
+        "all excluded, so this is a floor rather than a design."
+    )
+
 
 # --- Item 4: tab:bag_sizing ------------------------------------------------
 
@@ -539,6 +575,109 @@ def bore_radius(
         Bore radius (astropy Quantity, m).
     """
     return np.sqrt(volume / (np.pi * column_length)).to(u.m)
+
+
+# --- D4: the handling floor under the film ---------------------------------
+#
+# ``eq:bag_film_mass`` sizes a *pressure vessel*: it is ``F x rho_f R_g T /
+# (M sigma)``, linear in the vapour fraction ``x``.  With the solved leak the
+# slug boils nothing from cold storage, so ``x`` is zero and the equation
+# returns zero film *wherever it is evaluated* -- not only in the one table
+# that reported it.  Zero is the right answer to the question the equation
+# asks and the wrong answer to "what does the bag weigh": a bag still has to
+# be manufactured, folded, packed, deployed and inflated, and that sets a
+# gauge floor no pressure argument can go below.
+#
+# What binds is therefore ``max(pressure film, handling film)``, and at the
+# gauges below the handling term is the larger of the two for every row of
+# ``tab:axial_bag`` -- which is why the film column does not vanish when the
+# pressure does.
+
+#: Film gauge the handling floor is quoted at.  Echo 1 flew a 30 m sphere of
+#: half-mil (12.7 um) metallised PET in 1960, packed into a canister, deployed
+#: and inflated on orbit, which is the closest flown precedent for a membrane
+#: this thin at this scale.  **The paper needs this claim cited before it
+#: prints it**; the arithmetic here does not depend on the citation, only the
+#: choice of gauge does.
+HANDLING_FILM_GAUGE = 12.7e-6 * u.m
+#: Bracket the gauge is quoted over: 6 um is about as thin as a metallised
+#: film is handled in bulk, 25 um (1 mil) is a conservative deployable.
+HANDLING_GAUGE_BAND = (6.0e-6 * u.m, 25.0e-6 * u.m)
+#: Density of the polyethylene film of ``eq:bag_film_mass``.  The pressure
+#: model carries it inside :data:`FILM_COEFFICIENT`; the handling model needs
+#: it on its own, so it is named here rather than back-solved twice.
+FILM_DENSITY = 920.0 * u.kg / u.m**3
+
+
+def bag_surface_area(
+    column_length: u.Quantity, volume: u.Quantity = BAG_VOLUME
+) -> u.Quantity:
+    """Membrane area of a capsule bag of this total length.
+
+    A capsule is a cylinder of length ``L - 2r`` capped by two hemispheres, and
+    its area collapses to ``2 pi r L`` exactly: the caps put back precisely what
+    shortening the cylinder took away.  Stretching a fixed volume into a longer
+    column therefore *costs* area, since ``r`` falls only as ``1/sqrt(L)``.
+
+    Args:
+        column_length: Total bag length, tip to tip.
+        volume: Bag volume, which fixes the bore.
+
+    Returns:
+        Membrane area (astropy Quantity, m^2).
+    """
+    radius = (
+        SPHERE_BORE_RADIUS
+        if np.isclose(
+            column_length.to_value(u.m), 2.0 * SPHERE_BORE_RADIUS.to_value(u.m)
+        )
+        else bore_radius(column_length, volume)
+    )
+    return (2.0 * np.pi * radius * column_length).to(u.m**2)
+
+
+def handling_film_mass(
+    column_length: u.Quantity,
+    gauge: u.Quantity = HANDLING_FILM_GAUGE,
+    volume: u.Quantity = BAG_VOLUME,
+) -> u.Quantity:
+    """Bag mass at a manufacturable gauge, holding no pressure at all.
+
+    This is a floor, not a design: it charges area times gauge times density
+    and nothing else -- no seams, no ripstop, no inflation hardware, no
+    metallisation.  A real bag is heavier.  The point of the number is that it
+    is not zero, and that it does not depend on whether the slug boils.
+
+    Args:
+        column_length: Total bag length, tip to tip.
+        gauge: Film thickness.
+        volume: Bag volume, which fixes the bore.
+
+    Returns:
+        Film mass (astropy Quantity, kg).
+    """
+    return (bag_surface_area(column_length, volume) * gauge * FILM_DENSITY).to(u.kg)
+
+
+def governing_film_mass(
+    pressure_film_mass: u.Quantity,
+    column_length: u.Quantity,
+    gauge: u.Quantity = HANDLING_FILM_GAUGE,
+    volume: u.Quantity = BAG_VOLUME,
+) -> u.Quantity:
+    """The larger of the pressure vessel and the handling floor.
+
+    Args:
+        pressure_film_mass: What ``eq:bag_film_mass`` returns for this state.
+        column_length: Total bag length, tip to tip.
+        gauge: Film thickness for the handling floor.
+        volume: Bag volume, which fixes the bore.
+
+    Returns:
+        Film mass that actually flies (astropy Quantity, kg).
+    """
+    floor = handling_film_mass(column_length, gauge, volume)
+    return max(pressure_film_mass.to(u.kg), floor, key=lambda m: m.to_value(u.kg))
 
 
 def shape_factor(column_length: u.Quantity, volume: u.Quantity = BAG_VOLUME) -> float:

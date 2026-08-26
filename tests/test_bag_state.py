@@ -11,6 +11,8 @@ import pytest
 from src.bag_state import (
     AXIAL_BAG_LENGTHS,
     BAG_SIZING_RADII,
+    HANDLING_FILM_GAUGE,
+    HANDLING_GAUGE_BAND,
     HOT_PULSE_STATE,
     PAPER_LEAK_FRACTION,
     SLUG_MASS,
@@ -18,10 +20,13 @@ from src.bag_state import (
     SPHERE_BORE_RADIUS,
     BagState,
     bag_density_at,
+    bag_surface_area,
     bore_radius,
     coldest_mist_temperature,
     confinement_field_at,
     film_mass_fraction,
+    governing_film_mass,
+    handling_film_mass,
     paper_bag_state,
     radiated_fraction,
     saturation_density,
@@ -250,3 +255,62 @@ def test_the_sphere_is_the_lightest_film_and_the_long_tube_the_heaviest() -> Non
     assert np.isclose(shape_factor(10.8 * u.m), 1.5, rtol=1e-3)
     assert shape_factor(50.0 * u.m) < 2.0
     assert shape_factor(200.0 * u.m) > shape_factor(50.0 * u.m)
+
+
+def test_a_capsule_carries_exactly_two_pi_r_l_of_film() -> None:
+    """The hemispherical caps put back what shortening the cylinder removed."""
+    sphere = bag_surface_area(2.0 * SPHERE_BORE_RADIUS)
+    assert np.isclose(
+        sphere.to_value(u.m**2),
+        (4.0 * np.pi * SPHERE_BORE_RADIUS**2).to_value(u.m**2),
+        rtol=1e-9,
+    )
+
+
+def test_stretching_the_bag_costs_area_faster_than_it_costs_shape_factor() -> None:
+    """D4's finding: ``F`` is the wrong scaling once the bag holds no pressure.
+
+    A pressure vessel's film mass is independent of radius and rises only
+    through ``F``, which saturates at 2.0.  A handling-gauge bag pays for
+    *area*, ``2 pi r L``, which grows as ``sqrt(L)`` and does not saturate: from
+    16 m to 50 m the shape factor rises 8% while the area rises 77%.
+    """
+    short, long = 16.0 * u.m, 50.0 * u.m
+    shape_growth = shape_factor(long) / shape_factor(short)
+    area_growth = float(bag_surface_area(long) / bag_surface_area(short))
+    assert shape_growth < 1.1 < 1.7 < area_growth
+    assert np.isclose(area_growth, np.sqrt(50.0 / 16.0), rtol=1e-6)
+
+
+def test_the_handling_floor_does_not_care_whether_the_slug_boils() -> None:
+    """Which is the whole point: ``eq:bag_film_mass`` returns 0 kg, a bag does not.
+
+    From cold storage the solved leak boils nothing, so the pressure vessel is
+    massless.  The flown 23 m column still needs 2.4-10.0 kg of film depending
+    on gauge, centred on 5.1 kg at Echo 1's half-mil.
+    """
+    flown = 23.0 * u.m
+    thin, thick = HANDLING_GAUGE_BAND
+    assert np.isclose(handling_film_mass(flown).to_value(u.kg), 5.1, atol=0.1)
+    assert np.isclose(handling_film_mass(flown, thin).to_value(u.kg), 2.4, atol=0.1)
+    assert np.isclose(handling_film_mass(flown, thick).to_value(u.kg), 10.0, atol=0.1)
+    assert governing_film_mass(0.0 * u.kg, flown) == handling_film_mass(flown)
+
+
+def test_the_pressure_vessel_still_wins_when_the_slug_does_boil() -> None:
+    """The floor is a floor, not a replacement: whichever is larger flies."""
+    heavy = 40.0 * u.kg
+    assert governing_film_mass(heavy, 23.0 * u.m) == heavy
+
+
+def test_the_gauge_band_brackets_the_quoted_gauge() -> None:
+    """6-25 um around Echo 1's 12.7 um, so the floor is quoted with a range."""
+    thin, thick = HANDLING_GAUGE_BAND
+    assert thin < HANDLING_FILM_GAUGE < thick
+    for length in AXIAL_BAG_LENGTHS:
+        metres = length * u.m
+        assert (
+            handling_film_mass(metres, thin)
+            < handling_film_mass(metres)
+            < handling_film_mass(metres, thick)
+        )
