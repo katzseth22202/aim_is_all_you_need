@@ -15,6 +15,8 @@ from src.nozzle_geometry import (
     arrival_fraction_for,
     bag_density,
     full_bore_slug_ratio,
+    self_consistent_slug_ratio,
+    shocked_sound_speed,
     swept_slug_ratio,
 )
 
@@ -91,3 +93,62 @@ def test_rejects_a_nonsense_arrival_fraction() -> None:
     for bad in (0.0, -0.1, 1.5):
         with pytest.raises(ValueError):
             swept_slug_ratio(bad)
+
+
+def test_shocked_front_is_hot_enough_to_widen_at_a_quarter_of_its_own_speed() -> None:
+    """The number that retires the rigid front.
+
+    A 45.58 km/s impact shocks the plume to ~94 600 K, whose sound speed is
+    21.1 km/s -- very nearly half the closing speed, a 25 degree half-angle.
+    A front that widens that fast reaches the bore wall almost immediately.
+    """
+    assert np.isclose(shocked_sound_speed(45.58), 21.1, rtol=1e-2)
+    assert shocked_sound_speed(45.58) / 45.58 > 0.4
+
+
+def test_sound_speed_rises_with_front_speed_and_clamps_outside_the_table() -> None:
+    """Monotone, and it must not extrapolate off the ends of the provenance table."""
+    speeds = [shocked_sound_speed(v) for v in (5.0, 15.0, 30.0, 45.0)]
+    assert speeds == sorted(speeds)
+    assert shocked_sound_speed(0.5) == shocked_sound_speed(2.0)
+    assert shocked_sound_speed(500.0) == shocked_sound_speed(80.0)
+
+
+def test_self_consistent_front_makes_the_arrival_radius_nearly_irrelevant() -> None:
+    """The finding: 0.03-8.7 rigid collapses to 7.2-8.7 once the front may widen.
+
+    Pinned against a direct run of ``puffsat_impact_simulation``'s ``eos_water``
+    at commit ``0216a09``, which gave 7.240 and 8.601 for these two cases; the
+    in-repo interpolation must track that solve, not merely be self-consistent.
+    """
+    compact = (3.0 * (IMPACTOR_MASS / 917.0) / (4.0 * np.pi)) ** (1.0 / 3.0)
+    assert np.isclose(
+        self_consistent_slug_ratio(compact / BORE_RADIUS), 7.240, rtol=5e-3
+    )
+    assert np.isclose(self_consistent_slug_ratio(0.8), 8.601, rtol=5e-3)
+    # The whole spread across every plausible arrival radius is now under 1.5 in k.
+    ratios = [self_consistent_slug_ratio(f) for f in (0.3, 0.5, 0.8, 1.0)]
+    assert max(ratios) - min(ratios) < 1.5
+
+
+def test_self_consistent_front_is_bounded_by_the_rigid_and_full_bore_cases() -> None:
+    """It must beat a rigid front and never exceed sweeping the whole bag."""
+    for fraction in (0.2, 0.5, 0.8):
+        assert (
+            swept_slug_ratio(fraction)
+            < self_consistent_slug_ratio(fraction)
+            <= full_bore_slug_ratio()
+        )
+    assert np.isclose(
+        self_consistent_slug_ratio(1.0), full_bore_slug_ratio(), rtol=1e-9
+    )
+
+
+def test_the_delivered_ratio_overshoots_the_tolled_optimum() -> None:
+    """The design consequence, and it points at the bag rather than the projectile.
+
+    ADR 0016 puts the tolled chain optimum at k = 6.75-7.77.  A self-widening
+    front at the design 0.8 delivers 8.60, so the flown bag carries *more* slug
+    than the chain wants, and the fix is a smaller bag.
+    """
+    assert self_consistent_slug_ratio(0.8) > 7.77

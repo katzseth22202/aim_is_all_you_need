@@ -25,6 +25,24 @@ hydro question neither repository solves (``puffsat_impact_simulation``, Q-Q).
 
 Seth, 2026-08-26: **the design assumption is a front spanning 0.8 of the bore.**
 
+**And then the rigid front turned out to be unphysical, 2026-08-26.** ``c_exp``
+was being swept at 3-8 km/s because nobody had computed it. It is computable
+without a 2D solve: the freshly shocked material at the front takes ``v^2/2`` of
+specific energy, and ``eos_water`` returns its sound speed. At entry that is
+**94 630 K and 21.1 km/s**, which is *half the closing speed* -- a 24.9 degree
+half-angle. The front is strongly self-widening, it reaches the bore wall in the
+first few metres from any arrival radius, and **the arrival radius is therefore
+very nearly irrelevant**: even a compact 25 kg ice rod recovers ``k`` = 7.24
+against the rigid model's 0.034.
+
+Two checks that this is not an artefact. Balancing the shocked pressure against
+the cold cloud's ram pressure, ``sqrt(P/rho_ambient)``, gives **1.6-1.9x faster**
+lateral speed than ``c_s`` at every station, so ``c_s`` is the conservative
+choice. And the shock-compression ratio, which is the one weakly-known input,
+moves ``c_s`` by only 9% across 2x-16x.
+
+See :func:`self_consistent_slug_ratio`.
+
 See CONTEXT.md, "Plume ignition window", and
 ``docs/adr/0016-frozen-dissociation-is-charged-inside-the-momentum-debit.md``.
 
@@ -127,3 +145,108 @@ def arrival_fraction_for(slug_ratio: float) -> float:
         must spread.
     """
     return float(np.sqrt(slug_ratio / full_bore_slug_ratio()))
+
+
+#: Post-shock sound speed of the plume [km/s] against the front's own speed
+#: [km/s], which is what sets how fast the front widens.
+#:
+#: **Provenance, recorded because this repository cannot regenerate it.**
+#: Computed from ``puffsat_impact_simulation`` at commit ``0216a09`` with
+#: ``PYTHONPATH=python``::
+#:
+#:     from puffsat import eos_water
+#:     from puffsat.expansion import temperature_at
+#:     rho = 4.0 * 213.0 / 659.6                      # 4x shock compression
+#:     T = temperature_at(rho, 0.5 * (v * 1000) ** 2, eos_water.pressure_energy)
+#:     c_s = eos_water.sound_speed(rho, T) / 1000.0
+#:
+#: The freshly shocked layer takes ``v^2/2`` of specific energy (the snowplow's
+#: own inelastic-accretion assumption); ``eos_water`` inverts that to a
+#: temperature through the full dissociation and ``O+ .. O8+`` ionisation
+#: ladder, which is what keeps the temperature finite.  The 4x compression is
+#: the weakest input and barely matters: 2x-16x moves ``c_s`` by 9%.
+_SOUND_SPEED_TABLE = (
+    (2.0, 0.8432),  # T =    1249 K
+    (3.0, 1.1151),  # T =    2297 K
+    (4.0, 1.3038),  # T =    3071 K
+    (5.0, 1.4856),  # T =    3586 K
+    (7.5, 2.0433),  # T =    4597 K
+    (10.0, 2.8878),  # T =    5886 K
+    (12.5, 5.0178),  # T =   12288 K
+    (15.0, 6.0632),  # T =   18514 K
+    (20.0, 8.0531),  # T =   26206 K
+    (25.0, 10.4874),  # T =   34620 K
+    (30.0, 13.0844),  # T =   46734 K
+    (35.0, 15.3991),  # T =   58880 K
+    (40.0, 18.3456),  # T =   74783 K
+    (45.0, 20.8207),  # T =   92623 K
+    (50.0, 23.6094),  # T =  110970 K
+    (60.0, 27.7779),  # T =  148361 K
+    (80.0, 35.8412),  # T =  204860 K
+)
+
+
+def shocked_sound_speed(front_speed: float) -> float:
+    """Sound speed of the freshly shocked plume at a front moving at this speed.
+
+    This is the physical estimate of ``c_exp``: a hot, high-pressure layer vents
+    sideways at roughly its own sound speed.  Log-log interpolated on
+    :data:`_SOUND_SPEED_TABLE`, which is smooth apart from the dissociation knee
+    between 10 and 12.5 km/s -- and that knee is real, not noise.  It is where
+    the shocked layer stops being warm steam and starts being a dissociated
+    plasma, which roughly doubles ``c_s``.
+
+    Args:
+        front_speed: Speed of the front relative to the unswept cloud (km/s).
+
+    Returns:
+        Sound speed of the shocked material (km/s), clamped to the tabulated
+        range at both ends.
+    """
+    speeds = np.array([row[0] for row in _SOUND_SPEED_TABLE])
+    values = np.array([row[1] for row in _SOUND_SPEED_TABLE])
+    clamped = float(np.clip(front_speed, speeds[0], speeds[-1]))
+    return float(np.exp(np.interp(np.log(clamped), np.log(speeds), np.log(values))))
+
+
+def self_consistent_slug_ratio(
+    arrival_fraction: float = DESIGN_ARRIVAL_FRACTION,
+    closing_speed: float = 45.58,
+) -> float:
+    """Slug ratio when the front widens at its own computed sound speed.
+
+    The honest replacement for both bounds: :func:`swept_slug_ratio` at
+    ``expansion_speed = 0`` is a rigid front, which the shocked temperature says
+    is unphysical, and at a fixed ``c_exp`` it is a guess.  Here the widening
+    rate ``dr/dx = c_exp/v`` is evaluated from the local front speed at every
+    step, with both the speed and the sound speed falling as the front loads up.
+
+    **The result is that the arrival radius almost does not matter.** The front
+    reaches the bore wall within the first few metres of a 23.8 m column from
+    any plausible arrival radius, and ``k`` lands at 7.2-8.7 rather than the
+    rigid model's 0.03-8.7.
+
+    Args:
+        arrival_fraction: Front radius at entry, as a fraction of the bore.
+        closing_speed: Impactor speed relative to the vehicle (km/s).
+
+    Returns:
+        The delivered slug ratio.
+
+    Raises:
+        ValueError: If ``arrival_fraction`` is not in (0, 1].
+    """
+    if not 0.0 < arrival_fraction <= 1.0:
+        raise ValueError("arrival_fraction must be in (0, 1]")
+    rho, mass = bag_density(), IMPACTOR_MASS
+    radius = arrival_fraction * BORE_RADIUS
+    step = COLUMN_LENGTH / _STEPS
+    for _ in range(_STEPS):
+        speed = closing_speed * IMPACTOR_MASS / mass
+        mass += rho * np.pi * radius * radius * step
+        if radius < BORE_RADIUS:
+            radius = min(
+                BORE_RADIUS,
+                radius + (shocked_sound_speed(speed) / speed) * step,
+            )
+    return (mass - IMPACTOR_MASS) / IMPACTOR_MASS

@@ -2186,11 +2186,37 @@ slug of ice** -- the compact reading was mine, and it is probably not what the d
 > "74% to 97% of the bore" was computed against `k` = 8.5, which is no longer the number
 > the chain wants.
 >
-> **The caveat still decides how much this matters**, and it is unchanged: all of the
-> above is the *rigid-front* bound. At `c_exp` = 3-8 km/s a front arriving at even 0.6
-> recovers to `k` = 7.3-8.0, because it has 23.8 m of column to close a 1.2 m gap. So
-> `c_exp` -- the 2D hydro question this repo owns and has not solved -- is what decides
-> whether the arrival radius is load-bearing at all.
+> **AND THEN `c_exp` WAS COMPUTED, 2026-08-26, WHICH RETIRES THIS ITEM.** The
+> paragraph that stood here said `c_exp` was a 2D hydro question and that it decided
+> whether the arrival radius mattered at all. **The second half was right and the first
+> half was wrong.** The *magnitude* needs no 2D solve: the freshly shocked layer takes
+> `v^2/2` of specific energy and `eos_water` inverts it through the full ladder.
+>
+> **At the front, the plume is at 94 630 K and its sound speed is 21.1 km/s** -- very
+> nearly half the closing speed, a **24.9 degree half-angle**. The 3-8 km/s that was
+> swept here was low by a factor of 3-7 at entry, which is where widening matters most.
+> Cross-checked two ways: ram-pressure balance against the cold cloud is **1.6-1.9x
+> faster** than `c_s`, so `c_s` is conservative; and the shock compression ratio moves
+> it by only 9% across 2x-16x.
+>
+> **So the front is strongly self-widening and the arrival radius is very nearly
+> irrelevant.** From 0.8 it fills the bore in 1.3 m of a 23.8 m column and sweeps
+> **99.0%** of the bag; even a compact 25 kg ice rod fills it in 6.2 m and recovers
+> `k` = 7.24 against the rigid model's 0.034. **Q-Q's "74% to 97% of the bore" is
+> retired, and so is the finding two paragraphs up that 0.8 costs a quarter of the
+> growth.** Seth's 0.8 assumption stands and is comfortable.
+>
+> **What is owed now is the opposite of what this item asked for.** A self-widening
+> front at 0.8 delivers `k` = 8.603 against a tolled optimum of 6.75-7.77, so the flown
+> bag carries *more* slug than the chain wants. It is exactly optimal at
+> `eta_geom` = 0.70 and 10-22% oversized above that -- at `eta_geom` = 1, shrinking the
+> slug 213 -> 167 kg buys 9% more growth. **The design lever is the bag, not the
+> projectile.** ADR 0016 addendum 2; `nozzle_geometry.self_consistent_slug_ratio`.
+>
+> *Still genuinely 2D, and neither is positioned to overturn the above:* whether the
+> widening front stays a coherent plow or breaks into fingers, and whether material
+> reaching the bag wall stays in the flow. Study 2 already found coupling holds with two
+> orders of margin.
 
 **A stated projectile arrival radius, and the delivery dispersion around it.** `k = 8.5` is
 currently load-bearing for the vehicle (item 10's bag sizing, the whole Isp story) and rests on a

@@ -324,3 +324,97 @@ strongly spreading front wants a smaller bag rather than a wider one.
 `nozzle_geometry.swept_slug_ratio` and `arrival_fraction_for` for the geometry;
 `price_chain(cycles, 1.0, 0.8, slug_ratio=k, geometric_efficiency=g)` for each
 row, with `k = full_bore_slug_ratio() * (r/R)**2`.
+
+---
+
+## Addendum 2, 2026-08-26: `c_exp` is computable, and it retires the rigid front
+
+**Addendum 1's sensitivity table is the rigid-front bound, and that bound is now
+known to be the wrong branch.** It is kept above because it is a genuine bound
+and because the quadratic relation it rests on is exact -- but it should not be
+read as the design case.
+
+### The number nobody had computed
+
+`c_exp` was swept at 3-8 km/s because "whether a real front spreads at 3, 5 or 8
+km/s is a 2D hydro question" neither repository solves. That framing was wrong
+about what it takes. The **magnitude** does not need a 2D solve, only the
+detailed shape does: the freshly shocked layer at the front takes `v^2/2` of
+specific energy -- the snowplow's own inelastic-accretion assumption -- and
+`eos_water` inverts that to a temperature through the full dissociation and
+`O+ .. O8+` ladder. Its sound speed is `c_exp`.
+
+| front speed | shocked `T` | `c_s` | `dr/dx` | half-angle |
+| ---: | ---: | ---: | ---: | ---: |
+| 45.58 km/s | 94 630 K | **21.1 km/s** | 0.464 | **24.9 deg** |
+| 25.00 | 34 620 | 10.5 | 0.420 | 22.8 |
+| 12.00 | 10 226 | 4.7 | 0.389 | 21.3 |
+| 7.00 | 4 398 | 1.9 | 0.274 | 15.3 |
+
+**The sound speed of the shocked plume is roughly half the closing speed**, so
+the front widens at 15-25 degrees for the whole transit. Swept values of 3-8
+km/s were low by a factor of 3-7 at the entry, which is exactly where widening
+matters most.
+
+**Two checks that this is not an artefact.** Venting the shocked layer sideways
+until its pressure balances the cold cloud's ram pressure, `sqrt(P/rho_amb)`,
+gives **1.6-1.9x faster** than `c_s` at every station -- so taking `c_s` is the
+conservative choice, not a flattering one. And the shock compression ratio, the
+one weakly-known input, moves `c_s` by **9% across 2x-16x**.
+
+### The front is self-widening, so the arrival radius is very nearly irrelevant
+
+| `r/R` | `k`, rigid front | `k`, self-widening | fills bore at |
+| ---: | ---: | ---: | ---: |
+| 0.062 (compact ice rod) | 0.034 | **7.24** | 6.2 m |
+| 0.30 | 0.782 | 7.79 | 4.7 m |
+| 0.60 | 3.129 | 8.36 | 2.7 m |
+| **0.80** | **5.563** | **8.60** | **1.3 m** |
+| 0.90 | 7.041 | 8.67 | 0.7 m |
+| 1.00 | 8.692 | 8.692 | -- |
+
+The column is 23.8 m. From every plausible arrival radius the front reaches the
+wall in the first few metres, and `k` lands in **7.2-8.7** instead of the rigid
+model's 0.03-8.7. **Q-Q's "the projectile must arrive spanning 74-97% of the
+bore" is retired**, and so is Addendum 1's finding that 0.8 costs 23% of the
+chain: at 0.8 the front sweeps **99.0%** of the bag.
+
+Seth's 0.8 assumption stands and is now comfortable rather than marginal.
+
+### The consequence points at the bag, not the projectile
+
+A self-widening front at 0.8 delivers `k` = **8.603**, and ADR 0016 puts the
+tolled chain optimum at 6.75-7.77. **The flown bag therefore carries more slug
+than the chain wants** -- the "spreading dominates" branch this ADR flagged as
+wanting a smaller bag rather than a wider front.
+
+| `eta_geom` | optimum `k` | growth at optimum | growth as flown | gain | slug saved |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1.00 | 6.750 | 1.218e6 | 1.116e6 | 9.1% | 21.5% |
+| 0.90 | 7.187 | 3.547e5 | 3.341e5 | 6.2% | 16.5% |
+| 0.80 | 7.773 | 6.289e4 | 6.133e4 | 2.5% | 9.6% |
+| 0.70 | 8.598 | 4 674 | 4 674 | 0.0% | 0.1% |
+
+**The flown 213 kg bag is exactly optimal at `eta_geom` = 0.70**, and 10-22%
+oversized above that. Since `eta_geom` is unmeasured, the honest reading is that
+the current bag is defensible rather than wrong -- but every improvement in
+nozzle quality argues for shrinking it, which is the opposite of the intuition
+that a better nozzle should carry more propellant. At `eta_geom` = 1 the saving
+is 213 kg -> 167 kg of slug per pulse **and** 9% more growth.
+
+### What still needs the 2D solve
+
+The **magnitude** of `c_exp` is settled well enough that the arrival radius no
+longer decides anything. What a 2D solve would still add: whether the widening
+front stays a coherent plow or breaks into jets and fingers, and whether the
+material that reaches the bag wall stays in the flow or is lost past its edge.
+Both bear on how much of the swept mass really couples -- but the impact sim's
+Study 2 already found coupling holds with two orders of margin, so neither is
+positioned to overturn this.
+
+## Reproducing addendum 2
+
+`nozzle_geometry.shocked_sound_speed` and `self_consistent_slug_ratio`. The
+sound-speed table's provenance -- the `puffsat_impact_simulation` commit and the
+exact three-line call -- is recorded on `_SOUND_SPEED_TABLE` in that module,
+because this repository cannot regenerate it.
