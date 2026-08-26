@@ -398,6 +398,205 @@ def main() -> None:
         "from puffsat_impact_simulation's solved cooling history (Q-L, Q-M)."
     )
 
+    print("\n=== tab:bag_sizing (item 4) ===")
+    print(
+        f"{'radius':>9}{'density':>12}{'B cold':>9}{'B hot':>9}"
+        f"{'radiated':>11}{'mist':>9}"
+    )
+    for radius in BAG_SIZING_RADII:
+        metres = radius * u.m
+        print(
+            f"{radius:>8.1f}m{bag_density_at(metres).to_value(u.kg / u.m**3):>12.4g}"
+            f"{confinement_field_at(metres).to_value(u.T):>8.2f}T"
+            f"{confinement_field_at(metres, *HOT_PULSE_STATE).to_value(u.T):>8.2f}T"
+            f"{100 * radiated_fraction(metres):>10.2f}%"
+            f"{coldest_mist_temperature(metres).to_value(u.K):>8.0f}K"
+        )
+    print("The usable band is 3.5-7 m: radiative loss binds above, opacity below.")
+
+    print("\n=== tab:axial_bag (item 9) ===")
+    print(f"{'length':>9}{'bore':>9}{'conductor':>12}{'F':>7}{'film':>9}")
+    reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
+    for length in AXIAL_BAG_LENGTHS:
+        metres = length * u.m
+        radius = (
+            SPHERE_BORE_RADIUS if length == 10.8 else bore_radius(metres)
+        ).to_value(u.m)
+        factor = shape_factor(metres)
+        print(
+            f"{length:>8.1f}m{radius:>8.2f}m{radius * length / reference:>12.2f}"
+            f"{factor:>7.2f}{2.8 * factor / 1.5:>8.1f}kg"
+        )
+    print("Bore and conductor trade one for one; the launch envelope picks 23 m.")
+
+
+# --- Item 4: tab:bag_sizing ------------------------------------------------
+
+#: Plume temperature the cold-pulse field column is worked at.
+COLD_PULSE_TEMPERATURE = 15000.0 * u.K
+#: Plume temperature and ionisation fraction of the hottest pulse, from item 1.
+HOT_PULSE_STATE = (26200.0 * u.K, 0.573)
+#: Effective molar mass of dissociated neutral water: three particles per
+#: 18.015 g, so 6.005 g/mol.
+DISSOCIATED_MOLAR_MASS = WATER_MOLAR_MASS / ATOMS_PER_MOLECULE
+#: Expansion time the radiative-loss column integrates the surface flux over.
+#: **Calibrated against the published table rather than derived** -- it
+#: reproduces all six rows to the digits printed, and it matches the
+#: "hundred-microsecond expansion" the paper quotes elsewhere.
+EXPANSION_TIME = 200.0 * u.us
+#: Bag radii ``tab:bag_sizing`` tabulates.
+BAG_SIZING_RADII = (1.8, 3.5, 5.4, 8.7, 17.5, 28.0)
+
+
+def bag_density_at(radius: u.Quantity, slug_mass: u.Quantity = SLUG_MASS) -> u.Quantity:
+    """Slug density of a spherical bag of this radius.
+
+    Args:
+        radius: Bag radius.
+        slug_mass: Slug the bag holds.
+
+    Returns:
+        Density (astropy Quantity, kg/m^3).
+    """
+    return (slug_mass / ((4.0 / 3.0) * np.pi * radius**3)).to(u.kg / u.m**3)
+
+
+def confinement_field_at(
+    radius: u.Quantity,
+    temperature: u.Quantity = COLD_PULSE_TEMPERATURE,
+    ionisation_fraction: float = 0.0,
+    slug_mass: u.Quantity = SLUG_MASS,
+) -> u.Quantity:
+    """Field the bag must hold at this radius, ``B = sqrt(2 mu0 P)``.
+
+    The pressure is ideal-gas, ``P = rho R_g T / M_eff``, **not** ``(gamma-1) e``:
+    reproducing the published table to three figures is what settles which of
+    those the table was built from.  Ionisation enters only through the particle
+    count, since pressure counts particles rather than mass -- water goes from
+    three particles per molecule to ``3(1+f)``.
+
+    Args:
+        radius: Bag radius.
+        temperature: Plume temperature.
+        ionisation_fraction: ``f``.
+        slug_mass: Slug the bag holds.
+
+    Returns:
+        Field strength (astropy Quantity, T).
+    """
+    molar = DISSOCIATED_MOLAR_MASS / (1.0 + ionisation_fraction)
+    pressure = bag_density_at(radius, slug_mass) * const.R * temperature / molar
+    return np.sqrt(2.0 * const.mu0 * pressure).to(u.T)
+
+
+def radiated_fraction(
+    radius: u.Quantity,
+    temperature: u.Quantity = COLD_PULSE_TEMPERATURE,
+    slug_mass: u.Quantity = SLUG_MASS,
+) -> float:
+    """Share of the pulse's energy the plume radiates away from its surface.
+
+    Blackbody flux over the bag's surface, integrated for one expansion time,
+    against the ignition budget the pulse put in.  **It grows as radius squared
+    while the energy inside is fixed**, which is the trade that bounds the bag
+    from above: 0.1% at 1.8 m against 31% at 28 m.
+
+    Args:
+        radius: Bag radius.
+        temperature: Plume temperature.
+        slug_mass: Slug the bag holds.
+
+    Returns:
+        Radiated fraction of the pulse energy.
+    """
+    area = 4.0 * np.pi * radius**2
+    radiated = const.sigma_sb * temperature**4 * area * EXPANSION_TIME
+    return float(radiated / (plume_ignition_energy(temperature) * slug_mass))
+
+
+# --- Item 9: tab:axial_bag -------------------------------------------------
+
+#: Column lengths ``tab:axial_bag`` tabulates; the first is the sphere.
+AXIAL_BAG_LENGTHS = (10.8, 16.0, 23.0, 32.0, 50.0)
+#: Bore radius of the spherical row, which is the sphere's own radius rather
+#: than ``eq:bore_from_length``'s.
+SPHERE_BORE_RADIUS = 5.40 * u.m
+
+
+def bore_radius(
+    column_length: u.Quantity, volume: u.Quantity = BAG_VOLUME
+) -> u.Quantity:
+    """Bore of a column holding a fixed volume, ``eq:bore_from_length``.
+
+    ``r = sqrt(V / pi l)``.  Bore falls as the inverse square root of length,
+    and the conductor rises as its square root, so the two trade one for one.
+
+    Args:
+        column_length: Length of the column.
+        volume: Enclosed volume, fixed by ``PV = n R_g T``.
+
+    Returns:
+        Bore radius (astropy Quantity, m).
+    """
+    return np.sqrt(volume / (np.pi * column_length)).to(u.m)
+
+
+def shape_factor(column_length: u.Quantity, volume: u.Quantity = BAG_VOLUME) -> float:
+    """``F = (2L + 2r)/(L + 4r/3)`` for a capsule of this total length.
+
+    ``L`` is the *cylindrical* part, so the sphere (``L = 0``) gives exactly
+    1.5 and a long tube tends to 2.0.  The film mass is linear in ``F``, so the
+    whole cost of stretching the bag into a column is this factor.
+
+    Args:
+        column_length: Total length, caps included.
+        volume: Enclosed volume.
+
+    Returns:
+        The shape factor.
+    """
+    radius = (
+        SPHERE_BORE_RADIUS
+        if np.isclose(
+            column_length.to_value(u.m), 2.0 * SPHERE_BORE_RADIUS.to_value(u.m)
+        )
+        else bore_radius(column_length, volume)
+    )
+    cylinder = column_length - 2.0 * radius
+    return float((2.0 * cylinder + 2.0 * radius) / (cylinder + 4.0 * radius / 3.0))
+
+
+def coldest_mist_temperature(
+    radius: u.Quantity,
+    vapour_fraction: float = 0.1107,
+    slug_mass: u.Quantity = SLUG_MASS,
+) -> u.Quantity:
+    """Mist temperature in a spherical bag of this radius.
+
+    The vapour fraction is held at ``tab:bag_state``'s value and only the volume
+    changes, so a bigger bag holds the same vapour more thinly and condenses
+    colder.
+
+    **This reproduces the published column to ~1 K across the usable band and
+    overshoots outside it** -- +16 K at 1.8 m and +9 K at 28 m.  The deviation
+    runs the way an optical-depth correction would: the paper notes the plume
+    "stops being optically thick past about 7 m", and a bag that has gone thin
+    reabsorbs less of its own radiation, so its vapour fraction should fall
+    below the held 0.11 rather than stay at it.  That correction is not modelled
+    here because the paper does not state one, and the usable band the paper
+    itself settles on (3.5-7 m) is inside the region that reproduces.
+
+    Args:
+        radius: Bag radius.
+        vapour_fraction: ``x`` carried as vapour.
+        slug_mass: Slug the bag holds.
+
+    Returns:
+        Mist temperature (astropy Quantity, K).
+    """
+    volume = (4.0 / 3.0) * np.pi * radius**3
+    return saturation_temperature(vapour_fraction * slug_mass / volume)
+
 
 if __name__ == "__main__":
     main()

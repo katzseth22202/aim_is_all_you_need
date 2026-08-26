@@ -157,6 +157,24 @@ apart and the 55 is the wrong one.
 a week.
 **Reproduce:** `make cruise-thermal`.
 
+### A8. `tab:bag_sizing`'s mist column has no stated model, and does not hold at the extremes
+**Now:** a "Coldest mist" column running 372 / 332 / 306 / 281 / 250 / 228 K, with
+no statement of how it is computed.
+**Reproduced:** holding the vapour fraction at `tab:bag_state`'s 0.11 and
+changing only the volume gives **333 / 306 / 282 / 253** across the four middle
+rows -- within 1.5 K -- but **388 K at 1.8 m against the printed 372** and
+**237 K at 28 m against 228**.
+**Likely cause, and it is physical rather than arithmetic:** the paper notes the
+plume "stops being optically thick past about 7 m", and a bag that has gone thin
+reabsorbs less of its own radiation, so the vapour fraction should *fall* below
+0.11 at large radii rather than stay there. That fixes the 28 m row and runs the
+right way. The 1.8 m row deviates the other way and is not explained by it.
+**Should be:** state the model, and either state the optical-depth correction or
+mark the two outer rows as outside the band the correction is calibrated for.
+**Not load-bearing:** the paper's own usable band is 3.5-7 m, which is entirely
+inside the region that reproduces.
+**Reproduce:** `make bag-state`.
+
 ---
 
 ## D. Citation mechanism (the ledger's rule 3)

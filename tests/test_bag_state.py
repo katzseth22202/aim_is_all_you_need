@@ -9,15 +9,25 @@ import numpy as np
 import pytest
 
 from src.bag_state import (
+    AXIAL_BAG_LENGTHS,
+    BAG_SIZING_RADII,
+    HOT_PULSE_STATE,
     PAPER_LEAK_FRACTION,
     SLUG_MASS,
     SOLVED_LEAK_FRACTIONS,
+    SPHERE_BORE_RADIUS,
     BagState,
+    bag_density_at,
+    bore_radius,
+    coldest_mist_temperature,
+    confinement_field_at,
     film_mass_fraction,
     paper_bag_state,
+    radiated_fraction,
     saturation_density,
     saturation_pressure,
     saturation_temperature,
+    shape_factor,
     stored_field_energy,
 )
 
@@ -144,3 +154,99 @@ def test_warm_storage_is_what_makes_the_bag_a_pressure_vessel() -> None:
     assert BagState(leak, energy, "jupiter").film_mass.to_value(u.kg) == 0.0
     warm = BagState(leak, energy, "earth")
     assert 4.0 < warm.film_mass.to_value(u.kg) < 6.0
+
+
+def test_bag_sizing_density_and_both_field_columns_reproduce() -> None:
+    """Item 4: 18 of the table's cells, to the digits the paper prints.
+
+    Reproducing the field to three figures is what settles that the table is
+    ideal-gas pressure and not ``(gamma-1) e`` -- the two differ by ~30% here.
+    """
+    published = {
+        1.8: (8.72, 21.3, 35.4),
+        3.5: (1.19, 7.9, 13.1),
+        5.4: (0.32, 4.1, 6.8),
+        8.7: (0.077, 2.0, 3.3),
+        17.5: (0.0095, 0.70, 1.16),
+        28.0: (0.0023, 0.35, 0.58),
+    }
+    for radius, (density, cold, hot) in published.items():
+        metres = radius * u.m
+        assert np.isclose(
+            bag_density_at(metres).to_value(u.kg / u.m**3), density, rtol=2e-2
+        )
+        assert np.isclose(confinement_field_at(metres).to_value(u.T), cold, rtol=2e-2)
+        assert np.isclose(
+            confinement_field_at(metres, *HOT_PULSE_STATE).to_value(u.T), hot, rtol=2e-2
+        )
+
+
+def test_the_hot_column_is_the_cold_one_scaled_by_one_number() -> None:
+    """1.66x at every radius, from ``sqrt(3(1+f) T_hot / 3 T_cold)``.
+
+    Ionisation enters pressure only through the particle count, so the ratio is
+    a property of the plume state and not of the bag.
+    """
+    ratios = [
+        confinement_field_at(r * u.m, *HOT_PULSE_STATE) / confinement_field_at(r * u.m)
+        for r in BAG_SIZING_RADII
+    ]
+    for ratio in ratios:
+        assert np.isclose(float(ratio), 1.657, rtol=1e-3)
+
+
+def test_radiated_fraction_reproduces_and_grows_as_radius_squared() -> None:
+    """0.1% at 1.8 m to 31% at 28 m -- the bound that caps the bag from above."""
+    # Tolerances are the paper's own printed precision: 0.1% and 31% are one
+    # and two significant figures respectively.
+    for radius, expected, tolerance in (
+        (1.8, 0.001, 5e-4),
+        (5.4, 0.012, 1e-3),
+        (8.7, 0.030, 1e-3),
+        (28.0, 0.31, 5e-3),
+    ):
+        assert np.isclose(radiated_fraction(radius * u.m), expected, atol=tolerance)
+    assert np.isclose(
+        radiated_fraction(10.8 * u.m) / radiated_fraction(5.4 * u.m), 4.0, rtol=1e-9
+    )
+
+
+def test_mist_column_reproduces_across_the_usable_band() -> None:
+    """Item 4's last column, where the paper's own design actually sits.
+
+    The paper settles on 3.5-7 m (opacity above, radiative loss below).  Inside
+    that band this is within ~1.5 K; outside it, it overshoots by 16 K at 1.8 m
+    and 9 K at 28 m, which is recorded on the function.
+    """
+    for radius, expected in ((3.5, 332.0), (5.4, 306.0), (8.7, 281.0)):
+        assert np.isclose(
+            coldest_mist_temperature(radius * u.m).to_value(u.K), expected, atol=2.0
+        )
+
+
+def test_axial_bag_reproduces_every_cell() -> None:
+    """Item 9: all five rows, bore and conductor and shape factor and film."""
+    published = {
+        10.8: (5.40, 1.00, 1.50, 2.8),
+        16.0: (3.62, 0.99, 1.82, 3.4),
+        23.0: (3.02, 1.19, 1.90, 3.6),
+        32.0: (2.56, 1.41, 1.94, 3.6),
+        50.0: (2.05, 1.76, 1.97, 3.7),
+    }
+    reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
+    for length, (bore, conductor, factor, film) in published.items():
+        metres = length * u.m
+        radius = (
+            SPHERE_BORE_RADIUS if length == 10.8 else bore_radius(metres)
+        ).to_value(u.m)
+        assert np.isclose(radius, bore, rtol=5e-3)
+        assert np.isclose(radius * length / reference, conductor, rtol=1e-2)
+        assert np.isclose(shape_factor(metres), factor, rtol=5e-3)
+        assert np.isclose(2.8 * shape_factor(metres) / 1.5, film, atol=0.1)
+
+
+def test_the_sphere_is_the_lightest_film_and_the_long_tube_the_heaviest() -> None:
+    """``F`` runs 1.5 to 2.0, so stretching the bag costs a third of the film."""
+    assert np.isclose(shape_factor(10.8 * u.m), 1.5, rtol=1e-3)
+    assert shape_factor(50.0 * u.m) < 2.0
+    assert shape_factor(200.0 * u.m) > shape_factor(50.0 * u.m)

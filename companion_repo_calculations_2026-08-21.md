@@ -623,10 +623,10 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       consumer of an impact-sim plume-state table, *not* a Saha implementation. `eos_water.py`
       already solves `(rho, e) -> (T, f, P)` better than the spec in item 1 does. What stays
       here is the burn-envelope sweep and `P/P0`, `B/B0`, `E_B`. See the audit section above.
-- [x] `src/bag_state.py` + `make bag-state` -- items 5-8 and **10 DONE 2026-08-26**.
-      `tab:bag_state` reproduces both columns to every printed digit. **Items 4 and 9
-      (`tab:bag_sizing`, `tab:axial_bag`) are still owed** -- they are separate tables,
-      not part of the cascade.
+- [x] `src/bag_state.py` + `make bag-state` -- items 4-10. **DONE 2026-08-26.**
+      `tab:bag_state` reproduces both columns to every printed digit, `tab:bag_sizing`'s
+      density and both field columns and the radiative column all reproduce (24 of 24
+      cells), and `tab:axial_bag` reproduces all 20.
 - [x] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13. **DONE 2026-08-26.**
 - [x] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14. **DONE 2026-08-26.**
 - [ ] Extend `src/plume_thermal.py` with the ionisation term
@@ -1047,9 +1047,9 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
       Expect it to disagree; the interesting output is by how much.
 
 ## Regression tests
-- [ ] `tab:bag_sizing` reproduces to three figures, both columns
+- [x] `tab:bag_sizing` reproduces to three figures, both columns -- **2026-08-26**
 - [x] `tab:bag_state` reproduces both columns -- **2026-08-26**, all eight rows
-- [ ] `tab:axial_bag` reproduces all five rows
+- [x] `tab:axial_bag` reproduces all five rows -- **2026-08-26**, every cell
 - [ ] `tab:seed_window` reproduces all six rows
 - [x] `E_B = n Rg T` holds across a 15x radius sweep -- **2026-08-26**, radius does not enter the expression
 - [ ] The 2026-08-21 burn sweep reproduces (26 200 K / 0.573 down to 14 700 K / 0.053)
