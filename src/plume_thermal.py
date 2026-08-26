@@ -57,6 +57,12 @@ SEED_MASS_FRACTION = 0.01
 SEED_MOLAR_MASS = 39.0983 * u.g / u.mol
 #: First ionisation potential of potassium.
 SEED_IONISATION_ENERGY = 4.34 * u.eV
+#: First ionisation potential charged to water's atoms.  A single value for
+#: all three, which is hydrogen's 13.598 eV; oxygen's is 13.618 and its
+#: second stage is 35.1, so this understates a strongly ionised plume.  The
+#: proper ladder is in ``puffsat_impact_simulation``'s ``eos_water``, and this
+#: term exists to *price* a solved ionisation fraction, not to find one.
+WATER_IONISATION_ENERGY = 13.598 * u.eV
 
 #: Plume temperature the nozzle is designed to start from.  The nozzle converts
 #: thermal energy into directed energy, so the plume only cools from here; this
@@ -96,19 +102,60 @@ def _particle_counts() -> Tuple[float, float]:
     return atoms, seed
 
 
+def water_ionisation_energy(ionisation_fraction: float) -> u.Quantity:
+    """Energy locked in stripping electrons off the water's own atoms.
+
+    **This is where most of a hot pulse's energy actually goes**, and the
+    ignition budget of :func:`plume_ignition_energy` deliberately does not
+    charge it: that budget answers "what does it cost to light the plume",
+    where the seed carries the current and the water need not ionise at all.
+    A *hot* pulse ionises the water anyway, because Saha says it must at that
+    temperature, and the energy has to come from somewhere.
+
+    At the hottest pulse the split is 125 MJ/kg of stripped electrons against
+    86 MJ/kg of thermal motion -- so ionisation absorbs the excess the way
+    boiling absorbs heat from a pot without warming it, which is exactly why
+    the plume temperature rises far less than dividing energy by heat capacity
+    would suggest.
+
+    Args:
+        ionisation_fraction: ``f``, the share of water's atoms singly ionised.
+            Comes from a Saha solve, which this module does not do --
+            ``plume_state.plume_state`` reads it from the solved table.
+
+    Returns:
+        Energy per kilogram of blob (astropy Quantity, J/kg).
+    """
+    atoms, _ = _particle_counts()
+    return (
+        (ionisation_fraction * atoms * float(WATER_IONISATION_ENERGY.to_value(u.J)))
+        * u.J
+        / u.kg
+    )
+
+
 def plume_ignition_energy(
     temperature: u.Quantity = NOZZLE_FLOOR_TEMPERATURE,
+    ionisation_fraction: float = 0.0,
 ) -> u.Quantity:
     """Specific energy to take cold seeded water to a conducting plume.
 
     Charges vaporisation, full atomisation of the water, ionisation of the
-    alkali seed only, and the translational energy of everything that is then
-    free to move (dissociated atoms, seed ions and their electrons).  The water
-    is never charged for ionisation because the seed is what carries the
-    current.
+    alkali seed, and the translational energy of everything then free to move.
+
+    **The water's own ionisation defaults to zero, and that is the ignition
+    question rather than an omission.**  The seed is what carries the current,
+    so a plume that has dissociated and seed-ionised is already conducting and
+    the water need not ionise at all -- which is what makes the 85.1 MJ/kg bill
+    a *floor*.  Pass ``ionisation_fraction`` to ask the different question of
+    what a plume at a given Saha state actually cost, which at the hottest
+    pulse more than doubles the answer.
 
     Args:
         temperature: Plume temperature to reach.
+        ionisation_fraction: ``f`` for the water; see
+            :func:`water_ionisation_energy`.  Also raises the free-particle
+            count, since every ionised atom becomes two.
 
     Returns:
         Energy per kilogram of blob (astropy Quantity, J/kg).
@@ -121,8 +168,11 @@ def plume_ignition_energy(
         + float(WATER_ATOMISATION_ENTHALPY.to_value(u.J / u.mol))
         / float(WATER_MOLAR_MASS.to_value(u.kg / u.mol))
     )
-    ionisation = seed * float(SEED_IONISATION_ENERGY.to_value(u.J))
-    thermal = 1.5 * (atoms + 2.0 * seed) * boltzmann * float(temperature.to_value(u.K))
+    ionisation = seed * float(SEED_IONISATION_ENERGY.to_value(u.J)) + float(
+        water_ionisation_energy(ionisation_fraction).to_value(u.J / u.kg)
+    )
+    free = atoms * (1.0 + ionisation_fraction) + 2.0 * seed
+    thermal = 1.5 * free * boltzmann * float(temperature.to_value(u.K))
     return (chemical + ionisation + thermal) * u.J / u.kg
 
 

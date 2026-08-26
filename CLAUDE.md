@@ -90,6 +90,10 @@ cruise_thermal.py            ← plume_thermal only: ice sublimation equilibrium
 plume_state.py               ← bag_state + plume_thermal: the burn envelope and
                                 the bag consequence, consuming the vendored
                                 data/plume_state.csv (ledger items 1 and 3)
+
+bag_converge.py              ← plume_state + bag_state: iterates the bag loop to
+                                a fixed point and reports the gap against the
+                                published tables (the ledger's rule 2)
 ```
 
 One edge runs opposite the diagram: `retrograde_return_legs.py` imports

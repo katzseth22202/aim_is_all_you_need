@@ -631,7 +631,14 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       cells), and `tab:axial_bag` reproduces all 20.
 - [x] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13. **DONE 2026-08-26.**
 - [x] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14. **DONE 2026-08-26.**
-- [ ] Extend `src/plume_thermal.py` with the ionisation term
+- [x] Extend `src/plume_thermal.py` with the ionisation term -- **DONE 2026-08-26.**
+      `water_ionisation_energy(f)` prices a solved Saha state rather than finding one, so
+      the module stays a leaf. It reproduces the paper's split at the hottest pulse (125
+      MJ/kg of stripped electrons against 86 of thermal motion) and, more usefully,
+      **closes the energy budget**: this repo's caloric model prices the impact sim's
+      solved `(T, f)` at 262.3 MJ/kg against 264.9 dissipated at 75 km/s, and 100.0
+      against 97.8 at 45.58. Two independent models agreeing to 1-2% is what turns the
+      15 000 K figure from an assumption into a result.
 
 ## Owed to `puffsat_impact_simulation` instead
 See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulation`) for both specs.
@@ -1044,9 +1051,30 @@ See `impact_sim_conductivity_and_bag.md` (delivered to `puffsat_impact_simulatio
       rather than changing the shipped API; worth a small refactor if this comparison recurs.
 
 ## The convergence check (rule 2)
-- [ ] `make bag-converge` -- iterate volume, plume state, leak and bag state to a fixed point
-      and **report the gap against the published tables as a number**, not as a replacement.
-      Expect it to disagree; the interesting output is by how much.
+- [x] `make bag-converge` -- **DONE 2026-08-26. `src/bag_converge.py`, 6 tests.**
+
+      **The gap, as a number: cut 1 costs a factor of 3.1 at the hot pulse and nothing at
+      the cold one.** The bag was sized holding the plume at 15 000 K; radiative loss goes
+      as `T^4`, so at the solved 26 521 K the flown 5.4 m bag radiates **3.64% of the pulse
+      against the tabulated 1.17%**. At 45.58 km/s the solved state is 15 165 K and the
+      tabulated figure is right to 10%. **So the cut was defensible where it was made and
+      misleading where it was carried across the burn.**
+
+      **Stated fairly, it is a factor of 3 in a term that is small either way** -- 3.6%
+      radiated rather than 1.2%. It does not move the bag out of the optically thick band,
+      and it does not reach the film, which cold storage holds at zero (item 10).
+
+      **What the fixed point turns up that the item did not ask about:** holding the
+      radiated share at the value the bag was sized for, **the four legs want bags 2.03 /
+      2.50 / 3.13 / 5.96 m** -- a factor of 2.9 in radius and **25 in volume** -- and one
+      bag has to serve all of them. The flown 5.4 m is very nearly the *cold* leg's answer
+      (5.96 m) and nothing like the hot leg's. Whether that is the right end of the range
+      to design to is a question the paper does not pose.
+
+      *Also recovered:* the optically-thick limit is `2 kappa rho r = 1` measured across
+      the **diameter**, giving 7.13 m against the paper's stated "about 7 m". Across the
+      radius it would be 5.04 m and the flown bag would already be thin, so the convention
+      matters and is not stated.
 
 ## Regression tests
 - [x] `tab:bag_sizing` reproduces to three figures, both columns -- **2026-08-26**

@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -54,6 +54,9 @@ cruise-thermal:  ## Ice sublimation equilibrium for the projectile (ledger item 
 
 plume-state:  ## Burn envelope, bag consequence and tab:seed_window (items 1, 3)
 	python -m src.plume_state
+
+bag-converge:  ## Iterate the bag loop to a fixed point and report the gap (rule 2)
+	python -m src.bag_converge
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse

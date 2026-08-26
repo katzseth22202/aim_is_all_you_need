@@ -17,6 +17,7 @@ from src.plume_thermal import (
     plume_temperature,
     slug_ratio_window,
     specific_thermal_energy,
+    water_ionisation_energy,
 )
 
 
@@ -154,3 +155,43 @@ def test_the_gate_is_looser_than_the_design_floor() -> None:
     # own [0.098, 10.21] at its 85.1 MJ/kg bill.
     assert np.isclose(gate[1], 11.94, rtol=5e-3)
     assert np.isclose(floor[1], 10.21, rtol=5e-3)
+
+
+def test_ionisation_term_reproduces_the_papers_energy_split() -> None:
+    """125 MJ/kg of stripped electrons against 86 MJ/kg of thermal motion.
+
+    This is the paper's own decomposition of the hottest pulse, and it is why
+    the plume temperature rises far less than dividing energy by heat capacity
+    would suggest: ionisation absorbs the excess the way boiling absorbs heat
+    from a pot without warming it.
+    """
+    assert np.isclose(
+        water_ionisation_energy(0.573).to_value(u.MJ / u.kg), 125.0, rtol=2e-2
+    )
+
+
+def test_the_solved_state_closes_the_energy_budget() -> None:
+    """The check the ionisation term exists to make possible.
+
+    ``puffsat_impact_simulation`` solves ``(T, f)`` on ``eos_water``; this
+    repository's own caloric model then prices that state.  The two are
+    independent, so the fact that the full cost lands within 1-2% of the
+    dissipated energy at both ends of the burn is a real cross-check rather
+    than a tautology -- and it is what turns the 15 000 K figure from an
+    assumption into a result.
+    """
+    for speed, temperature, ionised in (
+        (75.0, 26200.0, 0.573),
+        (45.58, 15165.0, 0.0616),
+    ):
+        cost = plume_ignition_energy(temperature * u.K, ionised)
+        dissipated = specific_thermal_energy(speed * u.km / u.s, 8.5)
+        assert np.isclose(
+            cost.to_value(u.MJ / u.kg), dissipated.to_value(u.MJ / u.kg), rtol=3e-2
+        )
+
+
+def test_ionisation_defaults_off_because_that_is_the_ignition_question() -> None:
+    """The seed carries the current, so the water need not ionise to conduct."""
+    assert plume_ignition_energy(15000 * u.K) == plume_ignition_energy(15000 * u.K, 0.0)
+    assert plume_ignition_energy(15000 * u.K, 0.5) > plume_ignition_energy(15000 * u.K)

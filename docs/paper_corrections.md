@@ -200,6 +200,34 @@ Those are the same number". So an `Rm` column that cannot be reproduced is also
 a leak fraction that cannot be.
 **Reproduce:** `make plume-state`.
 
+### A10. The radiated-loss column holds the plume at 15 000 K across the whole burn
+**Now:** `tab:bag_sizing`'s "Energy radiated" column, and the 3.5-7 m usable band
+derived from it, are worked at 15 000 K.
+**Should be:** the plume runs 15 165-26 521 K across the burn, and radiative loss
+goes as `T^4`. At the flown 5.4 m the same bag radiates **3.64% at the hottest
+pulse against the tabulated 1.17%, a factor of 3.1**. At the coldest pulse the
+tabulated figure is right to 10%.
+**Stated fairly:** a factor of three in a term that is small either way. It does
+not move the bag out of the optically thick band and does not reach the film.
+The correction is to say the column is a cold-pulse figure rather than a
+burn-wide one.
+**What falls out and is worth a sentence of its own:** holding the radiated
+share fixed, the four legs would each choose a different bag -- 2.03 / 2.50 /
+3.13 / 5.96 m, a factor of 25 in volume -- and one bag serves all of them. The
+flown 5.4 m is very nearly the *cold* leg's own answer and nothing like the hot
+leg's. The paper does not pose the question of which end to design to.
+**Reproduce:** `make bag-converge`.
+
+### A11. The optical-thickness convention is not stated
+**Now:** "the plume stops being optically thick past about 7 m".
+**Problem:** `kappa rho r = 1` gives **5.04 m**, which would make the flown 5.4 m
+bag already thin. `kappa rho D = 1`, across the **diameter**, gives **7.13 m** and
+reproduces the stated limit.
+**Should be:** say which. The flown design sits at `tau = 1.74` on the diameter
+convention and below 1 on the radius convention, so the reader cannot tell
+whether the baseline is inside its own band.
+**Reproduce:** `bag_converge.optically_thick_limit`.
+
 ---
 
 ## D. Citation mechanism (the ledger's rule 3)
