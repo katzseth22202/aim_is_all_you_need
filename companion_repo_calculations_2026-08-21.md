@@ -572,6 +572,26 @@ reconciled and the paper quotes the small one.
 
 ## `src/cruise_thermal.py` -- `make cruise-thermal`
 
+### 14. Ice sublimation -- **DONE 2026-08-26. Reproduces, and found one bad number.**
+
+> `src/cruise_thermal.py`, `make cruise-thermal`, 7 tests. Equilibrium **194.4 K**
+> against the paper's 194; shaded loss **0.577 kg/m^2** against 0.58, which is
+> **1.40%** of the rod against the paper's 1.4%.
+>
+> **But the rod's areal density is 41.1 kg/m^2, not the 55 the paper prints.** A 25 kg
+> ice rod at 0.1 m radius is 0.868 m long (the paper's own 0.87) with 0.608 m^2 of total
+> surface, and 25/0.608 = 41.1. **The paper's own 1.4% confirms 0.608 m^2** -- that
+> fraction only comes out with that area -- so the two numbers are inconsistent two
+> sentences apart, and the 55 is the wrong one.
+>
+> **The conclusion is unchanged and slightly stronger**: bare survival is **5.2 days**
+> rather than the stated week. Paper correction A7.
+>
+> *Why the sublimation term dominates, which is the part worth keeping:* at the balance
+> the latent heat carried off is more than twice what the body radiates. That is why bare
+> ice sits at 194 K rather than the 278 K a rock would, and why the sunshade is not
+> optional -- 194 K to 150 K is **four orders of magnitude** in evaporation rate.
+
 ### 14. Ice sublimation equilibrium for the projectile
 **Paper:** `sec:needle_through_fog`, the ice-versus-polyethylene paragraph.
 **Why coded:** a root-find on a radiative-plus-latent energy balance. I got it wrong by six
@@ -608,7 +628,7 @@ goes: 125 MJ/kg at the hottest pulse against 86 MJ/kg of thermal motion. Add it,
       (`tab:bag_sizing`, `tab:axial_bag`) are still owed** -- they are separate tables,
       not part of the cascade.
 - [x] `src/nozzle_geometry.py` + `make nozzle-geom` -- items 11, 12, 13. **DONE 2026-08-26.**
-- [ ] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14
+- [x] `src/cruise_thermal.py` + `make cruise-thermal` -- item 14. **DONE 2026-08-26.**
 - [ ] Extend `src/plume_thermal.py` with the ionisation term
 
 ## Owed to `puffsat_impact_simulation` instead

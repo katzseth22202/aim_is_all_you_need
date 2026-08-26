@@ -143,6 +143,20 @@ falls faster than the static term rises. That is the non-obvious part and the
 passage states only the outcome.
 **Reproduce:** `nozzle_geometry.mirror_stagnation`.
 
+### A7. The ice rod's areal density is 41 kg/m^2, not 55
+**Now:** "A 25 kg rod carries about 55 kg/m^2. It would be gone in a week."
+(`sec:needle_through_fog`).
+**Should be:** **41.1 kg/m^2**, and gone in **5.2 days**.  A 25 kg ice rod at
+0.1 m radius is 0.868 m long -- the paper's own 0.87 -- with 0.608 m^2 of total
+surface, and 25/0.608 = 41.1.
+**How we know 0.608 m^2 is the intended area:** the paper's *next* sentence says
+the shaded cruise loses "about 1.4% of the rod", and 0.58 kg/m^2 only comes to
+1.4% of 25 kg over 0.608 m^2. So the two numbers are inconsistent two sentences
+apart and the 55 is the wrong one.
+**The conclusion is unaffected and slightly stronger**: under a week rather than
+a week.
+**Reproduce:** `make cruise-thermal`.
+
 ---
 
 ## D. Citation mechanism (the ledger's rule 3)
