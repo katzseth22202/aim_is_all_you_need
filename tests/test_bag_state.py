@@ -14,10 +14,12 @@ from src.bag_state import (
     HANDLING_FILM_GAUGE,
     HANDLING_GAUGE_BAND,
     HOT_PULSE_STATE,
-    PAPER_LEAK_FRACTION,
+    PLUG_MASS,
     SLUG_MASS,
     SOLVED_LEAK_FRACTIONS,
     SPHERE_BORE_RADIUS,
+    SUPERSEDED_LEAK_FRACTION,
+    TABLE_CLOSING_SPEED,
     BagState,
     bag_density_at,
     bag_surface_area,
@@ -27,6 +29,7 @@ from src.bag_state import (
     film_mass_fraction,
     governing_film_mass,
     handling_film_mass,
+    melting_fixed_point,
     paper_bag_state,
     radiated_fraction,
     saturation_density,
@@ -34,15 +37,62 @@ from src.bag_state import (
     saturation_temperature,
     shape_factor,
     stored_field_energy,
+    superseded_bag_state,
+    table_stored_energy,
 )
 
 
 def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
-    """Both columns, all eight rows, to the digits the paper prints."""
+    """Both columns, every row, to the digits the paper prints.
+
+    The table is the solved 2.54% leak at the 45.58 km/s cold end of the growth
+    push -- one column of ``LEG_PLUME_STATES``, not a flown assumption.  The
+    Jupiter column is the interesting one: 0.65 MJ/kg of waste heat against
+    0.73 to melt, so nothing boils and there is no pressure vessel at all.
+    """
     jupiter, earth = paper_bag_state("jupiter"), paper_bag_state("earth")
+    for state in (jupiter, earth):
+        assert np.isclose(state.intercept.to_value(u.MJ / u.kg), 0.10, atol=5e-3)
+        # The row reads "2.54% of 21.5 MJ/kg", and 21.5 is itself the rounded
+        # 21.43 the cold leg actually stores, so the printed 0.55 is 0.3%
+        # above the product of the unrounded inputs.  Same shape of rounding
+        # as the superseded table's 0.89-against-0.915.
+        assert np.isclose(state.leak.to_value(u.MJ / u.kg), 0.55, atol=1e-2)
+        assert np.isclose(state.waste_heat.to_value(u.MJ / u.kg), 0.65, atol=5e-3)
+
+    assert jupiter.boiling.to_value(u.MJ / u.kg) < 0.0  # never finishes melting
+    assert jupiter.vapour_fraction == 0.0
+    assert jupiter.mist_pressure.to_value(u.kPa) == 0.0
+    assert jupiter.film_mass.to_value(u.kg) == 0.0
+
+    assert np.isclose(earth.boiling.to_value(u.MJ / u.kg), 0.44, atol=5e-3)
+    assert np.isclose(earth.vapour_fraction, 0.18, atol=5e-3)
+    assert np.isclose(earth.mist_temperature.to_value(u.K), 316.0, atol=1.0)
+    assert np.isclose(earth.mist_pressure.to_value(u.kPa), 8.7, rtol=4e-2)
+    assert np.isclose(earth.film_mass.to_value(u.kg), 4.9, atol=0.15)
+    assert np.isclose(earth.film_fraction, 0.023, atol=5e-4)  # "2.3%, 4.9 kg"
+
+
+def test_the_table_is_the_cold_leg_and_says_so() -> None:
+    """``E_B`` = 21.5 MJ/kg is the 45.58 km/s row, which the caption quotes."""
+    assert np.isclose(
+        (table_stored_energy() / SLUG_MASS).to_value(u.MJ / u.kg), 21.5, atol=0.1
+    )
+    assert SOLVED_LEAK_FRACTIONS["equilibrium"][TABLE_CLOSING_SPEED] == 0.0254
+
+
+def test_the_superseded_table_is_kept_and_is_not_the_one_in_print() -> None:
+    """306 K and 328 K are the fingerprint of the pre-solve 4.4% leak.
+
+    Anything downstream still quoting either was computed before the leak was
+    solved, which is the only reason this reproduction is carried at all.
+    """
+    was_jupiter, was_earth = superseded_bag_state("jupiter"), superseded_bag_state(
+        "earth"
+    )
     for state, boil, x, temp, press, film in (
-        (jupiter, 0.26, 0.11, 306.0, 4.9, 2.8),
-        (earth, 0.78, 0.33, 328.0, 16.0, 8.9),
+        (was_jupiter, 0.26, 0.11, 306.0, 4.9, 2.8),
+        (was_earth, 0.78, 0.33, 328.0, 16.0, 8.9),
     ):
         assert np.isclose(state.waste_heat.to_value(u.MJ / u.kg), 0.99, atol=5e-3)
         assert np.isclose(state.boiling.to_value(u.MJ / u.kg), boil, atol=5e-3)
@@ -50,6 +100,81 @@ def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
         assert np.isclose(state.mist_temperature.to_value(u.K), temp, atol=1.0)
         assert np.isclose(state.mist_pressure.to_value(u.kPa), press, rtol=4e-2)
         assert np.isclose(state.film_mass.to_value(u.kg), film, atol=0.15)
+    # The two tables must not be confusable: every output row moved.
+    now = paper_bag_state("earth")
+    assert now.mist_temperature < was_earth.mist_temperature
+    assert now.film_mass < was_earth.film_mass
+
+
+def test_the_plug_can_only_take_vapour_away() -> None:
+    """``sec:needle_through_fog``, and the direction is the whole point.
+
+    The plug is 37.5 kg of extra condensed mass absorbing heat that the pulse
+    was going to deliver anyway, so at a fixed bill it removes 27 MJ from the
+    boiling step -- 20% of the 138 MJ.  Vapour mass and mist temperature must
+    both fall; the paper's text has them rising.
+    """
+    bare, plugged = (
+        paper_bag_state("earth"),
+        paper_bag_state("earth", plug_mass=PLUG_MASS),
+    )
+    assert np.isclose((plugged.plug_sink * SLUG_MASS).to_value(u.MJ), 27.4, atol=0.1)
+    assert np.isclose(float(plugged.plug_sink / bare.waste_heat), 0.20, atol=5e-3)
+    assert np.isclose(bare.vapour_mass.to_value(u.kg), 39.3, atol=0.1)
+    assert np.isclose(plugged.vapour_mass.to_value(u.kg), 27.7, atol=0.1)
+    assert plugged.vapour_mass < bare.vapour_mass
+    assert plugged.mist_temperature < bare.mist_temperature
+    assert np.isclose(plugged.mist_temperature.to_value(u.K), 309.3, atol=0.5)
+    assert plugged.film_mass < bare.film_mass
+
+
+def test_the_plug_is_moot_from_cold_storage() -> None:
+    """Both columns are already dry there, so the heat sink buys nothing.
+
+    Which is worth pinning: the paper prices the plug as a heat sink on the
+    Jupiter leg, and on that leg the slug never finishes melting with or
+    without it.
+    """
+    for plug in (0.0 * u.kg, PLUG_MASS):
+        state = paper_bag_state("jupiter", plug_mass=plug)
+        assert state.vapour_fraction == 0.0
+        assert state.film_mass.to_value(u.kg) == 0.0
+
+
+def test_the_plug_takes_the_flown_column_below_the_handling_floor() -> None:
+    """So on the leg that does boil, the plug retires the pressure vessel."""
+    flown = 23.0 * u.m
+    scale = shape_factor(flown) / 1.5
+    bare = paper_bag_state("earth").film_mass * scale
+    plugged = paper_bag_state("earth", plug_mass=PLUG_MASS).film_mass * scale
+    assert governing_film_mass(bare, flown) == bare
+    assert governing_film_mass(plugged, flown) == handling_film_mass(flown)
+
+
+def test_the_warming_row_was_closed_against_the_superseded_mist() -> None:
+    """Cut 4: the warming row is an output of the mist row four lines below it.
+
+    0.21 MJ/kg warms liquid water from 278 K to 328 K, and 328 K is the
+    superseded table's Earth mist.  Closing the loop instead moves the Earth
+    column by half a kilogram of film and gives the Jupiter column a slush at
+    the freezing point rather than a dry bag -- reported, not applied.
+    """
+    earth = paper_bag_state("earth")
+    closed = melting_fixed_point(earth.waste_heat, "earth")
+    assert closed.warming < earth.warming
+    assert closed.vapour_fraction > earth.vapour_fraction
+    assert np.isclose(closed.mist_temperature.to_value(u.K), 318.2, atol=0.5)
+    assert abs((closed.film_mass - earth.film_mass).to_value(u.kg)) < 1.0
+
+    jupiter = paper_bag_state("jupiter")
+    slush = melting_fixed_point(jupiter.waste_heat, "jupiter")
+    assert not slush.below_freezing
+    assert 273.0 < slush.mist_temperature.to_value(u.K) < 280.0
+    assert slush.film_mass.to_value(u.kg) < 0.5
+
+    # With the plug on top, the two curves stop meeting above freezing at all.
+    frozen = melting_fixed_point(jupiter.waste_heat, "jupiter", plug_mass=PLUG_MASS)
+    assert frozen.below_freezing
 
 
 def test_stored_energy_reproduces_both_published_values() -> None:
@@ -116,13 +241,13 @@ def test_the_leak_bracket_closes_dry_from_cold_storage() -> None:
     for speed, (temp, ionised) in legs.items():
         energy = stored_field_energy(temp * u.K, ionised)
         solved = BagState(SOLVED_LEAK_FRACTIONS["equilibrium"][speed], energy)
-        feared = BagState(PAPER_LEAK_FRACTION, energy)
+        feared = BagState(SUPERSEDED_LEAK_FRACTION, energy)
         assert solved.vapour_fraction == 0.0
         assert solved.film_mass.to_value(u.kg) == 0.0
         assert feared.film_mass.to_value(u.kg) > 3.0
     assert (
         BagState(
-            PAPER_LEAK_FRACTION, stored_field_energy(26200 * u.K, 0.573)
+            SUPERSEDED_LEAK_FRACTION, stored_field_energy(26200 * u.K, 0.573)
         ).film_mass.to_value(u.kg)
         > 20.0
     )
@@ -220,25 +345,52 @@ def test_mist_column_reproduces_across_the_usable_band() -> None:
     """Item 4's last column, where the paper's own design actually sits.
 
     The paper settles on 3.5-7 m (opacity above, radiative loss below).  Inside
-    that band this is within ~1.5 K; outside it, it overshoots by 16 K at 1.8 m
-    and 9 K at 28 m, which is recorded on the function.
+    that band this is within ~1 K; outside it, it overshoots, which is recorded
+    on the function.  The held fraction is ``tab:bag_state``'s Earth-storage
+    column, which the caption names -- and the 5.4 m row therefore has to be
+    that table's own 316 K by construction.
     """
-    for radius, expected in ((3.5, 332.0), (5.4, 306.0), (8.7, 281.0)):
+    for radius, expected in ((3.5, 346.0), (5.4, 316.0), (8.7, 290.0)):
         assert np.isclose(
-            coldest_mist_temperature(radius * u.m).to_value(u.K), expected, atol=2.0
+            coldest_mist_temperature(radius * u.m).to_value(u.K), expected, atol=1.5
         )
+    assert np.isclose(
+        coldest_mist_temperature(5.4 * u.m).to_value(u.K),
+        paper_bag_state("earth").mist_temperature.to_value(u.K),
+        atol=0.5,
+    )
+
+
+def test_the_mist_column_tracks_the_table_rather_than_a_pinned_fraction() -> None:
+    """This column went stale once already; it must not be able to again.
+
+    It was written against the superseded 4.4% leak's ``x`` = 0.11, printed a
+    306 K flown row, and that 306 K then survived into prose after the leak was
+    solved.  Reading the default off ``paper_bag_state`` is what closes that.
+    """
+    superseded = coldest_mist_temperature(
+        5.4 * u.m, superseded_bag_state("jupiter").vapour_fraction
+    )
+    assert np.isclose(superseded.to_value(u.K), 306.0, atol=1.0)
+    assert coldest_mist_temperature(5.4 * u.m) > superseded
 
 
 def test_axial_bag_reproduces_every_cell() -> None:
-    """Item 9: all five rows, bore and conductor and shape factor and film."""
+    """Item 9: all five rows, bore and conductor and shape factor and film.
+
+    The film column is ``tab:axial_bag``'s **Pressure** column, which the
+    caption pins to ``tab:bag_state``'s Earth-storage vapour state -- the only
+    case left that boils.  It scales with nothing but ``F``.
+    """
     published = {
-        10.8: (5.40, 1.00, 1.50, 2.8),
-        16.0: (3.62, 0.99, 1.82, 3.4),
-        23.0: (3.02, 1.19, 1.90, 3.6),
-        32.0: (2.56, 1.41, 1.94, 3.6),
-        50.0: (2.05, 1.76, 1.97, 3.7),
+        10.8: (5.40, 1.00, 1.50, 4.9),
+        16.0: (3.62, 0.99, 1.82, 5.9),
+        23.0: (3.02, 1.19, 1.90, 6.2),
+        32.0: (2.56, 1.41, 1.94, 6.3),
+        50.0: (2.05, 1.76, 1.97, 6.4),
     }
     reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
+    sphere = paper_bag_state("earth").film_mass.to_value(u.kg)
     for length, (bore, conductor, factor, film) in published.items():
         metres = length * u.m
         radius = (
@@ -247,7 +399,7 @@ def test_axial_bag_reproduces_every_cell() -> None:
         assert np.isclose(radius, bore, rtol=5e-3)
         assert np.isclose(radius * length / reference, conductor, rtol=1e-2)
         assert np.isclose(shape_factor(metres), factor, rtol=5e-3)
-        assert np.isclose(2.8 * shape_factor(metres) / 1.5, film, atol=0.1)
+        assert np.isclose(sphere * shape_factor(metres) / 1.5, film, atol=0.1)
 
 
 def test_the_sphere_is_the_lightest_film_and_the_long_tube_the_heaviest() -> None:

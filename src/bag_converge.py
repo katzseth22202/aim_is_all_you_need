@@ -15,6 +15,10 @@ value runs 15 165-26 521 K.
 **Cut 2.** The leak was held at 4.4% while ``E_B`` moved 4.43 -> 12.2 GJ.
 **Cut 3.** The vapour fraction's effect on the ignition budget was held rather
 than recomputed.
+**Cut 4.** ``tab:bag_state``'s warming row warms liquid water up to the mist
+temperature, so it is an output of the row four lines below it. The published
+0.73 and 0.21 MJ/kg were closed against 306 K and 328 K, which were the mist
+of the *superseded* 4.4% leak, and the table now prints 316 K instead.
 
 Cutting a loop is the right way to write a paper -- a reader can check each link
 -- and it is the wrong way to find out whether the design closes. This module
@@ -174,7 +178,12 @@ def converge(
 
 def main() -> None:
     """Report the fixed point and the gap against the published tables."""
-    from src.bag_state import SOLVED_LEAK_FRACTIONS, radiated_fraction
+    from src.bag_state import (
+        SOLVED_LEAK_FRACTIONS,
+        melting_fixed_point,
+        paper_bag_state,
+        radiated_fraction,
+    )
     from src.plume_state import QUOTED_SPEEDS
 
     print("=== The loop, closed ===")
@@ -229,6 +238,40 @@ def main() -> None:
         "is small either way -- 3.6% of the pulse radiated rather than 1.2%. It\n"
         "does not move the bag out of the optically thick band, and it does not\n"
         "reach the film, which cold storage holds at zero (item 10)."
+    )
+
+    print("\n--- Cut 4: the warming row is an output of the mist row ---")
+    print(f"{'case':>24}{'warming':>10}{'x':>9}{'mist':>9}{'film':>9}")
+    for storage in ("jupiter", "earth"):
+        published = paper_bag_state(storage)
+        closed = melting_fixed_point(published.waste_heat, storage)
+        for label, warming, fraction, temperature, film in (
+            (
+                "printed",
+                published.warming,
+                published.vapour_fraction,
+                published.mist_temperature,
+                published.film_mass,
+            ),
+            (
+                "closed",
+                closed.warming,
+                closed.vapour_fraction,
+                closed.mist_temperature,
+                closed.film_mass,
+            ),
+        ):
+            print(
+                f"{storage + ', ' + label:>24}"
+                f"{warming.to_value(u.MJ / u.kg):>10.3f}{fraction:>9.4f}"
+                f"{temperature.to_value(u.K):>8.1f}K{film.to_value(u.kg):>8.2f}kg"
+            )
+    print(
+        "Size of this gap: half a kilogram of film on the Earth leg, and a\n"
+        "Jupiter column that ends as slush at the freezing point rather than\n"
+        "dry. Neither overturns 'cold storage removes the pressure vessel',\n"
+        "which is the conclusion the section rests on, so this is reported\n"
+        "rather than applied -- the paper prints the warming row as an input."
     )
 
 

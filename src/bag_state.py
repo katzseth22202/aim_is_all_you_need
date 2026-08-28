@@ -13,11 +13,11 @@ whole chain is six dependent steps and the paper prints it as
       -> eq:bag_film_mass             ->  film mass
 
 **The field leak is the whole story and it is the one term nobody had
-computed.**  The paper holds it at 4.4% of the 20.8 MJ/kg of stored field
-energy, which was fine while ``E_B`` was 4.43 GJ.  Item 1 moved ``E_B`` to
-12.2 GJ at the hottest pulse without moving the leak fraction, and at 4.4% of
-*that* the film goes from 2.8 kg to 31 kg -- from a rounding error to 15% of
-the slug, every pulse.  That is the bracket this module exists to close.
+computed.**  The paper *used to* hold it at 4.4% of the 20.8 MJ/kg of stored
+field energy, which was fine while ``E_B`` was 4.43 GJ.  Item 1 moved ``E_B``
+to 12.2 GJ at the hottest pulse without moving the leak fraction, and at 4.4%
+of *that* the film goes from 2.8 kg to 31 kg -- from a rounding error to 15%
+of the slug, every pulse.  That is the bracket this module exists to close.
 
 **It is closed, and in the design's favour.**  The leak fraction is
 ``~1/Rm`` -- the field diffuses out in ``mu0 sigma L^2`` against an expansion
@@ -29,11 +29,22 @@ cooling history (Q-L, ``make analysis-expansion``) and gets **0.11% to 2.54%**
 on the equilibrium branch -- and Q-M then established that equilibrium is the
 branch that holds, by two to five decades.  See :data:`SOLVED_LEAK_FRACTIONS`.
 
+**That bracket is now closed in print**, and :func:`paper_bag_state` follows
+the table the paper prints today: the solved 2.54% at the cold end of the
+growth push, which boils nothing at all from Jupiter storage and leaves
+``x = 0.18`` from Earth storage.  The superseded 4.4% column is kept as
+:func:`superseded_bag_state`, because numbers computed downstream of it are
+still in circulation and the comparison is what identifies them.
+
+The bag also carries the ice **plug** of ADR 0018, and the plug is a heat sink
+before it is a target: see :data:`PLUG_MASS` and ``BagState(plug_mass=...)``.
+
 See CONTEXT.md and the ledger's items 5-10.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, Tuple
 
 import numpy as np
@@ -62,6 +73,14 @@ SKY_FRACTION = 0.1
 #: Sensible-plus-latent heat to bring the slug from storage up to liquid.
 #: Jupiter parks it at 122 K (0.26 warming ice + 0.33 melting + 0.14 warming
 #: liquid); Earth at 278 K needs only the last part of that.
+#:
+#: **The last part of each is a warming term to the mist's own temperature**,
+#: which makes these rows an output of the cascade rather than an input to it:
+#: 0.14 MJ/kg warms liquid water 33 K, to 306 K, and 0.21 warms it 50 K, to
+#: 328 K -- and those are exactly the two mist temperatures the *superseded*
+#: 4.4% table printed.  The paper still prints them, so they stay as published
+#: inputs here; :func:`melting_fixed_point` measures what closing that loop
+#: would cost instead of quietly closing it.
 WARMING_TO_LIQUID: Dict[str, u.Quantity] = {
     "jupiter": 0.73 * u.MJ / u.kg,
     "earth": 0.21 * u.MJ / u.kg,
@@ -71,6 +90,21 @@ STORAGE_TEMPERATURE: Dict[str, u.Quantity] = {
     "jupiter": 122.0 * u.K,
     "earth": 278.0 * u.K,
 }
+#: The published warming rows, decomposed, so the loop above can be closed.
+#: ``WARMING_TO_LIQUID`` is the first two terms plus liquid warming up to the
+#: mist temperature; these are the parts that do *not* depend on it.
+WARMING_ICE_TO_MELT = 0.26 * u.MJ / u.kg
+HEAT_OF_FUSION = 0.334 * u.MJ / u.kg
+#: Specific heat of liquid water.  The paper's own two warming rows imply
+#: 4.10 and 4.14 kJ/kg/K when read back against the mist temperatures they
+#: were closed at, so the textbook value is what they were built from.
+LIQUID_HEAT_CAPACITY = 4.18e-3 * u.MJ / (u.kg * u.K)
+
+#: Ice plug at the end the projectile enters, sized at half again the 25 kg
+#: projectile's mass so the crater runs wider than the rod (ADR 0018).  It is
+#: charged the full 122 K ice warming: the plug has to end up *condensed*, not
+#: frozen, so melting it is free and boiling it is not.
+PLUG_MASS = 37.5 * u.kg
 
 #: Latent heat of vaporisation used by the paper's own table.  **Back-solved
 #: from it, not quoted by it**: both columns give ``left-over / x`` = 2.36
@@ -97,11 +131,18 @@ SOLVED_LEAK_FRACTIONS: Dict[str, Dict[float, float]] = {
     "equilibrium": {75.0: 0.0011, 65.0: 0.0017, 56.53: 0.0029, 45.58: 0.0254},
     "frozen": {75.0: 0.0121, 65.0: 0.0180, 56.53: 0.0258, 45.58: 0.0538},
 }
-#: The leak fraction the paper prints.  Its own table is internally
-#: inconsistent by 3%: the row reads "4.4% of 20.8 MJ/kg" but prints 0.89
-#: MJ/kg, and 0.89/20.8 is 4.28%.  Reproducing the printed table needs the
-#: printed 0.89, so that is what :func:`paper_bag_state` uses.
-PAPER_LEAK_FRACTION = 0.044
+#: The leak fraction the paper used to print, **superseded** by the solved
+#: fractions above and kept only for comparison.  Its table was internally
+#: inconsistent by 3%: the row read "4.4% of 20.8 MJ/kg" but printed 0.89
+#: MJ/kg, and 0.89/20.8 is 4.28%.  Reproducing that table needs the printed
+#: 0.89, so that is what :func:`superseded_bag_state` uses.
+SUPERSEDED_LEAK_FRACTION = 0.044
+#: The leak energy per kilogram of slug the superseded table printed.
+SUPERSEDED_LEAK_ENERGY = 0.89 * u.MJ / u.kg
+#: Closing speed ``tab:bag_state`` is quoted at: the cold end of the growth
+#: push, which is the leg that leaks most and therefore the leg that sizes the
+#: bag.  The whole table is one column of :data:`LEG_PLUME_STATES`.
+TABLE_CLOSING_SPEED = 45.58
 
 
 def stored_field_energy(
@@ -236,8 +277,14 @@ class BagState:
         leak: Field energy leaked, per kg of slug.
         waste_heat: Their sum, which the slug must absorb.
         warming: Heat spent bringing the slug up to liquid, per kg.
+        plug_sink: Heat the ice plug absorbs before boiling starts, charged
+            per kg of *slug* so it subtracts from the same cascade.
         boiling: What is left to boil, per kg.
         vapour_fraction: ``x``, the share of the slug carried as vapour.
+        vapour_mass: ``x`` times the slug, which is the mass the film holds
+            back.  With a plug it is still ``x`` times the *slug*: the boiled
+            water is drawn from slug and plug together, but the energy that
+            boils it is booked per kg of slug, so the product is right.
         mist_temperature: Saturation temperature at that vapour density.
         mist_pressure: Saturation pressure there.
         film_fraction: Bag film mass per unit slug mass.
@@ -253,6 +300,7 @@ class BagState:
         slug_mass: u.Quantity = SLUG_MASS,
         bag_volume: u.Quantity = BAG_VOLUME,
         leak_energy: u.Quantity | None = None,
+        plug_mass: u.Quantity = 0.0 * u.kg,
     ) -> None:
         """Run the cascade.
 
@@ -264,7 +312,13 @@ class BagState:
             slug_mass: Slug in the bag.
             bag_volume: Enclosed volume, which sets the vapour density.
             leak_energy: Override the leak term with an explicit energy per kg,
-                used only to reproduce the paper's printed 0.89 MJ/kg.
+                used only to reproduce the superseded table's printed 0.89
+                MJ/kg.
+            plug_mass: Ice plug at the bag's entrance.  **Pure added thermal
+                mass at a fixed heat input**: it absorbs 122 K ice warming and
+                melting without boiling, so it can only ever *lower* the vapour
+                mass.  ``tab:bag_state`` itself is the no-plug case; the plug
+                is priced separately in ``sec:needle_through_fog``.
 
         Raises:
             KeyError: If ``storage`` is not a known location.
@@ -283,7 +337,13 @@ class BagState:
         self.waste_heat = self.intercept + self.leak
         self.warming = WARMING_TO_LIQUID[storage]
         storage_temperature = STORAGE_TEMPERATURE[storage]
-        self.boiling = self.waste_heat - self.warming
+        # The plug is frozen at 122 K wherever the slug was stored, because a
+        # plug that is not solid is not a target, so it is charged the Jupiter
+        # warming on both columns.
+        self.plug_sink = (plug_mass * WARMING_TO_LIQUID["jupiter"] / slug_mass).to(
+            u.MJ / u.kg
+        )
+        self.boiling = self.waste_heat - self.warming - self.plug_sink
         self.vapour_fraction = max(0.0, float(self.boiling / LATENT_HEAT))
         if self.vapour_fraction <= 0.0:
             # The waste heat does not even finish melting the slug, so there is
@@ -294,9 +354,11 @@ class BagState:
             # a containment membrane, sized by handling rather than by stress.
             self.mist_temperature = storage_temperature
             self.mist_pressure = 0.0 * u.Pa
+            self.vapour_mass = 0.0 * u.kg
             self.film_fraction = 0.0
             self.film_mass = 0.0 * u.kg
             return
+        self.vapour_mass = (self.vapour_fraction * slug_mass).to(u.kg)
         vapour_density = self.vapour_fraction * slug_mass / bag_volume
         self.mist_temperature = saturation_temperature(vapour_density)
         self.mist_pressure = saturation_pressure(self.mist_temperature)
@@ -304,27 +366,6 @@ class BagState:
             self.vapour_fraction, self.mist_temperature, shape_factor
         )
         self.film_mass = (self.film_fraction * slug_mass).to(u.kg)
-
-
-def paper_bag_state(storage: str = "jupiter") -> BagState:
-    """``tab:bag_state`` exactly as printed, for regression.
-
-    Uses the table's printed 0.89 MJ/kg leak rather than ``0.044 * 20.8``,
-    which is 0.915: the paper's own row is internally inconsistent by 3% and
-    the printed digits follow the smaller number.
-
-    Args:
-        storage: ``"jupiter"`` or ``"earth"``.
-
-    Returns:
-        The cascade as the paper prints it.
-    """
-    return BagState(
-        leak_fraction=PAPER_LEAK_FRACTION,
-        stored_energy=stored_field_energy(),
-        storage=storage,
-        leak_energy=0.89 * u.MJ / u.kg,
-    )
 
 
 #: Plume state per closing speed, from item 1: ``(T, ionisation fraction)``.
@@ -337,6 +378,80 @@ LEG_PLUME_STATES: Dict[float, Tuple[float, float]] = {
     56.53: (19400.0, 0.217),
     45.58: (14700.0, 0.053),
 }
+
+
+def table_stored_energy(closing_speed: float = TABLE_CLOSING_SPEED) -> u.Quantity:
+    """``E_B`` on the leg ``tab:bag_state`` is quoted at.
+
+    Args:
+        closing_speed: Key into :data:`LEG_PLUME_STATES`.
+
+    Returns:
+        Stored field energy (astropy Quantity, J).
+
+    Raises:
+        KeyError: If the closing speed is not one of the solved legs.
+    """
+    temperature, ionised = LEG_PLUME_STATES[closing_speed]
+    return stored_field_energy(temperature * u.K, ionised)
+
+
+def paper_bag_state(
+    storage: str = "jupiter",
+    shape_factor: float = SPHERE_SHAPE_FACTOR,
+    plug_mass: u.Quantity = 0.0 * u.kg,
+) -> BagState:
+    """``tab:bag_state`` exactly as printed, for regression.
+
+    The table is one leg -- the 45.58 km/s cold end of the growth push, which
+    leaks most -- at the solved 2.54% rather than at any assumed fraction.
+    Both of its columns therefore come out of :data:`SOLVED_LEAK_FRACTIONS`
+    and nothing here is hand-entered.
+
+    Args:
+        storage: ``"jupiter"`` or ``"earth"``.
+        shape_factor: ``F`` of ``eq:bag_film_mass``; the table is the sphere.
+        plug_mass: Ice plug, if the plug is being priced.  The table itself is
+            the no-plug case.
+
+    Returns:
+        The cascade as the paper prints it.
+    """
+    return BagState(
+        leak_fraction=SOLVED_LEAK_FRACTIONS["equilibrium"][TABLE_CLOSING_SPEED],
+        stored_energy=table_stored_energy(),
+        storage=storage,
+        shape_factor=shape_factor,
+        plug_mass=plug_mass,
+    )
+
+
+def superseded_bag_state(storage: str = "jupiter") -> BagState:
+    """``tab:bag_state`` as it read before the leak was solved, for comparison.
+
+    **Not what the paper prints, and kept only because things computed from it
+    are still in circulation.**  The old table assumed a 4.4% leak against the
+    4.43 GJ neutral-plume store, which put the mist at 306 K from Jupiter
+    storage and 328 K from Earth storage.  Those two temperatures are the
+    signature to grep for: anything still quoting them was computed before the
+    leak was solved.
+
+    Uses the table's printed 0.89 MJ/kg leak rather than ``0.044 * 20.8``,
+    which is 0.915: that row was internally inconsistent by 3% and the printed
+    digits followed the smaller number.
+
+    Args:
+        storage: ``"jupiter"`` or ``"earth"``.
+
+    Returns:
+        The cascade as the paper used to print it.
+    """
+    return BagState(
+        leak_fraction=SUPERSEDED_LEAK_FRACTION,
+        stored_energy=stored_field_energy(),
+        storage=storage,
+        leak_energy=SUPERSEDED_LEAK_ENERGY,
+    )
 
 
 def boil_onset_leak(stored_energy: u.Quantity, storage: str = "jupiter") -> float:
@@ -362,20 +477,157 @@ def boil_onset_leak(stored_energy: u.Quantity, storage: str = "jupiter") -> floa
     return float(deficit * SLUG_MASS / stored_energy)
 
 
+@dataclass(frozen=True)
+class MeltingFixedPoint:
+    """The cascade with its one remaining loop closed, for gap reporting.
+
+    ``tab:bag_state``'s warming row is not independent of its mist row: the
+    last part of "warming and melting the slug up to liquid" warms liquid
+    water to whatever temperature the mist ends up at, and the published 0.73
+    and 0.21 MJ/kg were closed against 306 K and 328 K -- the mist of the
+    *superseded* 4.4% table.  Solving the two together instead is a one-line
+    root find, and what it produces is a gap rather than a replacement: the
+    paper prints the warming row as an input, so :func:`paper_bag_state` keeps
+    printing it that way and this measures what that costs.
+
+    Attributes:
+        warming: Heat to bring the slug up to liquid at the solved mist
+            temperature, per kg of slug.
+        vapour_fraction: ``x`` at the fixed point.
+        vapour_mass: ``x`` times the slug.
+        mist_temperature: Where the saturation curve and the energy balance
+            agree.
+        mist_pressure: Saturation pressure there.
+        film_mass: ``eq:bag_film_mass`` at that state.
+        below_freezing: True if the two curves only meet below 273 K, where
+            the condensate is ice rather than water and this model has left
+            its domain.  The vapour is then a sublimation equilibrium and the
+            reported state is the freezing point, not the solution.
+    """
+
+    warming: u.Quantity
+    vapour_fraction: float
+    vapour_mass: u.Quantity
+    mist_temperature: u.Quantity
+    mist_pressure: u.Quantity
+    film_mass: u.Quantity
+    below_freezing: bool
+
+
+def melting_fixed_point(
+    waste_heat: u.Quantity,
+    storage: str = "earth",
+    shape_factor: float = SPHERE_SHAPE_FACTOR,
+    plug_mass: u.Quantity = 0.0 * u.kg,
+    slug_mass: u.Quantity = SLUG_MASS,
+    bag_volume: u.Quantity = BAG_VOLUME,
+) -> MeltingFixedPoint:
+    """Solve the warming row and the mist row together instead of in sequence.
+
+    Two curves in the mist temperature: the energy balance says how much
+    vapour is left once the slug has been warmed *to that temperature*, and
+    the saturation curve says how much vapour that temperature can hold.  The
+    first falls and the second rises, so they cross exactly once and bisection
+    is enough.
+
+    Args:
+        waste_heat: Waste heat the slug must absorb, per kg of slug.
+        storage: ``"jupiter"`` (122 K ice, which must melt first) or
+            ``"earth"`` (278 K liquid, which need only warm).
+        shape_factor: ``F`` of ``eq:bag_film_mass``.
+        plug_mass: Ice plug, charged the same melting ladder from 122 K.
+        slug_mass: Slug in the bag.
+        bag_volume: Enclosed volume, which sets the vapour density.
+
+    Returns:
+        The state where both rows hold at once.
+
+    Raises:
+        KeyError: If ``storage`` is not a known location.
+    """
+    freezing = 273.15
+    from_ice = storage == "jupiter"
+    liquid_from = freezing if from_ice else STORAGE_TEMPERATURE[storage].to_value(u.K)
+    to_liquid = WARMING_ICE_TO_MELT + HEAT_OF_FUSION if from_ice else 0.0 * u.MJ / u.kg
+    capacity = LIQUID_HEAT_CAPACITY * u.K  # per kelvin of warming
+    plug_share = float(plug_mass / slug_mass)
+
+    def warming_at(kelvin: float) -> u.Quantity:
+        return to_liquid + capacity * max(0.0, kelvin - liquid_from)
+
+    def surplus(kelvin: float) -> float:
+        """Vapour the energy balance leaves, less what saturation can hold."""
+        plug = plug_share * (
+            WARMING_ICE_TO_MELT
+            + HEAT_OF_FUSION
+            + capacity * max(0.0, kelvin - freezing)
+        )
+        left = waste_heat - warming_at(kelvin) - plug
+        by_energy = max(0.0, float(left / LATENT_HEAT))
+        by_saturation = float(saturation_density(kelvin * u.K) * bag_volume / slug_mass)
+        return by_energy - by_saturation
+
+    low, high = freezing, 450.0
+    below_freezing = surplus(low) <= 0.0
+    if not below_freezing:
+        for _ in range(200):
+            mid = 0.5 * (low + high)
+            if surplus(mid) > 0.0:
+                low = mid
+            else:
+                high = mid
+    kelvin = 0.5 * (low + high) if not below_freezing else freezing
+    temperature = kelvin * u.K
+    fraction = float(saturation_density(temperature) * bag_volume / slug_mass)
+    mass = (fraction * slug_mass).to(u.kg)
+    return MeltingFixedPoint(
+        warming=warming_at(kelvin).to(u.MJ / u.kg),
+        vapour_fraction=fraction,
+        vapour_mass=mass,
+        mist_temperature=temperature,
+        mist_pressure=saturation_pressure(temperature),
+        film_mass=(
+            film_mass_fraction(fraction, temperature, shape_factor) * slug_mass
+        ).to(u.kg),
+        below_freezing=below_freezing,
+    )
+
+
 def main() -> None:
     """Print the bag-state reproduction and the closed leak bracket."""
-    print("=== tab:bag_state, as printed ===")
-    print(f"{'row':<32}{'Jupiter 122 K':>15}{'Earth 278 K':>15}")
-    jupiter, earth = paper_bag_state("jupiter"), paper_bag_state("earth")
-    for label, getter in (
+    rows = (
         ("waste heat [MJ/kg]", lambda s: s.waste_heat.to_value(u.MJ / u.kg)),
         ("left to boil [MJ/kg]", lambda s: s.boiling.to_value(u.MJ / u.kg)),
         ("vapour fraction x", lambda s: s.vapour_fraction),
+        ("vapour mass [kg]", lambda s: s.vapour_mass.to_value(u.kg)),
         ("mist temperature [K]", lambda s: s.mist_temperature.to_value(u.K)),
         ("mist pressure [kPa]", lambda s: s.mist_pressure.to_value(u.kPa)),
         ("bag film [kg]", lambda s: s.film_mass.to_value(u.kg)),
-    ):
+    )
+
+    print("=== tab:bag_state, as printed ===")
+    print(f"{'row':<32}{'Jupiter 122 K':>15}{'Earth 278 K':>15}")
+    jupiter, earth = paper_bag_state("jupiter"), paper_bag_state("earth")
+    for label, getter in rows:
         print(f"{label:<32}{getter(jupiter):>15.4g}{getter(earth):>15.4g}")
+    print(
+        f"The leak is the solved {100 * SOLVED_LEAK_FRACTIONS['equilibrium'][TABLE_CLOSING_SPEED]:.2f}%"
+        f" at the {TABLE_CLOSING_SPEED} km/s cold end of the growth push.\n"
+        "Jupiter storage never finishes melting, so that column has no vapour\n"
+        "and no pressure vessel at all."
+    )
+
+    print("\n=== The same table before the leak was solved, for comparison ===")
+    print(f"{'row':<32}{'Jupiter 122 K':>15}{'Earth 278 K':>15}")
+    was_jupiter, was_earth = superseded_bag_state("jupiter"), superseded_bag_state(
+        "earth"
+    )
+    for label, getter in rows:
+        print(f"{label:<32}{getter(was_jupiter):>15.4g}{getter(was_earth):>15.4g}")
+    print(
+        "306 K and 328 K are the signature of the superseded 4.4% leak. Any\n"
+        "number still quoting them was computed before the leak was solved."
+    )
 
     print("\n=== Item 10: the leak bracket, closed ===")
     print(
@@ -391,7 +643,7 @@ def main() -> None:
             f"{100 * onset:>8.2f}%{onset / leak:>8.1f}x"
             f"{BagState(leak, energy, 'jupiter').film_mass.to_value(u.kg):>10.2f}"
             f"{BagState(leak, energy, 'earth').film_mass.to_value(u.kg):>12.2f}"
-            f"{BagState(PAPER_LEAK_FRACTION, energy).film_mass.to_value(u.kg):>14.2f}"
+            f"{BagState(SUPERSEDED_LEAK_FRACTION, energy).film_mass.to_value(u.kg):>14.2f}"
         )
     print(
         "\nLeak fractions are residence-weighted 1/Rm on the equilibrium branch,\n"
@@ -417,27 +669,110 @@ def main() -> None:
     print("\n=== tab:axial_bag (item 9) ===")
     print(f"{'length':>9}{'bore':>9}{'conductor':>12}{'F':>7}{'film':>9}")
     reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
+    sphere_film = paper_bag_state("earth").film_mass
     for length in AXIAL_BAG_LENGTHS:
         metres = length * u.m
         radius = (
             SPHERE_BORE_RADIUS if length == 10.8 else bore_radius(metres)
         ).to_value(u.m)
         factor = shape_factor(metres)
+        film = sphere_film * factor / SPHERE_SHAPE_FACTOR
         print(
             f"{length:>8.1f}m{radius:>8.2f}m{radius * length / reference:>12.2f}"
-            f"{factor:>7.2f}{2.8 * factor / 1.5:>8.1f}kg"
+            f"{factor:>7.2f}{film.to_value(u.kg):>8.1f}kg"
         )
-    print("Bore and conductor trade one for one; the launch envelope picks 23 m.")
+    print(
+        "Bore and conductor trade one for one; the launch envelope picks 23 m.\n"
+        "The film column is the Earth-storage pressure vessel, the only case\n"
+        "left that boils; from cold storage it is 0 kg at every length."
+    )
+
+    print("\n=== sec:needle_through_fog: the plug as a heat sink ===")
+    for storage in ("jupiter", "earth"):
+        bare = paper_bag_state(storage)
+        plugged = paper_bag_state(storage, plug_mass=PLUG_MASS)
+        bill = (bare.waste_heat * SLUG_MASS).to(u.MJ)
+        sink = (plugged.plug_sink * SLUG_MASS).to(u.MJ)
+        print(
+            f"{storage:>8} storage: bill {bill.to_value(u.MJ):5.1f} MJ, the plug "
+            f"removes {sink.to_value(u.MJ):4.1f} MJ "
+            f"({100 * float(sink / bill):.0f}% of it)"
+        )
+        for label, state in (("without plug", bare), ("with plug", plugged)):
+            if state.vapour_fraction <= 0.0:
+                print(f"{label:>21}: nothing boils")
+                continue
+            flown = 23.0 * u.m
+            column = state.film_mass * shape_factor(flown) / SPHERE_SHAPE_FACTOR
+            governing = governing_film_mass(column, flown)
+            print(
+                f"{label:>21}: vapour {state.vapour_mass.to_value(u.kg):5.2f} kg"
+                f"  x {state.vapour_fraction:.4f}"
+                f"  mist {state.mist_temperature.to_value(u.K):6.2f} K"
+                f"  film(F=1.5) {state.film_mass.to_value(u.kg):5.2f} kg"
+                f"  film(23 m) {column.to_value(u.kg):5.2f} kg"
+                f"  flies {governing.to_value(u.kg):5.2f} kg"
+                f" ({'handling' if governing > column else 'pressure'})"
+            )
+    print(
+        "The plug is pure added thermal mass at a fixed heat input, so it can\n"
+        "only lower the vapour mass and cool the mist. From cold storage both\n"
+        "columns are dry and the plug changes nothing the bag has to hold.\n"
+        "From Earth storage it takes the flown 23 m column below the 12.7 um\n"
+        "handling floor, so the plug is what stops the bag being a pressure\n"
+        "vessel at all on the leg that still boils."
+    )
+
+    print("\n=== The one loop the table still cuts: warming vs mist temperature ===")
+    print(
+        f"{'case':>26}{'warming':>10}{'x':>9}{'vapour':>10}{'mist':>9}"
+        f"{'press':>9}{'film':>8}"
+    )
+    for storage in ("jupiter", "earth"):
+        for label, plug in (("no plug", 0.0 * u.kg), ("with plug", PLUG_MASS)):
+            published = paper_bag_state(storage, plug_mass=plug)
+            closed = melting_fixed_point(published.waste_heat, storage, plug_mass=plug)
+            for name, warming, x, mass, temp, press, film in (
+                (
+                    f"{storage} {label}, printed",
+                    published.warming,
+                    published.vapour_fraction,
+                    published.vapour_mass,
+                    published.mist_temperature,
+                    published.mist_pressure,
+                    published.film_mass,
+                ),
+                (
+                    f"{storage} {label}, closed",
+                    closed.warming,
+                    closed.vapour_fraction,
+                    closed.vapour_mass,
+                    closed.mist_temperature,
+                    closed.mist_pressure,
+                    closed.film_mass,
+                ),
+            ):
+                edge = (
+                    "  (ice, not water: the two curves only meet below 273 K)"
+                    if name.endswith("closed") and closed.below_freezing
+                    else ""
+                )
+                print(
+                    f"{name:>26}{warming.to_value(u.MJ / u.kg):>10.3f}{x:>9.4f}"
+                    f"{mass.to_value(u.kg):>9.2f}kg{temp.to_value(u.K):>8.1f}K"
+                    f"{press.to_value(u.kPa):>8.2f}k{film.to_value(u.kg):>7.2f}kg{edge}"
+                )
+    print(
+        "The printed warming rows were closed against the superseded table's\n"
+        "306 K and 328 K, so they overcharge the slug now. Closing the loop\n"
+        "moves Earth storage up about 4 kg of vapour and 2 K, and gives the\n"
+        "Jupiter column a slush at the freezing point rather than a dry bag.\n"
+        "Reported, not applied: the paper prints the warming row as an input."
+    )
 
     print("\n=== D4: the handling floor under the film ===")
     thin, thick = HANDLING_GAUGE_BAND
-    coldest = 45.58
-    temperature, ionised = LEG_PLUME_STATES[coldest]
-    earth_film = BagState(
-        SOLVED_LEAK_FRACTIONS["equilibrium"][coldest],
-        stored_field_energy(temperature * u.K, ionised),
-        "earth",
-    ).film_mass
+    earth_film = sphere_film
     print(
         f"{'length':>9}{'area':>10}{'6 um':>9}{'12.7 um':>10}{'25 um':>9}"
         f"{'pressure':>11}{'governs':>10}"
@@ -707,32 +1042,42 @@ def shape_factor(column_length: u.Quantity, volume: u.Quantity = BAG_VOLUME) -> 
 
 def coldest_mist_temperature(
     radius: u.Quantity,
-    vapour_fraction: float = 0.1107,
+    vapour_fraction: float | None = None,
     slug_mass: u.Quantity = SLUG_MASS,
 ) -> u.Quantity:
     """Mist temperature in a spherical bag of this radius.
 
-    The vapour fraction is held at ``tab:bag_state``'s value and only the volume
-    changes, so a bigger bag holds the same vapour more thinly and condenses
-    colder.
+    The vapour fraction is held at ``tab:bag_state``'s Earth-storage value --
+    the only column that still boils -- and only the volume changes, so a
+    bigger bag holds the same vapour more thinly and condenses colder.
+
+    **The default is read off the table rather than pinned**, because this
+    column was left behind once already: it was written against the superseded
+    4.4% leak's ``x`` = 0.11 and printed a 306 K flown row, which then survived
+    into three sentences of prose after the leak was solved.  Taking the
+    fraction from :func:`paper_bag_state` means the column cannot go stale
+    without the table going stale with it.
 
     **This reproduces the published column to ~1 K across the usable band and
     overshoots outside it** -- +16 K at 1.8 m and +9 K at 28 m.  The deviation
     runs the way an optical-depth correction would: the paper notes the plume
     "stops being optically thick past about 7 m", and a bag that has gone thin
     reabsorbs less of its own radiation, so its vapour fraction should fall
-    below the held 0.11 rather than stay at it.  That correction is not modelled
-    here because the paper does not state one, and the usable band the paper
-    itself settles on (3.5-7 m) is inside the region that reproduces.
+    below the held value rather than stay at it.  That correction is not
+    modelled here because the paper does not state one, and the usable band the
+    paper itself settles on (3.5-7 m) is inside the region that reproduces.
 
     Args:
         radius: Bag radius.
-        vapour_fraction: ``x`` carried as vapour.
+        vapour_fraction: ``x`` carried as vapour.  Defaults to
+            ``tab:bag_state``'s Earth-storage fraction.
         slug_mass: Slug the bag holds.
 
     Returns:
         Mist temperature (astropy Quantity, K).
     """
+    if vapour_fraction is None:
+        vapour_fraction = paper_bag_state("earth").vapour_fraction
     volume = (4.0 / 3.0) * np.pi * radius**3
     return saturation_temperature(vapour_fraction * slug_mass / volume)
 

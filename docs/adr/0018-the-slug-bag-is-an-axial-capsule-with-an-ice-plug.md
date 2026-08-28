@@ -35,17 +35,23 @@ contained energy and contained energy is the `n R_g T` that shape leaves alone.
 
 | length | bore | conductor | `F` | film |
 | ---: | ---: | ---: | ---: | ---: |
-| 10.8 m (sphere) | 5.40 m | 1.00 | 1.50 | 2.8 kg |
-| 16 | 3.62 | 0.99 | 1.82 | 3.4 |
-| **23** | **3.02** | **1.19** | **1.90** | **3.6** |
-| 32 | 2.56 | 1.41 | 1.94 | 3.6 |
-| 50 | 2.05 | 1.76 | 1.97 | 3.7 |
+| 10.8 m (sphere) | 5.40 m | 1.00 | 1.50 | 4.9 kg |
+| 16 | 3.62 | 0.99 | 1.82 | 5.9 |
+| **23** | **3.02** | **1.19** | **1.90** | **6.2** |
+| 32 | 2.56 | 1.41 | 1.94 | 6.3 |
+| 50 | 2.05 | 1.76 | 1.97 | 6.4 |
+
+The film column is the **Earth-storage** pressure vessel, which is the only
+column that still boils once the leak is solved; from cold storage it is 0 kg
+at every length and the handling floor of the addendum is the whole answer.
+(It read 2.8-3.7 kg when this ADR was written, which was the Jupiter column of
+the *superseded* 4.4%-leak table. See the 2026-08-28 addendum.)
 
 **Nothing in the physics picks a row**, so the launch envelope does: a 5.4 m
 bore needs coils about 11 m across and orbital assembly, while a 3 m bore is
 about 7 m across and flies up built inside an 8 m fairing. Length is the cheap
 dimension for a rocket and diameter the expensive one. **23 m at a 3.02 m bore**,
-for a fifth more conductor and 0.8 kg more film.
+for a fifth more conductor and 1.3 kg more film.
 
 ### The plug, and why the projectile stays compact
 
@@ -61,8 +67,10 @@ runs wider than the rod.
 **The plug is close to free twice over.** It adds nothing to the film, because
 `eq:bag_film_mass` counts only the vapour fraction and condensed water exerts no
 pressure. And it works as a heat sink on the way to being a target, absorbing
-0.73 MJ/kg of warming and melting over 37.5 kg -- 27 MJ removed before the
-boiling step sees it.
+0.73 MJ/kg of warming and melting over 37.5 kg -- 27.4 MJ removed before the
+boiling step sees it, which is **20%** of the pulse's 137.5 MJ waste-heat bill
+(it was 13% of the 211 MJ bill the superseded leak implied). The heat sink is
+worth something only on the leg that still boils: see the 2026-08-28 addendum.
 
 ### The aperture argument, restated because the paper's mechanism is wrong
 
@@ -172,3 +180,68 @@ choice of 23 m over 50 m is favoured on film mass too, not merely tolerated.
 ## Reproducing the addendum
 
 `make bag-state`, section "D4: the handling floor under the film".
+
+## Addendum, 2026-08-28: the plug takes vapour away, it does not add it
+
+**The plug is a better heat sink than the paper says, and it works in the
+opposite direction to the sentence describing it.** `sec:needle_through_fog`
+reads: *"The vapor mass lands at 24.5 kg against 23.4 kg without the plug, and
+the saturation curve moves the mist from 306 K to 307 K."* Both halves point
+the wrong way. The plug is 37.5 kg of extra condensed mass absorbing heat the
+pulse was going to deliver anyway, so at a fixed bill it can only **lower** the
+vapour mass and **cool** the mist.
+
+The pair was never two configurations. 24.5 kg is `(211 - 213 x 0.73)/2.26` and
+23.4 kg is `0.11 x 213` from the superseded table's Jupiter column -- the same
+energy pool divided by two different latent heats, on the pre-solve 211 MJ bill.
+
+### The corrected numbers
+
+On the 137.5 MJ bill of the current `tab:bag_state`, at Earth storage, which is
+the only column that still boils:
+
+| | without the plug | with the plug |
+| --- | ---: | ---: |
+| left to boil | 92.8 MJ | **65.4 MJ** |
+| vapour mass | 39.3 kg | **27.7 kg** |
+| `x` | 0.185 | **0.130** |
+| mist | 316.3 K | **309.3 K** |
+| film, 23 m column | 6.2 kg | **4.2 kg** |
+| what actually flies | 6.2 kg (pressure) | **5.1 kg (handling)** |
+
+The plug removes 27.4 MJ, which is **20%** of the bill rather than the 13% it
+was worth against 211 MJ. Cold storage is where the argument stops applying
+entirely: from 122 K the slug never finishes melting with or without the plug,
+so on that leg the heat sink buys nothing the bag can spend.
+
+**The consequence is a design one, not a wording one.** At the flown 23 m
+column the plug drops the pressure vessel to 4.2 kg, which is below the 5.1 kg
+handling floor of the addendum above. **On the leg that still boils, the plug is
+what retires the pressure vessel** -- the same role cold storage plays on the
+other leg. `tab:axial_bag`'s Pressure column is the no-plug case and should stay
+that way, but the flown bag is handling-governed at both ends of the burn.
+
+### The loop the table still cuts
+
+`tab:bag_state`'s warming row is not independent of its mist row. "Warming and
+melting the slug up to liquid" warms liquid water up to whatever temperature the
+mist settles at, and the published 0.73 and 0.21 MJ/kg were closed against
+306 K and 328 K -- the mist of the *superseded* 4.4% table. Read back, they
+imply 4.10 and 4.14 kJ/kg/K, which is liquid water; the temperatures are the
+part that moved.
+
+Solving the two rows together (`bag_state.melting_fixed_point`, reported by
+`make bag-converge` as Cut 4) moves Earth storage to `x` = 0.202 at 318.2 K and
+5.35 kg of film, half a kilogram heavier, and gives the Jupiter column a slush
+at 275.5 K carrying 3.8 kg of vapour and 0.4 kg of film rather than a dry bag.
+
+**Reported, not applied.** The paper prints the warming row as an input, both
+gaps are under a kilogram of film, and neither overturns "cold storage removes
+the pressure vessel", which is what the section rests on. It is recorded because
+the 0.73 row is the last place in this cascade where a superseded number is
+still doing work.
+
+## Reproducing the second addendum
+
+`make bag-state`, sections "sec:needle_through_fog: the plug as a heat sink" and
+"The one loop the table still cuts"; `make bag-converge`, Cut 4.
