@@ -388,3 +388,72 @@ this cycle, because `eta_geom` is the largest unmeasured quantity in either
 repository (`sec:jet_efficiency`) and it decided the device choice outright in
 ADR 0014/0015. **Here it is not load-bearing**, which makes this the most
 efficiency-robust result in the repository rather than the most exposed.
+
+### The launch ledger does not rescue this cycle, and the argument that said it might was mine
+
+Charging the launched mass was flagged above as the top open task, on the
+expectation that it would demolish the 83.7x growth. It was worked, and it did
+something more interesting: **it first appeared to reverse the verdict, and then
+the reversal turned out to be an artefact of a mis-transferred calibration.**
+Recorded in full because the intermediate step is exactly the kind of result that
+gets quoted out of context. Scored by `launch_ledger_verdict()`.
+
+`two_leg_nozzle_sweep.RETURN_FLOOR` demands 1/15 kg returned per kilogram off the
+pad (2/3 of liftoff is ground propellant, a quarter of the remainder is launcher
+dry mass, so 0.25 kg reaches the intercept point). Read three ways:
+
+| cycle | returned/pad kg | vs 1/15 | vs rescaled 1/42 | per pad kg per yr | vs methalox |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 3S Jovian solar dive | 0.1254 | **1.88x** | 5.27x | 0.0383 | 50x |
+| paper single-impulse resonant dive | 0.0482 | **0.72x** | 2.03x | **0.0540** | 11,602x |
+
+**Reading 1, as committed.** The 3S cycle clears the floor with 88 percent margin
+and the paper's own dive fails it. Taken at face value this is decisive, because a
+cycle that cannot pay for its launched mass cannot be run in steady state on
+freshly launched payload however fast it compounds.
+
+**Reading 2, and why reading 1 does not stand.** The floor's own calibration
+sentence sets it against reusable rockets and says explicitly that the returned
+mass is "at ~60 km/s Earth-relative rather than sitting in LEO". Both cycles here
+return at **157.8 km/s**. A floor is a statement about what a returned kilogram is
+*worth*, so it has to be restated when the kilogram does different work: scored
+pushing to a common target, a 157.8 km/s stream is worth **2.80x** a 60 km/s one.
+The floor restates as **1/42**, and **both cycles clear it**. The paper's failure
+was an artefact of applying a threshold calibrated for a different return.
+
+The rescale deliberately uses the *closing speed alone*, via
+`return_value_ratio()`, not each cycle's own leverage. Leverage -- kilograms
+placed on the transfer per kilogram of stream consumed, 152.7 here against 14.2
+for the paper's dive -- already shows up in `returned/pad kg`, since a cycle that
+spends impactors well returns more. Rescaling by it too would credit the same
+efficiency twice and manufacture the answer.
+
+**Reading 3, the defect neither rescale fixes.** The floor is a *per-pass*
+quantity compared against a per-pass threshold, with no clock in it -- and the
+clock is precisely the axis that separates these two cycles. Divide by cycle time
+and the ordering flips back: 0.0383 against 0.0540 kg per pad kilogram per year,
+the paper's dive ahead by 1.41x, in agreement with the growth rate and the
+doubling time. **The un-normalised ledger is the odd reading out, and it is the
+only one that favoured the 3S cycle.**
+
+### Consequence
+
+The launch-ledger caveat raised earlier in this ADR is withdrawn in both
+directions. It does not demolish the 83.7x growth -- charged honestly, the 3S
+cycle returns 0.125 kg per kilogram off the pad and clears every version of the
+floor. Nor does it rescue the 3S cycle against the paper's, because the version
+of the floor that favoured it is the version whose calibration does not apply,
+and time-normalising it reproduces the growth-rate ordering.
+
+**So the ranking is unchanged for the third time.** The paper's single-impulse
+resonant dive doubles in 0.289 yr against this cycle's 0.503, and no accounting
+tried so far reverses it. What survives is narrower and worth keeping: this cycle
+uses a returned kilogram **10.7x more efficiently** (152.7 against 14.2 kg placed
+per kilogram of stream), because a 4.29 km/s departure wastes far fewer impactors
+than a 28.16 km/s one, and it beats an all-chemical stage flying the same
+departure from the same ballistic lob by **50x**. Both are real; neither buys back
+3.7x the clock.
+
+The remaining unexamined route to a shorter clock is multi-revolution transfer
+arcs, which the **transfer clock ceiling** rules out only for zero-revolution
+solutions.

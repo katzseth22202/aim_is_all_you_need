@@ -510,3 +510,74 @@ def test_specific_impulse_rises_only_as_the_square_root_of_efficiency() -> None:
     low = _three_synodic_ledger(jet_energy_efficiency=0.25).nozzle.specific_impulse
     high = _three_synodic_ledger(jet_energy_efficiency=1.0).nozzle.specific_impulse
     assert high / low == pytest.approx(2.0, abs=0.15)
+
+
+# --------------------------------------------------------------------------
+# The launch ledger, and why it does not decide this (ADR 0019 addendum 2)
+# --------------------------------------------------------------------------
+
+
+def _both_verdicts() -> "tuple[cycle.LaunchLedgerVerdict, cycle.LaunchLedgerVerdict]":
+    closure = cycle.solve_synodic_closure(3, params=_PARAMS)
+    assert closure is not None
+    mine = _three_synodic_ledger(jet_energy_efficiency=0.70)
+    paper = cycle.paper_resonant_dive_ledger(
+        closure.return_excess,
+        closure.push_axis_deg,
+        jet_energy_efficiency=0.70,
+        params=_PARAMS,
+    )
+    return (
+        cycle.launch_ledger_verdict(mine, _PARAMS),
+        cycle.launch_ledger_verdict(paper, _PARAMS),
+    )
+
+
+def test_as_committed_the_floor_says_ours_clears_and_the_papers_fails() -> None:
+    mine, paper = _both_verdicts()
+    assert mine.stated_margin == pytest.approx(1.88, abs=0.06)
+    assert paper.stated_margin == pytest.approx(0.72, abs=0.05)
+    assert mine.stated_margin > 1.0 > paper.stated_margin
+
+
+def test_the_return_value_ratio_isolates_the_closing_speed() -> None:
+    # Both cycles share one returning stream, so they must share one rescaled
+    # floor. A floor is a single number; rescaling it per-cycle by that cycle's
+    # own leverage would credit the same efficiency twice, since a cycle that
+    # uses impactors well already returns more per kilogram off the pad.
+    mine, paper = _both_verdicts()
+    assert mine.return_value_ratio == pytest.approx(paper.return_value_ratio)
+    assert mine.rescaled_floor == pytest.approx(paper.rescaled_floor)
+    assert mine.return_value_ratio == pytest.approx(2.80, abs=0.06)
+    # Their leverages differ a lot, which is exactly why it must not be the knob.
+    assert mine.leverage / paper.leverage > 5.0
+
+
+def test_rescaling_the_floor_makes_the_papers_failure_disappear() -> None:
+    # The honest consequence of the rescale argument: it removes the one axis on
+    # which the 3S cycle beat the paper's. Both clear, and by the same 2.6x ratio
+    # the un-rescaled ledger already showed.
+    mine, paper = _both_verdicts()
+    assert paper.rescaled_margin > 1.0
+    assert mine.rescaled_margin > 1.0
+    assert mine.rescaled_margin / paper.rescaled_margin == pytest.approx(
+        mine.stated_margin / paper.stated_margin, rel=1e-9
+    )
+    assert 1.0 / mine.rescaled_floor == pytest.approx(42.0, abs=2.0)
+
+
+def test_time_normalising_the_ledger_agrees_with_the_growth_rate() -> None:
+    # The committed floor is a per-pass quantity with no clock in it, and the
+    # clock is the axis that separates these two cycles. Divide by cycle time and
+    # the ordering flips back to match doubling time.
+    mine, paper = _both_verdicts()
+    assert mine.returned_per_pad_kg > paper.returned_per_pad_kg
+    assert paper.returned_per_pad_kg_per_year > mine.returned_per_pad_kg_per_year
+
+
+def test_both_cycles_beat_an_all_chemical_stage_by_orders_of_magnitude() -> None:
+    mine, paper = _both_verdicts()
+    assert mine.versus_chemical > 40.0
+    # The paper's dive is essentially chemically impossible, which is its own
+    # point: a 39 km/s departure from a ballistic lob is 10^4 in propellant.
+    assert paper.versus_chemical > 1000.0

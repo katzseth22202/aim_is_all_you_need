@@ -665,7 +665,11 @@ an 83.7x cycle is an 83.7x launch-rate cycle and the constraint has moved to the
 rather than vanished. Deliberately switches off the **launch ledger**.
 _Avoid_: comparing an impactor-scarce doubling time against the **doubling time**
 figures of ADR 0003/0008/0009/0013, which all charge launched mass or methalox --
-the two are different currencies and the ranking between them is meaningless.
+the two are different currencies and the ranking between them is meaningless;
+rescaling the **return floor** by a cycle's own leverage (that credits the same
+efficiency twice -- use the closing speed alone, `return_value_ratio()`); quoting
+the un-normalised **launch ledger** as a verdict, since it has no clock in it and
+the clock is what separates these cycles.
 
 **Radial-outward push axis**:
 Where the returning 150 km/s stream points when it reaches Earth: 2.3 deg off radially
@@ -767,14 +771,15 @@ uncanted upper bound; assuming the paper's solar-dive cycle is free of the same 
   `k` = 30 the un-steerable bulk term is a sixth of the impulse rather than a third.
   The cant costs under 5 points of delivered mass, and cancelling the retro impactor
   costs 0.6. The parking-orbit-plus-methalox alternative is not needed.
-- **The Jovian solar-dive cycle's growth is scored, but only in the currency that
-  flatters it.** The ADR 0019 addendum gives 83.7x per pass and a 0.513 yr doubling --
-  the fastest here by a wide margin, against 3.33-4.04 yr for the direct flyby and
-  1.45-1.74 for the **two-wave split** -- but under **impactor-scarce accounting**,
-  which treats launched slug as free and so switches off the **launch ledger** that
-  binds every one of those other figures. Re-scoring it with the ledger on is the
-  single most valuable open task, and nothing about the ranking should be quoted until
-  it is done. Unresolved.
+- ~~**The Jovian solar-dive cycle's growth is scored only in the currency that
+  flatters it.**~~ **Resolved** by ADR 0019's second addendum, and the **launch
+  ledger** turned out to cut neither way. Charged as committed, the 3S cycle returns
+  0.1254 kg per kilogram off the pad and clears the 1/15 floor 1.88x while the paper's
+  own dive fails at 0.72x -- but that floor was calibrated on a ~60 km/s return, and
+  these close at 157.8, worth 2.80x more payload pushed to a common target. Restated
+  at 1/42, **both clear**, so the failure was an artefact. And the floor carries no
+  clock: time-normalised it gives 0.0383 against 0.0540 kg per pad kg per year, the
+  paper's dive ahead, agreeing with doubling time. The ranking is unchanged.
 - **The paper's "doubling factor at two" does not reproduce.**
   `eq:external_reaction_mass` at `eta_jet` = 0.8 puts the per-cycle survival at the
   4 R_sun node near 0.71, which makes the **single-impulse resonant dive** grow payload

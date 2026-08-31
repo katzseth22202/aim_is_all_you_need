@@ -67,6 +67,7 @@ from src.conic_kernel import (
 from src.heliocentric_reintercept import single_impulse_resonant_dive
 from src.propulsion import payload_mass_ratio
 from src.retrograde_return_legs import _FlybyParams, _powered_flyby_params
+from src.two_leg_nozzle_sweep import PAYLOAD_FRACTION_AT_INTERCEPT, RETURN_FLOOR
 
 _SECONDS_PER_YEAR = 365.25 * 86400.0
 _MU_EARTH = float(Earth.k.to_value(u.km**3 / u.s**2))
@@ -127,6 +128,11 @@ DEFAULT_JET_ENERGY_EFFICIENCY = 0.60
 # eq:external_reaction_mass at eta_jet**2 = 0.6 and the optimal retrograde share
 # gives about 0.69.
 DEFAULT_PERIAPSIS_SURVIVAL = 0.60
+# Earth-closing speed of the cycle the 1/15 return floor was calibrated against:
+# the Jupiter-only retrograde return (sec:jupiter_only_growth).  The floor is a
+# value judgement about what a *returned* kilogram is worth, so it has to be
+# restated whenever the returned kilogram does a different amount of work.
+RETURN_FLOOR_REFERENCE_VB = 60.0
 
 
 def _dive_periapsis_radius(
@@ -1523,6 +1529,8 @@ class CycleGrowthLedger:
         departure_excess: Earth-relative departure excess (km/s).
         departure_aim_deg: Direction it must point, from Earth's prograde.
         cycle_years: Departure-to-return time (yr).
+        earth_closing_speed: Collision speed of the returning stream at Earth,
+            folded through Earth's surface escape speed (km/s).
         nozzle: The departure burn's ledger.
         periapsis_survival: Mass fraction surviving the solar-periapsis
             collision, both streams counted.
@@ -1538,6 +1546,7 @@ class CycleGrowthLedger:
     departure_excess: float
     departure_aim_deg: float
     cycle_years: float
+    earth_closing_speed: float
     nozzle: DepartureNozzleLedger
     periapsis_survival: float
     round_trip_fraction: float
@@ -1602,6 +1611,9 @@ def cycle_growth_ledger(
         departure_excess=departure_excess,
         departure_aim_deg=departure_aim_deg,
         cycle_years=cycle_years,
+        earth_closing_speed=speed_with_escape_energy(
+            stream_excess, (params or _powered_flyby_params()).v_esc_surface
+        ),
         nozzle=nozzle,
         periapsis_survival=periapsis_survival,
         round_trip_fraction=delivered * periapsis_survival,
@@ -1652,6 +1664,142 @@ def paper_resonant_dive_ledger(
         jet_energy_efficiency,
         periapsis_survival,
         params,
+    )
+
+
+# --------------------------------------------------------------------------
+# The launch ledger, and why it does not decide this
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LaunchLedgerVerdict:
+    """Whether a cycle earns its launched mass, read three ways.
+
+    ``two_leg_nozzle_sweep.RETURN_FLOOR`` demands 1/15 kg returned per kilogram
+    off the pad, set against reusable rockets and explicitly calibrated on a
+    return "at ~60 km/s Earth-relative rather than sitting in LEO".  Both cycles
+    scored here return at ~158 km/s, so that calibration does not transfer, and
+    applying it unchanged is a category error rather than a result.
+
+    Attributes:
+        label: Which cycle this is.
+        returned_per_pad_kg: Kilograms returning per kilogram off the pad.
+        stated_floor: The committed 1/15 floor.
+        stated_margin: ``returned_per_pad_kg`` over that floor.
+        leverage: Kilograms this cycle places on its transfer per kilogram of
+            returning stream it consumes.  Reported, but deliberately *not* used
+            to rescale the floor -- see :func:`launch_ledger_verdict`.
+        return_value_ratio: How much more a kilogram returning at this cycle's
+            closing speed is worth than one at ``RETURN_FLOOR_REFERENCE_VB``,
+            measured as the payload each pushes to a *common* target.
+        rescaled_floor: The floor restated at that value.
+        rescaled_margin: ``returned_per_pad_kg`` over the rescaled floor.
+        returned_per_pad_kg_per_year: The same currency, time-normalised.
+        chemical_delivered_fraction: What an all-methalox stage would place on
+            the same trajectory from the same ballistic lob.
+        versus_chemical: ``delivered_fraction`` over that.
+    """
+
+    label: str
+    returned_per_pad_kg: float
+    stated_floor: float
+    stated_margin: float
+    leverage: float
+    return_value_ratio: float
+    rescaled_floor: float
+    rescaled_margin: float
+    returned_per_pad_kg_per_year: float
+    chemical_delivered_fraction: float
+    versus_chemical: float
+
+
+def return_value_ratio(
+    closing_speed: float, params: Optional[_FlybyParams] = None
+) -> float:
+    """How much more a kilogram returning at ``closing_speed`` is worth than at 60 km/s.
+
+    Both are scored pushing to the *same* target -- the parking-orbit periapsis
+    speed -- so the ratio isolates the closing speed and says nothing about which
+    cycle consumes the stream.  That separation is the point: a cycle's own
+    leverage already shows up in how much mass it returns per kilogram off the
+    pad, so rescaling the floor by it too would credit the same efficiency twice.
+
+    Args:
+        closing_speed: Earth-relative collision speed of the returning stream,
+            folded through Earth's escape speed (km/s).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The value ratio, > 1 for a stream faster than the reference.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    at_speed = payload_mass_ratio(
+        p.v_depart_from * u.km / u.s,
+        closing_speed * u.km / u.s,
+        fudge_factor=STD_FUDGE_FACTOR,
+    )
+    reference = payload_mass_ratio(
+        p.v_depart_from * u.km / u.s,
+        RETURN_FLOOR_REFERENCE_VB * u.km / u.s,
+        fudge_factor=STD_FUDGE_FACTOR,
+    )
+    return float(at_speed) / float(reference)
+
+
+def launch_ledger_verdict(
+    growth: CycleGrowthLedger, params: Optional[_FlybyParams] = None
+) -> LaunchLedgerVerdict:
+    """Charge a cycle for its launched mass, and show why the floor cannot decide.
+
+    Three readings of the same ledger, which do not agree:
+
+    1. **As committed.** 1/15 kg returned per kilogram off the pad.  The 3S
+       Jovian dive clears it 1.9x and the paper's own dive fails it at 0.7x.
+    2. **Rescaled for what a returned kilogram is worth.** The floor is a
+       statement about the value of returned mass, and both cycles return at
+       ~158 km/s rather than the ~60 it was set at, which is worth 2.8x more
+       payload pushed to a common target.  Restating the floor at that value
+       gives ~1/42, and **both cycles clear it** -- so the failure disappears
+       and the floor stops discriminating.
+    3. **Time-normalised.** The committed floor is a per-pass quantity with no
+       clock in it, which is exactly the axis that separates these two cycles.
+       Divide by the cycle time and the ordering flips back to agree with the
+       growth rate: the paper's dive wins.
+
+    Reading 1 is the only one that favours the 3S cycle, and it is the reading
+    whose calibration does not apply.  Recorded so the ledger is not quoted as a
+    rescue.
+
+    Args:
+        growth: The cycle to charge.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`LaunchLedgerVerdict`.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    returned = PAYLOAD_FRACTION_AT_INTERCEPT * growth.round_trip_fraction
+    leverage = 1.0 / growth.nozzle.impactor_per_delivered_kg
+    value = return_value_ratio(growth.earth_closing_speed, p)
+    rescaled = RETURN_FLOOR / value
+    # An all-chemical architecture has no returning stream to park it, so the
+    # methalox stage must fly the whole way from the ballistic lob.
+    chemical = float(
+        np.exp(-(growth.nozzle.delta_v + p.v_depart_from) / p.exhaust_speed)
+    )
+    return LaunchLedgerVerdict(
+        label=growth.label,
+        returned_per_pad_kg=returned,
+        stated_floor=RETURN_FLOOR,
+        stated_margin=returned / RETURN_FLOOR,
+        leverage=leverage,
+        return_value_ratio=value,
+        rescaled_floor=rescaled,
+        rescaled_margin=returned / rescaled,
+        returned_per_pad_kg_per_year=returned / growth.cycle_years,
+        chemical_delivered_fraction=chemical,
+        versus_chemical=growth.nozzle.delivered_fraction / chemical,
     )
 
 
@@ -2027,8 +2175,44 @@ def main() -> None:
         f"{fastest.doubling_years:.3f} yr "
         f"(millionfold in {fastest.millionfold_years:.1f} yr)."
     )
+    print("\n-- charging the launch ledger, read three ways --")
     print(
-        "CAVEAT: growth is per impactor kilogram, and the launched slug grows with\n"
+        tabulate(
+            [
+                [
+                    verdict.label,
+                    f"{verdict.returned_per_pad_kg:.4f}",
+                    f"{verdict.stated_margin:.2f}x",
+                    f"{verdict.rescaled_margin:.2f}x",
+                    f"{verdict.returned_per_pad_kg_per_year:.4f}",
+                    f"{verdict.versus_chemical:,.0f}x",
+                ]
+                for verdict in (
+                    launch_ledger_verdict(ledger, params) for ledger in ledgers
+                )
+            ],
+            headers=[
+                "cycle",
+                "returned/pad kg",
+                "vs 1/15",
+                "vs rescaled",
+                "per pad kg/yr",
+                "vs methalox",
+            ],
+            tablefmt="github",
+        )
+    )
+    verdict = launch_ledger_verdict(ledgers[0], params)
+    print(
+        f"The 1/15 floor was calibrated on a ~{RETURN_FLOOR_REFERENCE_VB:.0f} km/s return; these\n"
+        f"close at {ledgers[0].earth_closing_speed:.0f} km/s, worth {verdict.return_value_ratio:.2f}x more payload pushed to a\n"
+        f"common target, so the floor restates as 1/{1 / verdict.rescaled_floor:.0f}. Both cycles then clear it,\n"
+        "and the paper's failure disappears -- the one axis on which this cycle led is\n"
+        "an artefact of a floor calibrated for a different return. The floor also has\n"
+        "no clock in it; time-normalised, the ordering matches doubling time again."
+    )
+    print(
+        "\nCAVEAT: growth is per impactor kilogram, and the launched slug grows with\n"
         f"it -- {ledgers[0].launched_slug_per_impactor_kg:.0f} kg lofted per impactor kg, so a "
         f"{ledgers[0].return_per_impactor_kg:.0f}x cycle is also a "
         f"{ledgers[0].return_per_impactor_kg:.0f}x launch-rate cycle. The constraint moves\n"
