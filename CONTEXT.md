@@ -623,6 +623,35 @@ on bend, **3S is the only synodic multiple that closes**, bracketed on both side
 _Avoid_: reading a missing 4S closure as a search failure; forgetting that
 multi-revolution arcs, unexplored, are the only route past the ceiling.
 
+**Departure nozzle ledger**:
+What the Earth departure costs once the returning stream drives a magnetic nozzle
+rather than a bare collision (`departure_nozzle_ledger()`, `cycle_growth_ledger()`,
+ADR 0019 addendum). Two corrections turn the **radial-outward push axis** from the
+architecture's largest risk into a rounding error. First, the angle the
+**impact-angle impulse law** consumes is *not* the **aim separation**: the free
+**departure-hyperbola mirror** (+/-20.67 deg at `v_inf` 10.54) plus the vehicle's
+own motion take 110.6 deg down to 94 deg. Second, the un-steerable `cos theta`
+term has magnitude 1 whatever the **slug ratio**, while the steerable term grows as
+`sqrt(k)`, so at `k` = 30 the bulk is a sixth of the impulse and the whole cant
+costs under 5 points of delivered mass. At `eta_jet^2` = 0.6 the 3S departure runs
+Isp 2214 s and delivers 0.823, spending 0.59% of the vehicle in impactors.
+_Avoid_: feeding the SOI **aim separation** into `beta`; scaling the `cos theta`
+term by the jet efficiency (momentum conservation on the arriving impactor does not
+care how good the nozzle is -- only the exhaust term scales); reading the cant as
+expensive without naming `k`.
+
+**Impactor-scarce accounting**:
+Scoring the loop on returning kilograms per *impactor* kilogram, with Earth-launched
+slug treated as free -- one impactor kg buys `k` kg of spent slug, which flies
+`k*f/(1-f)` kg of vehicle, of which the solar node keeps `s`. It is what makes the
+3S cycle grow 83.7x per pass and double in 0.513 yr, the fastest in this repository.
+It is also **an assumption, not a result**: the launched slug scales one-for-one, so
+an 83.7x cycle is an 83.7x launch-rate cycle and the constraint has moved to the pad
+rather than vanished. Deliberately switches off the **launch ledger**.
+_Avoid_: comparing an impactor-scarce doubling time against the **doubling time**
+figures of ADR 0003/0008/0009/0013, which all charge launched mass or methalox --
+the two are different currencies and the ranking between them is meaningless.
+
 **Radial-outward push axis**:
 Where the returning 150 km/s stream points when it reaches Earth: 2.3 deg off radially
 outward (98.55 deg from prograde), because the boosted climb-out is nearly radial -- its
@@ -697,6 +726,13 @@ uncanted upper bound; assuming the paper's solar-dive cycle is free of the same 
 - The **transfer clock ceiling** and the **bend deficit** bracket the **Jovian
   solar-dive cycle** from opposite sides: short clocks demand more bend than Jupiter
   has, long clocks demand a slower transfer than exists.
+- The **departure nozzle ledger** is what makes the **radial-outward push axis**
+  survivable: the same misalignment that costs 53% at `k` = 3 costs under 5 points
+  at `k` = 30, because the **slug ratio** dilutes the un-steerable bulk term.
+- **Impactor-scarce accounting** and the **launch ledger** are the same ledger with
+  one term switched off. Every headline in the ADR 0019 addendum is stated in the
+  first and would have to be restated in the second before it can be ranked against
+  anything else in this repository.
 - The **radial-outward push axis** is the **push axis** of the near-Sun architecture,
   and it constrains the *paper's* solar-dive cycle as well as the **Jovian solar-dive
   cycle** -- the two differ in how much cant they need, not in whether they need it.
@@ -709,22 +745,29 @@ uncanted upper bound; assuming the paper's solar-dive cycle is free of the same 
 > **Domain expert:** "That's the **lunar-return optimum** — it isn't a **PuffSat scenario** at all, so it doesn't belong in the **scenario table**. Present it separately."
 
 ## Flagged ambiguities
-- **The Jovian solar-dive cycle's Earth push is quoted uncanted.** Its 15.76 payload
-  mass ratio at 3S assumes the collision pushes along its own impact axis, but the
-  **radial-outward push axis** sits 110.6 deg from the departure the cycle needs, where
-  ADR 0012's `beta` gives 2.70 against the along-axis 4.16 at `k = 9`. The alternative
-  is the **closed cycle**'s parking-orbit route -- push sub-escape, **apoapsis
-  reversal**, depart on methalox -- which swaps the cant for a rocket-equation charge.
-  Which is cheaper is unresolved, and it is the largest open risk in ADR 0019.
-- **Growth rate has not been scored for the Jovian solar-dive cycle, and the blocker is
-  the paper's own number.** Rolling it up needs the per-cycle survival fraction at the
-  4 R_sun collision node. `eq:external_reaction_mass` gives about 0.71 at
-  `eta_jet` = 0.8, which implies the paper's **single-impulse resonant dive** grows the
-  payload by ~3.8 per cycle -- but `sec:earth_reintercept` says the two-impulse loop
-  "holds the doubling factor at two" and that the single-impulse dive falls *below* it.
-  Those cannot both be right. Until it is settled, neither architecture can be ranked on
-  doubling time. Unresolved, and load-bearing for whether ADR 0019's cycle is worth
-  flying at all.
+- ~~**The Jovian solar-dive cycle's Earth push is quoted uncanted.**~~ **Resolved**
+  by the ADR 0019 addendum, and it reversed sign: the diagnosis that the cant was
+  the largest open risk was wrong twice over. The angle was the SOI **aim
+  separation** rather than the vehicle-frame one (110.6 deg against 94), and at
+  `k` = 30 the un-steerable bulk term is a sixth of the impulse rather than a third.
+  The cant costs under 5 points of delivered mass, and cancelling the retro impactor
+  costs 0.6. The parking-orbit-plus-methalox alternative is not needed.
+- **The Jovian solar-dive cycle's growth is scored, but only in the currency that
+  flatters it.** The ADR 0019 addendum gives 83.7x per pass and a 0.513 yr doubling --
+  the fastest here by a wide margin, against 3.33-4.04 yr for the direct flyby and
+  1.45-1.74 for the **two-wave split** -- but under **impactor-scarce accounting**,
+  which treats launched slug as free and so switches off the **launch ledger** that
+  binds every one of those other figures. Re-scoring it with the ledger on is the
+  single most valuable open task, and nothing about the ranking should be quoted until
+  it is done. Unresolved.
+- **The paper's "doubling factor at two" does not reproduce.**
+  `eq:external_reaction_mass` at `eta_jet` = 0.8 puts the per-cycle survival at the
+  4 R_sun node near 0.71, which makes the **single-impulse resonant dive** grow payload
+  by ~3.8 per cycle -- yet `sec:earth_reintercept` says the two-impulse loop "holds the
+  doubling factor at two" and that the single-impulse dive falls *below* it. Those
+  cannot both be right, and the paper's published 17 yr millionfold rests on the
+  smaller one. ADR 0019's addendum sidesteps it by charging a stated 40% propellant at
+  that node rather than deriving it. Unresolved, and it belongs to the paper repo.
 - **ADR 0019's 6.84 deg 2S bend deficit is inside the real-orbit noise.** ADR 0011 found
   real eccentric Jupiter swings the perijove margin by 20,515 km window to window, far
   more than this. So 2S is *unpayable at a price the circular model can see* -- about

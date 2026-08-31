@@ -224,3 +224,133 @@ raises `v_rf` from 15.24 to 16.79 km/s). **We take 3S and spend nothing.**
   perihelion at all, only to be at 4 solar radii at the right moment, which floors at
   Jupiter's own 13.0579 km/s and is cheaper to place than the retrograde dive's 14.1602.
   Unexplored.
+
+## Addendum: the departure nozzle, and the fastest doubling time found so far
+
+Date: 2026-08-31
+
+The body above left the Earth-side push as the largest open risk, quoting an
+uncanted payload mass ratio of 15.76 and noting the 110.6 degree cant would
+reduce it by an unknown amount. That question is now closed, and the answer
+reverses its sign: **the cant costs almost nothing, and the cycle grows far
+faster than anything previously recorded in this repository.** Two corrections
+and one modelling change get there.
+
+Scored by `cycle_growth_ledger()` / `paper_resonant_dive_ledger()`, printed by
+`make jovian-dive`. The impulse law itself stays in its one home,
+`circular_resonance_impulse.impulse_per_impactor_kg()`, which now takes an
+optional `jet_energy_efficiency`.
+
+### Correction 1: 110.6 degrees was the wrong angle, and the right one is friendlier
+
+110.6 degrees is the **aim separation**, a diagnostic between excess vectors at
+the patched-conic boundary. CONTEXT.md already warns against feeding it to the
+impulse law, and the body of this ADR did exactly that. The law wants the angle
+at the 200 km burn point relative to the *moving* vehicle:
+
+- The **departure-hyperbola mirror** is free. At `v_inf` = 10.54 km/s the
+  departure hyperbola has `e` = 2.833, so its periapsis velocity sits
+  ±20.67 degrees off the outgoing excess and the sign is ours. Taking the sign
+  that rotates the thrust axis *toward* the stream puts it at +8.61 degrees.
+- The impactor's own Earth hyperbola barely bends: at `v_inf` = 157.42 km/s,
+  `e` = 410 and the turn is 0.28 degrees. It arrives on a straight line.
+- Subtracting the vehicle's own velocity leaves **93.9 to 95.5 degrees** across
+  the burn, at a closing speed of 158.2 to 158.5 km/s.
+
+So the stream arrives essentially perpendicular, only ~5 degrees past square.
+
+### Correction 2: at k = 30 the un-steerable part is a sixth of the impulse
+
+The impulse law splits into a steerable and an un-steerable piece:
+
+    beta(theta, k, eta) = sqrt(eta*(1+k) - sin^2 theta) + cos theta
+                          \_______ thermal, aimed ______/   \__ bulk __/
+
+The `cos theta` term is the impactor's own momentum -- the merged blob's centre
+of mass drifts along the incoming direction at `w/(1+k)`, and no field turns it.
+Its magnitude is **1 regardless of `k`**, while the steerable term grows as
+`sqrt(k)`. So dilution drowns a fixed-size wrong-way push in a growing right-way
+one:
+
+| `k` | beta along axis | beta at 110.6 deg | kept |
+| ---: | ---: | ---: | ---: |
+| 3 | 3.000 | 1.415 | 47% |
+| 9 | 4.162 | 2.669 | 64% |
+| 30 | 6.568 | 5.137 | 78% |
+| 100 | 11.050 | 9.654 | 87% |
+
+The efficiency multiplies only the exhaust term. Momentum conservation on the
+arriving impactor does not care how good the nozzle is, so a 60 percent *energy*
+efficient jet scales exhaust *speed* by `sqrt(0.6)` and leaves `cos theta` alone.
+
+k = 30 is comfortably inside the **plume ignition window** at this cycle's
+158 km/s closing speed: `eps_th = w^2 k / 2(1+k)^2` gives 387 MJ/kg against the
+84.4 MJ/kg ignition bill, a 4.6x margin, with the upper root near k ~ 150. That
+headroom is a gift of the 150 km/s return -- at the Jupiter-only cycle's 75 km/s,
+k = 30 sits at 87.8 MJ/kg, right on the edge.
+
+### The 3S departure, k = 30, eta_jet^2 = 0.60
+
+```
+impact angle (vehicle frame)     93.9 -> 95.5 deg
+closing speed                   158.2 -> 158.5 km/s
+beta, canted                      4.114     thermal +4.196, bulk -0.082
+effective exhaust speed          21.71 km/s   (Isp 2214 s)
+burn                              4.2895 km/s  (parking orbit 10.9503 -> 15.2398)
+
+MASS FRACTION SENT TO JUPITER     0.823
+impactors consumed                0.59% of the vehicle -- 1 kg flies 169 kg
+```
+
+Cancelling the retro impactor costs **0.6 points** of delivered mass: at 94.7
+degrees the cosine has almost nothing left in it. The whole cant is worth **under
+5 points** against the same burn flown straight down the axis. The reason is
+blunt: `dv/v_e` = 0.198. When Isp is 2214 s and the burn is 4.29 km/s, angle
+penalties land in the third decimal.
+
+With 40 percent of the mass at 4 solar radii spent as propellant across both
+streams -- conservative, since `eq:external_reaction_mass` at the same efficiency
+gives about 31 percent -- the round trip returns **49.4 percent** of departing
+mass.
+
+### Growth, with Earth-launched mass treated as free
+
+Counting only impactor kilograms as scarce, one impactor kilogram buys `k`
+kilograms of spent slug, which flies `k*f/(1-f)` kilograms of vehicle through the
+departure, of which the solar collision keeps `s`:
+
+| cycle | `v_inf` | theta (deg) | w (km/s) | Isp (s) | departs | round trip | per impactor kg | cycle | e-fold/yr | doubling |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| this 3S Jovian solar dive | 10.54 | 94-95 | 158-159 | 2214 | 0.823 | 0.494 | **83.7** | 3.276 yr | 1.351 | **0.513 yr** |
+| paper single-impulse resonant dive | 37.53 | 31-38 | 148-125 | 2367 | 0.297 | 0.178 | 7.6 | 0.893 yr | **2.274** | **0.305 yr** |
+
+**Both are the fastest doubling times this repository has recorded**, by a wide
+margin -- against 3.33-4.04 yr for the Jupiter-only direct flyby (ADR 0008/0009),
+1.37-1.51 yr for the unpowered assist chain (ADR 0003), and 1.45-1.74 yr for the
+two-wave split (ADR 0013). A millionfold takes 10.3 yr on the 3S cycle and 6.1 yr
+on the paper's, against the paper's own published 17 yr.
+
+They are **not** comparable to those earlier numbers, and the reason is the next
+section. The paper's row is derived from `single_impulse_resonant_dive()`, not
+quoted, so both rows sit on one device and one set of constants.
+
+### The ranking did not flip, and the assumption is doing the work
+
+This cycle wins every per-pass number -- 2.8x the departure survival, 11x the
+impactor economy -- and still loses on rate, because 3.7x the clock beats 11x the
+payload once the logarithm is taken. Modelling the nozzle properly raised both
+architectures together and left the ordering intact.
+
+**Free Earth-launched mass is the load-bearing assumption, and it is a strong
+one.** The 83.7x growth is 83.7x *in impactors*; the slug scales one-for-one, at
+30 kg lofted per impactor kilogram. Three cycles is a 5.9e5 launch-rate
+multiplier. The constraint has moved to the pad, not vanished. CONTEXT.md's
+**launch ledger** -- which binds in 56 of 64 cells wherever it is charged -- is
+exactly the accounting this deliberately switches off, and no result here
+survives turning it back on unchanged.
+
+Two smaller caveats. `eta_geom` remains unmeasured (`sec:jet_efficiency` says
+nothing in either repository bounds it), so 0.60 is a stated operating point, not
+a result. And the retrograde projectile stream is assumed to pay the same
+departure fraction as the prograde payload, which is approximate: its dive needs
+a hotter Jovian arrival (14.16 against 11.96 km/s), so its departure differs.

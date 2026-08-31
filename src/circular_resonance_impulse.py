@@ -272,34 +272,48 @@ class _Geometry:
 
 
 def impulse_per_impactor_kg(
-    impact_angle: u.Quantity, slug_ratio: float = _DEFAULT_SLUG_RATIO
+    impact_angle: u.Quantity,
+    slug_ratio: float = _DEFAULT_SLUG_RATIO,
+    jet_energy_efficiency: float = 1.0,
 ) -> float:
-    """Ideal collimated impulse per arriving impactor kilogram.
+    """Collimated impulse per arriving impactor kilogram.
 
     The exhaust is canted just enough to carry the incoming transverse momentum,
     so the vehicle takes no sideways kick and the axial impulse is what is left:
-    ``sqrt(1 + k - sin^2 theta) + cos theta``, in units of the closing speed.
-    At 180 degrees this is ADR 0009's head-on nozzle ``sqrt(1+k) - 1``; at zero
-    it is the growth push's ``1 + sqrt(1+k)``.
+    ``sqrt(eta*(1 + k) - sin^2 theta) + cos theta``, in units of the closing
+    speed.  At ``eta`` = 1 and 180 degrees this is ADR 0009's head-on nozzle
+    ``sqrt(1+k) - 1``; at zero degrees it is the growth push's ``1 + sqrt(1+k)``.
+
+    The efficiency multiplies only the *exhaust* term.  The ``cos theta`` term is
+    the impactor's own momentum arriving through the nozzle -- bulk drift of the
+    merged blob, fixed by where the impactor came from -- and momentum
+    conservation does not care how good the nozzle is.  ``eta`` is the paper's
+    ``eta_jet**2``, the fraction of collision energy that becomes coherent axial
+    momentum (``sec:jet_efficiency``), so a nozzle quoted at 60 percent *energy*
+    efficiency scales exhaust *speed* by ``sqrt(0.6)``.
 
     Args:
         impact_angle: Angle from the thrust axis to the impactor's velocity
             relative to the vehicle.  180 degrees is exactly head-on.
         slug_ratio: Kilograms of carried slug per kilogram of arriving impactor.
+        jet_energy_efficiency: Fraction of collision energy reaching coherent
+            axial exhaust momentum, in (0, 1].  Defaults to the loss-free ceiling.
 
     Returns:
         Impulse per impactor kilogram, in units of the closing speed.
 
     Raises:
-        ValueError: If the slug ratio is not positive.
+        ValueError: If the slug ratio is not positive, or the efficiency is not
+            in (0, 1].
     """
 
     if slug_ratio <= 0.0:
         raise ValueError("slug_ratio must be positive")
+    if not 0.0 < jet_energy_efficiency <= 1.0:
+        raise ValueError("jet_energy_efficiency must lie in (0, 1]")
     theta = float(impact_angle.to_value(u.rad))
-    return float(
-        np.sqrt(max(0.0, 1.0 + slug_ratio - np.sin(theta) ** 2)) + np.cos(theta)
-    )
+    exhaust = jet_energy_efficiency * (1.0 + slug_ratio) - np.sin(theta) ** 2
+    return float(np.sqrt(max(0.0, exhaust)) + np.cos(theta))
 
 
 def _mu_earth() -> float:

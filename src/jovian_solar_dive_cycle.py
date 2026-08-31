@@ -37,15 +37,18 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 from astropy import units as u
-from boinor.bodies import Sun
+from astropy.constants import g0
+from boinor.bodies import Earth, Sun
 from scipy.optimize import brentq, fsolve
 from tabulate import tabulate
 
 from src.astro_constants import (
+    LEO_ALTITUDE,
     LOW_JUPITER_ALTITUDE,
     SOLAR_DIVE_PERIAPSIS_SOLAR_RADII,
     STD_FUDGE_FACTOR,
 )
+from src.circular_resonance_impulse import impulse_per_impactor_kg
 from src.conic_kernel import (
     ConicState,
     conic_radius_crossings,
@@ -61,10 +64,14 @@ from src.conic_kernel import (
     unpowered_bend_angle,
     wrap_pi,
 )
+from src.heliocentric_reintercept import single_impulse_resonant_dive
 from src.propulsion import payload_mass_ratio
 from src.retrograde_return_legs import _FlybyParams, _powered_flyby_params
 
 _SECONDS_PER_YEAR = 365.25 * 86400.0
+_MU_EARTH = float(Earth.k.to_value(u.km**3 / u.s**2))
+_BURN_RADIUS = float((Earth.R + LEO_ALTITUDE).to_value(u.km))
+_STANDARD_GRAVITY = float(g0.to_value(u.km / u.s**2))
 
 # Hyperbolic-excess speed the boosted projectile keeps after climbing out of the
 # Sun (km/s) -- the paper's ~150 km/s Earth-crossing scale (sec:four_radii_thermal).
@@ -100,6 +107,26 @@ DSM_LEG_FRACTION = 0.80
 # of them (the price roughly doubles a few degrees either side of the minimum).
 _DSM_AIM_SAMPLES = 33
 _DSM_REFINE_SAMPLES = 25
+# Steps used to integrate the departure burn.  Both the closing speed and the
+# impact angle move as the vehicle accelerates, so the rocket equation is
+# integrated rather than evaluated at a midpoint -- on the paper's own dive the
+# closing speed falls 148 -> 125 km/s across the burn, which a midpoint hides.
+_BURN_INTEGRATION_STEPS = 400
+
+# Defaults for the departure-nozzle ledger.  A magnetic nozzle rather than a bare
+# collision is the flown device at these speeds (sec:minimum_nozzle -- no wall
+# survives the pass), so the slug ratio is the designer's knob and 30 sits well
+# inside the plume ignition window at this cycle's ~158 km/s closing speed.
+DEFAULT_SLUG_RATIO = 30.0
+# The paper's eta_jet**2: the fraction of collision energy reaching coherent
+# axial exhaust momentum.  Nothing in either repository bounds eta_geom
+# (sec:jet_efficiency), so this is a stated operating point, not a result.
+DEFAULT_JET_ENERGY_EFFICIENCY = 0.60
+# Mass fraction surviving the 4 solar-radii collision, both the prograde payload
+# and the opposing projectile stream counted.  0.60 is deliberately conservative:
+# eq:external_reaction_mass at eta_jet**2 = 0.6 and the optimal retrograde share
+# gives about 0.69.
+DEFAULT_PERIAPSIS_SURVIVAL = 0.60
 
 
 def _dive_periapsis_radius(
@@ -1281,6 +1308,322 @@ def soi_seam_correction(closure: SynodicCycleClosure) -> float:
 
 
 # --------------------------------------------------------------------------
+# The departure nozzle, and what the cycle grows
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DepartureNozzleLedger:
+    """A magnetic nozzle catching the returning stream to fly the Earth departure.
+
+    Attributes:
+        slug_ratio: Kilograms of carried slug per kilogram of arriving impactor.
+        jet_energy_efficiency: Fraction of collision energy reaching coherent
+            axial exhaust momentum (the paper's ``eta_jet**2``).
+        thrust_axis_deg: Direction of the periapsis velocity the burn adds to,
+            from Earth's prograde direction.  The **departure-hyperbola mirror**
+            makes this the outgoing aim plus *or* minus ``arcsin(1/e)``, and the
+            sign is free, so the ledger takes whichever delivers more.
+        impact_angle_start_deg: Vehicle-frame impact angle as the burn lights.
+        impact_angle_end_deg: The same as it finishes.
+        closing_speed_start: Impactor speed relative to the moving vehicle at
+            the start of the burn (km/s).
+        closing_speed_end: The same at the end (km/s).
+        effective_exhaust_speed: Slug-charged exhaust speed at mid-burn (km/s).
+        specific_impulse: That speed as an Isp (s).
+        delta_v: Burn the departure needs (km/s).
+        delivered_fraction: Mass fraction surviving the burn.
+        impactor_fraction: Impactor kilograms consumed per departing kilogram.
+    """
+
+    slug_ratio: float
+    jet_energy_efficiency: float
+    thrust_axis_deg: float
+    impact_angle_start_deg: float
+    impact_angle_end_deg: float
+    closing_speed_start: float
+    closing_speed_end: float
+    effective_exhaust_speed: float
+    specific_impulse: float
+    delta_v: float
+    delivered_fraction: float
+    impactor_fraction: float
+
+
+def _vehicle_frame_impact(
+    stream_axis_deg: float,
+    thrust_axis_deg: float,
+    stream_speed: float,
+    vehicle_speed: float,
+) -> Tuple[float, float]:
+    """Impact angle and closing speed seen by a vehicle moving along its thrust axis.
+
+    The **aim separation** measured between excess vectors at the patched-conic
+    boundary is a diagnostic, *not* what the impulse law consumes (CONTEXT.md):
+    the law wants the angle at the burn point relative to the moving vehicle.
+    Subtracting the vehicle's velocity is the whole difference, and it is worth
+    tens of degrees.
+
+    Args:
+        stream_axis_deg: Direction the impactor stream travels, from Earth's
+            prograde direction.
+        thrust_axis_deg: Direction the vehicle's periapsis velocity points.
+        stream_speed: Impactor speed at the burn radius (km/s).
+        vehicle_speed: Vehicle speed at that instant (km/s).
+
+    Returns:
+        (impact angle in rad from the thrust axis, closing speed in km/s).
+    """
+    relative = np.radians(stream_axis_deg - thrust_axis_deg)
+    along = stream_speed * float(np.cos(relative)) - vehicle_speed
+    across = stream_speed * float(np.sin(relative))
+    return float(np.arctan2(abs(across), along)), float(np.hypot(along, across))
+
+
+def departure_nozzle_ledger(
+    departure_excess: float,
+    departure_aim_deg: float,
+    stream_excess: float,
+    stream_axis_deg: float,
+    slug_ratio: float,
+    jet_energy_efficiency: float,
+    params: Optional[_FlybyParams] = None,
+) -> DepartureNozzleLedger:
+    """Fly the Earth departure on a magnetic nozzle fed by the returning stream.
+
+    The vehicle carries slug at ``slug_ratio``; the arriving stream vaporises it
+    and the field collimates the plume.  Only the slug is drawn from the vehicle,
+    so the rocket equation is charged against it -- but both the closing speed
+    and the impact angle move as the vehicle accelerates, so it is integrated
+    over ``_BURN_INTEGRATION_STEPS`` rather than evaluated once.
+
+    Args:
+        departure_excess: Earth-relative excess speed the departure must reach (km/s).
+        departure_aim_deg: Direction that excess must point, from Earth's prograde.
+        stream_excess: Earth-relative excess speed of the arriving stream (km/s).
+        stream_axis_deg: Direction the stream travels, from Earth's prograde.
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`DepartureNozzleLedger` for the better mirror sign.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    speed_end = speed_with_escape_energy(departure_excess, p.v_esc_leo)
+    stream_speed = speed_with_escape_energy(stream_excess, p.v_esc_leo)
+    mirror = float(
+        np.degrees(
+            half_turn_angle(
+                hyperbolic_eccentricity(_MU_EARTH, _BURN_RADIUS, departure_excess)
+            )
+        )
+    )
+    speeds = np.linspace(p.v_depart_from, speed_end, _BURN_INTEGRATION_STEPS + 1)
+    best: Optional[DepartureNozzleLedger] = None
+    for sign in (1.0, -1.0):
+        axis = departure_aim_deg + sign * mirror
+        log_fraction = 0.0
+        for lower, upper in zip(speeds[:-1], speeds[1:]):
+            angle, closing = _vehicle_frame_impact(
+                stream_axis_deg, axis, stream_speed, 0.5 * (float(lower) + float(upper))
+            )
+            beta = impulse_per_impactor_kg(
+                angle * u.rad, slug_ratio, jet_energy_efficiency
+            )
+            if beta <= 0.0:
+                log_fraction = -np.inf
+                break
+            log_fraction -= (float(upper) - float(lower)) / (
+                beta * closing / slug_ratio
+            )
+        delivered = float(np.exp(log_fraction))
+        start_angle, start_speed = _vehicle_frame_impact(
+            stream_axis_deg, axis, stream_speed, p.v_depart_from
+        )
+        end_angle, end_speed = _vehicle_frame_impact(
+            stream_axis_deg, axis, stream_speed, speed_end
+        )
+        mid_angle, mid_speed = _vehicle_frame_impact(
+            stream_axis_deg, axis, stream_speed, 0.5 * (p.v_depart_from + speed_end)
+        )
+        exhaust = (
+            impulse_per_impactor_kg(
+                mid_angle * u.rad, slug_ratio, jet_energy_efficiency
+            )
+            * mid_speed
+            / slug_ratio
+        )
+        candidate = DepartureNozzleLedger(
+            slug_ratio=slug_ratio,
+            jet_energy_efficiency=jet_energy_efficiency,
+            thrust_axis_deg=axis,
+            impact_angle_start_deg=float(np.degrees(start_angle)),
+            impact_angle_end_deg=float(np.degrees(end_angle)),
+            closing_speed_start=start_speed,
+            closing_speed_end=end_speed,
+            effective_exhaust_speed=exhaust,
+            specific_impulse=exhaust / _STANDARD_GRAVITY,
+            delta_v=speed_end - p.v_depart_from,
+            delivered_fraction=delivered,
+            impactor_fraction=(1.0 - delivered) / slug_ratio,
+        )
+        if best is None or candidate.delivered_fraction > best.delivered_fraction:
+            best = candidate
+    assert best is not None
+    return best
+
+
+@dataclass(frozen=True)
+class CycleGrowthLedger:
+    """What one cycle multiplies, counting only impactor kilograms as precious.
+
+    This scores the architecture under the assumption that **mass lifted off
+    Earth is free**, so the slug is not charged and the only scarce input is the
+    returning stream.  That assumption is doing heavy lifting -- the launched
+    slug grows in lockstep with the payload, so the constraint moves to the pad
+    rather than disappearing (see ``return_per_impactor_kg`` against
+    ``launched_slug_per_impactor_kg``). CONTEXT.md's **launch ledger** is the
+    accounting this deliberately switches off.
+
+    Attributes:
+        label: Which cycle this is.
+        departure_excess: Earth-relative departure excess (km/s).
+        departure_aim_deg: Direction it must point, from Earth's prograde.
+        cycle_years: Departure-to-return time (yr).
+        nozzle: The departure burn's ledger.
+        periapsis_survival: Mass fraction surviving the solar-periapsis
+            collision, both streams counted.
+        round_trip_fraction: Departing mass that comes home.
+        return_per_impactor_kg: Returning kilograms per impactor kilogram spent.
+        launched_slug_per_impactor_kg: Slug that had to be lofted, per the same.
+        growth_rate: Natural-log growth per year (e-foldings/yr).
+        doubling_years: Payload doubling time (yr).
+        millionfold_years: Time to a millionfold (yr).
+    """
+
+    label: str
+    departure_excess: float
+    departure_aim_deg: float
+    cycle_years: float
+    nozzle: DepartureNozzleLedger
+    periapsis_survival: float
+    round_trip_fraction: float
+    return_per_impactor_kg: float
+    launched_slug_per_impactor_kg: float
+    growth_rate: float
+    doubling_years: float
+    millionfold_years: float
+
+
+def cycle_growth_ledger(
+    label: str,
+    departure_excess: float,
+    departure_aim_deg: float,
+    cycle_years: float,
+    stream_excess: float,
+    stream_axis_deg: float,
+    slug_ratio: float = DEFAULT_SLUG_RATIO,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    periapsis_survival: float = DEFAULT_PERIAPSIS_SURVIVAL,
+    params: Optional[_FlybyParams] = None,
+) -> CycleGrowthLedger:
+    """Score a cycle on returning mass per impactor kilogram spent.
+
+    One impactor kilogram buys ``k`` kilograms of spent slug, which flies
+    ``k*f/(1-f)`` kilograms of vehicle through the departure; the solar-periapsis
+    collision then keeps ``periapsis_survival`` of it.
+
+    Args:
+        label: Name for the cycle.
+        departure_excess: Earth-relative departure excess (km/s).
+        departure_aim_deg: Direction it must point, from Earth's prograde.
+        cycle_years: Departure-to-return time (yr).
+        stream_excess: Earth-relative excess of the arriving stream (km/s).
+        stream_axis_deg: Direction the stream travels, from Earth's prograde.
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        periapsis_survival: Mass fraction surviving the 4 solar-radii collision.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`CycleGrowthLedger`.
+
+    Raises:
+        ValueError: If the departure burn delivers nothing, so no growth exists.
+    """
+    nozzle = departure_nozzle_ledger(
+        departure_excess,
+        departure_aim_deg,
+        stream_excess,
+        stream_axis_deg,
+        slug_ratio,
+        jet_energy_efficiency,
+        params,
+    )
+    delivered = nozzle.delivered_fraction
+    if delivered <= 0.0 or delivered >= 1.0:
+        raise ValueError("departure burn delivers no usable fraction")
+    growth = periapsis_survival * delivered * slug_ratio / (1.0 - delivered)
+    return CycleGrowthLedger(
+        label=label,
+        departure_excess=departure_excess,
+        departure_aim_deg=departure_aim_deg,
+        cycle_years=cycle_years,
+        nozzle=nozzle,
+        periapsis_survival=periapsis_survival,
+        round_trip_fraction=delivered * periapsis_survival,
+        return_per_impactor_kg=growth,
+        launched_slug_per_impactor_kg=slug_ratio,
+        growth_rate=float(np.log(growth) / cycle_years),
+        doubling_years=float(cycle_years * np.log(2.0) / np.log(growth)),
+        millionfold_years=float(cycle_years * np.log(1.0e6) / np.log(growth)),
+    )
+
+
+def paper_resonant_dive_ledger(
+    stream_excess: float,
+    stream_axis_deg: float,
+    slug_ratio: float = DEFAULT_SLUG_RATIO,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    periapsis_survival: float = DEFAULT_PERIAPSIS_SURVIVAL,
+    params: Optional[_FlybyParams] = None,
+) -> CycleGrowthLedger:
+    """Score the paper's own single-impulse resonant dive on the same nozzle.
+
+    The comparison this cycle has to beat.  Its departure state is *derived* from
+    :func:`single_impulse_resonant_dive` rather than quoted, so the two rows sit
+    on one device and one set of constants.
+
+    Args:
+        stream_excess: Earth-relative excess of the arriving stream (km/s).
+        stream_axis_deg: Direction the stream travels, from Earth's prograde.
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        periapsis_survival: Mass fraction surviving the 4 solar-radii collision.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`CycleGrowthLedger` for the paper's cycle.
+    """
+    dive = single_impulse_resonant_dive()
+    retrograde = float(dive.retrograde_component.to_value(u.km / u.s))
+    radial = float(dive.radial_component.to_value(u.km / u.s))
+    return cycle_growth_ledger(
+        "paper single-impulse resonant dive",
+        float(dive.earth_boost.to_value(u.km / u.s)),
+        float(np.degrees(np.arctan2(radial, -retrograde))),
+        float(dive.reintercept_time.to_value(u.year)),
+        stream_excess,
+        stream_axis_deg,
+        slug_ratio,
+        jet_energy_efficiency,
+        periapsis_survival,
+        params,
+    )
+
+
+# --------------------------------------------------------------------------
 # Reporting
 # --------------------------------------------------------------------------
 
@@ -1356,6 +1699,24 @@ def main() -> None:
         type=float,
         default=SOLAR_DIVE_PERIAPSIS_SOLAR_RADII,
         help="dive perihelion, in solar radii",
+    )
+    parser.add_argument(
+        "--slug-ratio",
+        type=float,
+        default=DEFAULT_SLUG_RATIO,
+        help="kilograms of carried slug per kilogram of arriving impactor",
+    )
+    parser.add_argument(
+        "--jet-efficiency",
+        type=float,
+        default=DEFAULT_JET_ENERGY_EFFICIENCY,
+        help="eta_jet^2: fraction of collision energy reaching axial exhaust momentum",
+    )
+    parser.add_argument(
+        "--periapsis-survival",
+        type=float,
+        default=DEFAULT_PERIAPSIS_SURVIVAL,
+        help="mass fraction surviving the 4 solar-radii collision, both streams",
     )
     args = parser.parse_args()
     params = _powered_flyby_params()
@@ -1496,6 +1857,95 @@ def main() -> None:
             "Jupiter's sphere of influence reaches ~0.322 AU, so a burn inside about\n"
             "4.88 AU would be a Jupiter-relative maneuver wearing a DSM's name."
         )
+
+    three = solve_synodic_closure(
+        3,
+        params=params,
+        dive_solar_radii=args.dive_solar_radii,
+        return_excess=args.return_excess,
+    )
+    if three is None:
+        return
+    print(
+        f"\n-- the 3S departure on a magnetic nozzle (k = {args.slug_ratio:.0f}, "
+        f"eta_jet^2 = {args.jet_efficiency:.2f}, {1 - args.periapsis_survival:.0%} "
+        "propellant at 4 R_sun) --"
+    )
+    print(
+        "Earth-launched slug is treated as FREE here; only impactor kilograms are\n"
+        "charged. That switches off CONTEXT.md's launch ledger -- see the caveat below."
+    )
+    ledgers = [
+        cycle_growth_ledger(
+            f"this {three.synodic_multiple}S Jovian solar dive",
+            three.departure_excess,
+            three.departure_aim_deg,
+            three.total_tof_years,
+            three.return_excess,
+            three.push_axis_deg,
+            slug_ratio=args.slug_ratio,
+            jet_energy_efficiency=args.jet_efficiency,
+            periapsis_survival=args.periapsis_survival,
+            params=params,
+        ),
+        paper_resonant_dive_ledger(
+            three.return_excess,
+            three.push_axis_deg,
+            slug_ratio=args.slug_ratio,
+            jet_energy_efficiency=args.jet_efficiency,
+            periapsis_survival=args.periapsis_survival,
+            params=params,
+        ),
+    ]
+    print(
+        tabulate(
+            [
+                [
+                    ledger.label,
+                    f"{ledger.departure_excess:.2f}",
+                    f"{ledger.nozzle.impact_angle_start_deg:.0f}-"
+                    f"{ledger.nozzle.impact_angle_end_deg:.0f}",
+                    f"{ledger.nozzle.closing_speed_start:.0f}-"
+                    f"{ledger.nozzle.closing_speed_end:.0f}",
+                    f"{ledger.nozzle.specific_impulse:.0f}",
+                    f"{ledger.nozzle.delivered_fraction:.3f}",
+                    f"{ledger.round_trip_fraction:.3f}",
+                    f"{ledger.return_per_impactor_kg:.1f}",
+                    f"{ledger.cycle_years:.3f}",
+                    f"{ledger.growth_rate:.3f}",
+                    f"{ledger.doubling_years:.3f}",
+                ]
+                for ledger in ledgers
+            ],
+            headers=[
+                "cycle",
+                "v_inf",
+                "theta (deg)",
+                "w (km/s)",
+                "Isp (s)",
+                "departs",
+                "round trip",
+                "per impactor kg",
+                "cycle (yr)",
+                "e-fold/yr",
+                "doubling (yr)",
+            ],
+            tablefmt="github",
+        )
+    )
+    fastest = max(ledgers, key=lambda ledger: ledger.growth_rate)
+    print(
+        f"Fastest doubling on this device: {fastest.label} at "
+        f"{fastest.doubling_years:.3f} yr "
+        f"(millionfold in {fastest.millionfold_years:.1f} yr)."
+    )
+    print(
+        "CAVEAT: growth is per impactor kilogram, and the launched slug grows with\n"
+        f"it -- {ledgers[0].launched_slug_per_impactor_kg:.0f} kg lofted per impactor kg, so a "
+        f"{ledgers[0].return_per_impactor_kg:.0f}x cycle is also a "
+        f"{ledgers[0].return_per_impactor_kg:.0f}x launch-rate cycle. The constraint moves\n"
+        "to the pad; it does not disappear. Charging it is CONTEXT.md's launch ledger."
+    )
 
 
 if __name__ == "__main__":
