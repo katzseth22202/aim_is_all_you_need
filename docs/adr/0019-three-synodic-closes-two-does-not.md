@@ -354,3 +354,37 @@ nothing in either repository bounds it), so 0.60 is a stated operating point, no
 a result. And the retrograde projectile stream is assumed to pay the same
 departure fraction as the prograde payload, which is approximate: its dive needs
 a hotter Jovian arrival (14.16 against 11.96 km/s), so its departure differs.
+
+### The stage is not exotic, and k = 30 is not a large propellant load
+
+Recorded here because it is easy to misread and was misread once already. **The
+slug ratio is kilograms of slug per kilogram of arriving *impactor*, not per
+kilogram of vehicle.** Impactors are well under one percent of the vehicle, so
+`k` = 30 does not mean a thirty-to-one propellant fraction. What the stage
+actually spends, per kilogram it places on the Jupiter trajectory:
+
+| `eta_jet^2` | Isp (s) | `v_e` (km/s) | slug/kg delivered | impactor/kg delivered | departs | doubling |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.40 | 1774 | 17.39 | 0.275 | 0.0092 | 0.784 | 0.543 yr |
+| 0.50 | 2006 | 19.67 | 0.240 | 0.0080 | 0.806 | 0.526 yr |
+| 0.60 | 2214 | 21.71 | 0.215 | 0.0072 | 0.823 | 0.513 yr |
+| **0.70** | **2405** | **23.58** | **0.196** | **0.0066** | **0.836** | **0.503 yr** |
+| 0.80 | 2582 | 25.32 | 0.182 | 0.0061 | 0.846 | 0.494 yr |
+| 1.00 | 2904 | 28.48 | 0.160 | 0.0053 | 0.862 | 0.481 yr |
+
+At a 70 percent efficient nozzle: **about 20 kg of slug and 0.7 kg of impactors
+per 100 kg delivered.** A methalox stage flying the same 4.29 km/s burn would
+spend **2.11 kg per kilogram delivered** against 0.196 kg of slug -- the nozzle is
+an order of magnitude leaner, and it carries no engine. `k` = 30 is not the
+extravagance it looks like when the units are read correctly.
+
+**The cycle also barely leans on nozzle efficiency.** Doubling time moves only
+0.543 to 0.481 yr across the entire range from `eta_jet^2` = 0.4 to the loss-free
+ceiling -- twelve percent for a two-and-a-half-fold change in the input. Two
+reasons: `beta` grows as `sqrt(eta*(1+k))` once the bulk term is small, so Isp
+rises only as the square root of efficiency; and `dv/v_e` is 0.18, so the rocket
+equation is nearly linear and forgives a poor exhaust speed. That matters beyond
+this cycle, because `eta_geom` is the largest unmeasured quantity in either
+repository (`sec:jet_efficiency`) and it decided the device choice outright in
+ADR 0014/0015. **Here it is not load-bearing**, which makes this the most
+efficiency-robust result in the repository rather than the most exposed.

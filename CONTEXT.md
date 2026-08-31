@@ -640,6 +640,21 @@ term by the jet efficiency (momentum conservation on the arriving impactor does 
 care how good the nozzle is -- only the exhaust term scales); reading the cant as
 expensive without naming `k`.
 
+**Slug ratio is per impactor, not per vehicle**:
+The misreading this repository has already made once. `k` = 30 is kilograms of
+slug per kilogram of *arriving impactor*, and impactors run under 1% of the
+vehicle, so it is not a thirty-to-one propellant fraction. At `eta_jet^2` = 0.7 the
+3S departure spends **0.196 kg of slug and 0.0066 kg of impactor per kilogram
+delivered** (Isp 2405 s) against the 2.11 kg a 380 s methalox stage would burn for
+the same 4.29 km/s -- an order of magnitude leaner, carrying no engine. The cycle
+is also nearly blind to the nozzle: doubling time moves 0.543 -> 0.481 yr across
+`eta_jet^2` from 0.4 to 1.0, because `beta` grows as `sqrt(eta*(1+k))` and
+`dv/v_e` is only 0.18. So **`eta_geom` is not load-bearing here**, unlike ADR
+0014/0015 where it decided a device outright.
+_Avoid_: reading the **slug ratio** as a propellant mass fraction; calling `k` = 30
+a heavy load without converting to slug-per-delivered-kilogram; treating this
+cycle's numbers as exposed to the unmeasured `eta_geom`.
+
 **Impactor-scarce accounting**:
 Scoring the loop on returning kilograms per *impactor* kilogram, with Earth-launched
 slug treated as free -- one impactor kg buys `k` kg of spent slug, which flies

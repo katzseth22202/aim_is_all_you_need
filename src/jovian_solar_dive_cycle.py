@@ -1349,6 +1349,16 @@ class DepartureNozzleLedger:
     delivered_fraction: float
     impactor_fraction: float
 
+    @property
+    def slug_per_delivered_kg(self) -> float:
+        """Kilograms of slug spent per kilogram actually placed on the transfer."""
+        return (1.0 - self.delivered_fraction) / self.delivered_fraction
+
+    @property
+    def impactor_per_delivered_kg(self) -> float:
+        """Kilograms of arriving impactor consumed per kilogram placed on the transfer."""
+        return self.impactor_fraction / self.delivered_fraction
+
 
 def _vehicle_frame_impact(
     stream_axis_deg: float,
@@ -1472,6 +1482,28 @@ def departure_nozzle_ledger(
             best = candidate
     assert best is not None
     return best
+
+
+def methalox_per_delivered_kg(
+    delta_v: float, params: Optional[_FlybyParams] = None
+) -> float:
+    """Propellant a methalox stage would burn for the same delta-v, per delivered kg.
+
+    The comparison that keeps the slug ratio in perspective.  ``k`` = 30 sounds
+    extravagant until it is read in the right units: it is slug per *impactor*
+    kilogram, and impactors are well under a percent of the vehicle.  What the
+    stage actually spends is the slug, and against a 380 s chemical stage flying
+    the same burn it spends an order of magnitude less.
+
+    Args:
+        delta_v: Burn to fly (km/s).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        Kilograms of methalox per kilogram delivered.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    return float(np.exp(delta_v / p.exhaust_speed) - 1.0)
 
 
 @dataclass(frozen=True)
@@ -1933,6 +1965,62 @@ def main() -> None:
             tablefmt="github",
         )
     )
+    print("\n-- the stage this actually needs, and how hard it leans on efficiency --")
+    mine = ledgers[0]
+    print(
+        tabulate(
+            [
+                [
+                    f"{eta:.2f}",
+                    f"{probe.nozzle.specific_impulse:.0f}",
+                    f"{probe.nozzle.effective_exhaust_speed:.2f}",
+                    f"{probe.nozzle.slug_per_delivered_kg:.3f}",
+                    f"{probe.nozzle.impactor_per_delivered_kg:.4f}",
+                    f"{probe.nozzle.delivered_fraction:.3f}",
+                    f"{probe.doubling_years:.3f}",
+                ]
+                for eta, probe in (
+                    (
+                        eta,
+                        cycle_growth_ledger(
+                            "3S",
+                            three.departure_excess,
+                            three.departure_aim_deg,
+                            three.total_tof_years,
+                            three.return_excess,
+                            three.push_axis_deg,
+                            slug_ratio=args.slug_ratio,
+                            jet_energy_efficiency=eta,
+                            periapsis_survival=args.periapsis_survival,
+                            params=params,
+                        ),
+                    )
+                    for eta in (0.4, 0.5, 0.6, 0.7, 0.8, 1.0)
+                )
+            ],
+            headers=[
+                "eta_jet^2",
+                "Isp (s)",
+                "v_e (km/s)",
+                "slug/kg delivered",
+                "impactor/kg delivered",
+                "departs",
+                "doubling (yr)",
+            ],
+            tablefmt="github",
+        )
+    )
+    print(
+        f"A methalox stage flying the same {mine.nozzle.delta_v:.2f} km/s would burn "
+        f"{methalox_per_delivered_kg(mine.nozzle.delta_v, params):.2f} kg per kg delivered, "
+        f"against {mine.nozzle.slug_per_delivered_kg:.2f} kg of slug -- "
+        f"{methalox_per_delivered_kg(mine.nozzle.delta_v, params) / mine.nozzle.slug_per_delivered_kg:.0f}x leaner.\n"
+        "The slug ratio is per *impactor* kilogram, and impactors are under 1% of the\n"
+        "vehicle, so k = 30 is not a large propellant load. Doubling time moves only\n"
+        "0.54 -> 0.48 yr across the whole efficiency range, so eta_geom being unmeasured\n"
+        "(sec:jet_efficiency) is not load-bearing here."
+    )
+
     fastest = max(ledgers, key=lambda ledger: ledger.growth_rate)
     print(
         f"Fastest doubling on this device: {fastest.label} at "

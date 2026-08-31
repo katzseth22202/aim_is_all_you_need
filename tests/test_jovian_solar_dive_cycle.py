@@ -461,3 +461,52 @@ def test_growth_ledger_rejects_a_burn_that_delivers_nothing() -> None:
             slug_ratio=0.05,
             params=_PARAMS,
         )
+
+
+def test_slug_ratio_thirty_is_not_a_large_propellant_load() -> None:
+    # k = 30 is slug per *impactor* kilogram, and impactors are well under a
+    # percent of the vehicle. What the stage actually spends is ~0.2 kg of slug
+    # per kg delivered. Reading k as a propellant fraction is the confusion this
+    # test exists to prevent.
+    ledger = _three_synodic_ledger(jet_energy_efficiency=0.70)
+    assert ledger.nozzle.slug_ratio == 30.0
+    assert ledger.nozzle.slug_per_delivered_kg == pytest.approx(0.196, abs=0.01)
+    assert ledger.nozzle.impactor_per_delivered_kg == pytest.approx(0.0066, abs=0.0005)
+    assert ledger.nozzle.impactor_per_delivered_kg < 0.01
+
+
+def test_the_stage_is_an_order_of_magnitude_leaner_than_methalox() -> None:
+    ledger = _three_synodic_ledger(jet_energy_efficiency=0.70)
+    chemical = cycle.methalox_per_delivered_kg(ledger.nozzle.delta_v, _PARAMS)
+    assert chemical == pytest.approx(2.11, abs=0.05)
+    assert chemical / ledger.nozzle.slug_per_delivered_kg > 9.0
+
+
+def test_specific_impulse_at_seventy_percent_efficiency() -> None:
+    ledger = _three_synodic_ledger(jet_energy_efficiency=0.70)
+    assert ledger.nozzle.specific_impulse == pytest.approx(2405, abs=30)
+    assert ledger.nozzle.effective_exhaust_speed == pytest.approx(23.58, abs=0.3)
+
+
+def test_the_cycle_barely_leans_on_nozzle_efficiency() -> None:
+    # eta_geom is the largest unmeasured quantity in either repository
+    # (sec:jet_efficiency). Because dv/v_e is small, the whole efficiency range
+    # moves doubling time by only ~12 percent -- so it is not load-bearing here,
+    # unlike in ADR 0014/0015 where it decided a device choice.
+    doubling = [
+        _three_synodic_ledger(jet_energy_efficiency=eta).doubling_years
+        for eta in (0.4, 0.6, 0.8, 1.0)
+    ]
+    assert all(later < earlier for earlier, later in zip(doubling, doubling[1:]))
+    assert doubling[0] / doubling[-1] < 1.15
+    assert doubling[0] == pytest.approx(0.543, abs=0.01)
+    assert doubling[-1] == pytest.approx(0.481, abs=0.01)
+
+
+def test_specific_impulse_rises_only_as_the_square_root_of_efficiency() -> None:
+    # beta goes as sqrt(eta*(1+k)) once the bulk term is small, so quadrupling
+    # the energy efficiency roughly doubles Isp -- which is why a poor nozzle
+    # costs so little here.
+    low = _three_synodic_ledger(jet_energy_efficiency=0.25).nozzle.specific_impulse
+    high = _three_synodic_ledger(jet_energy_efficiency=1.0).nozzle.specific_impulse
+    assert high / low == pytest.approx(2.0, abs=0.15)
