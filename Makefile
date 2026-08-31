@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse jovian-dive two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -60,6 +60,9 @@ bag-converge:  ## Iterate the bag loop to a fixed point and report the gap (rule
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse
+
+jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S works, 2S does not (ADR 0019)
+	python -m src.jovian_solar_dive_cycle
 
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp

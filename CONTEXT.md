@@ -576,6 +576,65 @@ launch cadence (they are geometry-repeat curiosities); quoting the cadence as an
 ephemeris-verified guarantee (it is synodic scaffolding — real calendar windows
 need Lambert arcs against actual planet positions).
 
+### Jovian solar-dive cycle
+
+Letting Jupiter place the solar dive instead of Earth: depart for Jupiter, let an
+unpowered flyby drop perihelion to 4 solar radii, take the Oberth boost there, and
+cross 1 AU where Earth waits -- the whole loop clocked to an integer multiple of the
+Earth-Jupiter synodic period so the next cycle repeats the geometry
+(`src/jovian_solar_dive_cycle.py`, `make jovian-dive`, ADR
+`0019-three-synodic-closes-two-does-not`). It exists to retire the **single-impulse
+resonant dive**'s ~37.5 km/s Earth-side boost: the collision at Earth then only has to
+buy a Jupiter transfer, 15.24 km/s at 200 km instead of 39.11.
+
+**Dive-placement floor**:
+The minimum Jupiter *arrival* excess speed that can put perihelion at 4 solar radii --
+11.9557 km/s prograde, 13.0579 km/s for a radial plunge, 14.1602 km/s retrograde
+(`dive_placement_excess_floor()`). A flyby rotates the excess but never rescales it, so
+placing the dive means cancelling nearly all of Jupiter's 13.06 km/s of orbital motion,
+and below these speeds no perijove achieves it. The same shape of statement as the
+13.058 km/s floor on the unpowered retrograde return: a **necessary condition, not a
+cost**. Both signs are reachable from a single arrival speed in the 14.16-17 km/s
+overlap, so the paper's prograde/retrograde split needs only one departure energy.
+_Avoid_: reading a floor as a delta-v to be spent; assuming the retrograde stream needs
+its own launch energy.
+
+**Synodic closure**:
+The two conditions a cycle must meet together -- the loop takes exactly `N` synodic
+periods (so the next departure sees the same Earth-Jupiter phase), and the 1 AU crossing
+lands where Earth actually is. Two knobs meet them, the departure excess speed and the
+**free-aim departure** angle, so the solution is *discrete* and the Jovian bend it
+demands is an **output** the search may not choose.
+_Avoid_: treating the required bend as a free parameter; scoring a closure that met the
+clock but not **Earth re-intercept**.
+
+**Bend deficit**:
+Required minus available Jovian turn at the perijove floor, the feasibility test a
+**synodic closure** either passes or fails. 1S is short by 101.38 deg, 2S by 6.84,
+3S has +58.80 deg of margin. _Avoid_: quoting a deficit without its perijove altitude
+floor (4,000 km gives 114.68 deg of authority at the 2S arrival, 200 km only 116.13 --
+the floor is nearly free and cannot rescue a failing closure).
+
+**Transfer clock ceiling**:
+3.661 yr, the longest cycle a zero-revolution direct transfer can fly -- approached at
+the departure excess below which the transfer's aphelion no longer reaches Jupiter's
+orbit. It is what rules out 4S (4.3682 yr) and every longer multiple, so with 2S failing
+on bend, **3S is the only synodic multiple that closes**, bracketed on both sides.
+_Avoid_: reading a missing 4S closure as a search failure; forgetting that
+multi-revolution arcs, unexplored, are the only route past the ceiling.
+
+**Radial-outward push axis**:
+Where the returning 150 km/s stream points when it reaches Earth: 2.3 deg off radially
+outward (98.55 deg from prograde), because the boosted climb-out is nearly radial -- its
+angular momentum is only `r_p * v_p` at 4 solar radii. It is the **push axis** of this
+architecture, and it is badly misaligned with every departure the cycle needs (110.6 deg
+for 3S, 87.8 for 2S), so the Earth-side collision is heavily canted on the
+**impact-angle impulse law**. Note it also misaligns with the *paper's own* dive
+injection by 31 deg: a push exactly along the axis cannot make a solar dive at any
+magnitude, since it would take 161 km/s and produce an escape.
+_Avoid_: quoting this architecture's Earth-push mass ratio without saying it is the
+uncanted upper bound; assuming the paper's solar-dive cycle is free of the same problem.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
@@ -628,6 +687,19 @@ need Lambert arcs against actual planet positions).
 - The **equivalent plate elasticity** is independent of `e2` to within a few
   percent, because leg 2 is common to both architectures — so "when does a
   nozzle beat a plate" is a question about `e1` alone.
+- The **dive-placement floor** and the **Tisserand `v_b` ceiling** are the same
+  invariant read at two targets: a flyby cannot rescale the excess, so one bounds how
+  *slow* the post-flyby tangential speed can be made (to fall to the Sun) and the other
+  how *retrograde* it can be made (to close fast on Earth).
+- A **synodic closure** fixes the clock and **Earth re-intercept**; the **bend deficit**
+  then reports whether the flyby can pay for them. The three are one test in three
+  parts, and only the third can fail once the first two are solved.
+- The **transfer clock ceiling** and the **bend deficit** bracket the **Jovian
+  solar-dive cycle** from opposite sides: short clocks demand more bend than Jupiter
+  has, long clocks demand a slower transfer than exists.
+- The **radial-outward push axis** is the **push axis** of the near-Sun architecture,
+  and it constrains the *paper's* solar-dive cycle as well as the **Jovian solar-dive
+  cycle** -- the two differ in how much cant they need, not in whether they need it.
 
 ## Example dialogue
 
@@ -637,6 +709,27 @@ need Lambert arcs against actual planet positions).
 > **Domain expert:** "That's the **lunar-return optimum** — it isn't a **PuffSat scenario** at all, so it doesn't belong in the **scenario table**. Present it separately."
 
 ## Flagged ambiguities
+- **The Jovian solar-dive cycle's Earth push is quoted uncanted.** Its 15.76 payload
+  mass ratio at 3S assumes the collision pushes along its own impact axis, but the
+  **radial-outward push axis** sits 110.6 deg from the departure the cycle needs, where
+  ADR 0012's `beta` gives 2.70 against the along-axis 4.16 at `k = 9`. The alternative
+  is the **closed cycle**'s parking-orbit route -- push sub-escape, **apoapsis
+  reversal**, depart on methalox -- which swaps the cant for a rocket-equation charge.
+  Which is cheaper is unresolved, and it is the largest open risk in ADR 0019.
+- **Growth rate has not been scored for the Jovian solar-dive cycle, and the blocker is
+  the paper's own number.** Rolling it up needs the per-cycle survival fraction at the
+  4 R_sun collision node. `eq:external_reaction_mass` gives about 0.71 at
+  `eta_jet` = 0.8, which implies the paper's **single-impulse resonant dive** grows the
+  payload by ~3.8 per cycle -- but `sec:earth_reintercept` says the two-impulse loop
+  "holds the doubling factor at two" and that the single-impulse dive falls *below* it.
+  Those cannot both be right. Until it is settled, neither architecture can be ranked on
+  doubling time. Unresolved, and load-bearing for whether ADR 0019's cycle is worth
+  flying at all.
+- **ADR 0019's 6.84 deg 2S bend deficit is inside the real-orbit noise.** ADR 0011 found
+  real eccentric Jupiter swings the perijove margin by 20,515 km window to window, far
+  more than this. So 2S is *unpayable at a price the circular model can see* -- about
+  2 km/s -- not proven infeasible. 3S's +58.80 deg margin is the one that should survive
+  a real ephemeris. Unresolved for 2S; a `real_orbit_resonance.py`-style audit settles it.
 
 - "The pusher plate is just the `k = 0` nozzle" is true of the impulse law and
   false of the device. Resolved: the **plume ignition window** is two-sided, so

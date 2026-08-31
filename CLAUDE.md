@@ -42,6 +42,9 @@ make run            # python -m src.main
 # Run a single test file
 pytest tests/test_orbit_utils.py -s
 
+# Opt-in analyses (not part of 'make all'; see `make help` for the full list)
+make jovian-dive    # Earth→Jupiter→4 R☉→Earth synodic closure (ADR 0019)
+
 # Conda environment
 conda env create -f environment.yml
 conda activate puffsat_math_env
@@ -75,6 +78,11 @@ jovian_flyby.py                assist_chain.py imports from jovian_flyby.py too
 assist_chain.py
       ↓
 main.py / nozzle_analysis.py  ← both import from every module above
+
+jovian_solar_dive_cycle.py   ← conic_kernel + retrograde_return_legs + propulsion:
+                                Earth → Jupiter → 4 R☉ Oberth → Earth on a synodic
+                                clock. 3S closes unpowered, 2S does not at any
+                                perijove burn (ADR 0019)
 
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius
