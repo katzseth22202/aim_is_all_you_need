@@ -44,6 +44,7 @@ pytest tests/test_orbit_utils.py -s
 
 # Opt-in analyses (not part of 'make all'; see `make help` for the full list)
 make jovian-dive    # Earth→Jupiter→4 R☉→Earth synodic closure (ADR 0019)
+make dive-depth     # what a shallower (32 R☉) dive costs (ADR 0020)
 
 # Conda environment
 conda env create -f environment.yml
@@ -83,6 +84,13 @@ jovian_solar_dive_cycle.py   ← conic_kernel + retrograde_return_legs + propuls
                                 Earth → Jupiter → 4 R☉ Oberth → Earth on a synodic
                                 clock. 3S closes unpowered, 2S does not at any
                                 perijove burn (ADR 0019)
+      ↓
+solar_dive_depth_trade.py    ← jovian_solar_dive_cycle + plume_thermal: what a
+                                shallower perihelion costs. Prices the dive node
+                                from the impulse law instead of stating its
+                                survival, and adds the **expansion floor** — the
+                                plume must still conduct after the jet is drawn,
+                                not merely ignite (ADR 0020)
 
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius

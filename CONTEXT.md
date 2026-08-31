@@ -595,9 +595,14 @@ placing the dive means cancelling nearly all of Jupiter's 13.06 km/s of orbital 
 and below these speeds no perijove achieves it. The same shape of statement as the
 13.058 km/s floor on the unpowered retrograde return: a **necessary condition, not a
 cost**. Both signs are reachable from a single arrival speed in the 14.16-17 km/s
-overlap, so the paper's prograde/retrograde split needs only one departure energy.
-_Avoid_: reading a floor as a delta-v to be spent; assuming the retrograde stream needs
-its own launch energy.
+overlap -- but **no 3S closure arrives inside it** (12.17 km/s at 4 solar radii,
+10.95 at 32), so the prograde/retrograde split does need two departure energies, and
+the floors spread further apart as the dive is backed out (9.98 / 16.14 at 32 solar
+radii). The opposing stream is one-way and expendable, so it needs a separate
+tangential launch (11.83 km/s of Earth excess at 32 solar radii) rather than a
+separate energy *budget*. See the **solar-dive depth trade**.
+_Avoid_: reading a floor as a delta-v to be spent; reading the overlap as saying one
+departure energy serves both streams on a closed cycle (it does not).
 
 **Synodic closure**:
 The two conditions a cycle must meet together -- the loop takes exactly `N` synodic
@@ -682,6 +687,67 @@ injection by 31 deg: a push exactly along the axis cannot make a solar dive at a
 magnitude, since it would take 161 km/s and produce an escape.
 _Avoid_: quoting this architecture's Earth-push mass ratio without saying it is the
 uncanted upper bound; assuming the paper's solar-dive cycle is free of the same problem.
+
+### Solar-dive depth trade
+
+What backing the dive perihelion out from 4 solar radii costs and buys
+(`src/solar_dive_depth_trade.py`, `make dive-depth`, ADR
+`0020-the-nozzle-cap-is-the-expansion-not-the-ignition`). The **Jovian solar-dive
+cycle** is a trajectory result; this asks whether the node it flies through can be
+built, and prices the answer.
+
+**Expansion floor**:
+The merge energy a plume needs to still be conducting when the nozzle has finished
+taking its work out, `eps_th * (1 - eta_jet^2) >= ` the **ignition bill** --
+211.0 MJ/kg at `eta_jet^2` = 0.60, or **2.50x the ignition bill**
+(`expansion_floor_energy()`). The **plume ignition window** is a condition at the
+instant of the merge; a magnetic nozzle works by letting the plume *expand*, which
+cools it, so a blob on the window's upper root lights and then decouples the moment
+the field draws on it. Roughly halves the admissible slug ratio at every closing
+speed (17.90 against 47.88 at 91.78 km/s) and vanishes entirely below 41.1 km/s,
+where the `k` = 1 peak of `w^2/8` is itself under the floor.
+_Avoid_: reading the **plume ignition window** as sufficient (it is necessary
+only); quoting a slug ratio near its upper root as an operating point; letting an
+optimiser sit on this floor either -- a boundary is not a design point, which is
+why `constrained_growth_optimum()` takes a margin.
+
+**Available jet efficiency**:
+`eta_jet^2 <= 1 - frozen / eps_th`, the ceiling energy conservation puts on a
+*stated* efficiency (`maximum_jet_efficiency()`). Follows directly from ADR 0016 --
+the frozen chemistry is charged **inside** `eta_jet^2`, so a jet taking `eta` of the
+merge leaves `1 - eta` to cover a 53.47 MJ/kg bill that does not shrink. At
+84.7 MJ/kg the ceiling is 0.369, so scoring that blob at 0.60 draws more directed
+exhaust from it than it holds. The **expansion floor** is the stricter form and
+subsumes this.
+_Avoid_: treating `eta_jet^2` as a free sweep parameter at low merge energy;
+approaching `eta` = 1, where the **expansion floor** diverges.
+
+**Derived periapsis survival**:
+Survival at the dive node computed from the **impact-angle impulse law** head-on at
+the **opposing-stream closing speed**, rather than stated as a constant
+(`dive_node()`). Reproduces `jovian_solar_dive_cycle`'s stated 0.60 at 4 solar radii
+to 0.4% (0.5977), which is what licenses comparing depths at all. The node's exhaust
+speed is `beta*w/k` and `w` is twice the near-parabolic perihelion speed, so backing
+out cuts the exhaust speed *faster* than it cuts the boost -- survival falls even
+though less delta-v is being bought.
+_Avoid_: comparing a derived-survival row against a stated-survival one; assuming a
+gentler node is a cheaper one.
+
+**Opposing-stream closing speed**:
+Twice the perihelion speed of a near-parabolic fall from Jupiter's orbit -- 616.6 km/s
+at 4 solar radii, 215.3 at 32. Sets the dive node's exhaust speed, its merge energy,
+and the rendezvous timing tolerance (which scales as `1/w`: 162 us against 464 us for
+a 100 m along-track miss).
+
+**Depth trade**:
+A 64x drop in solar flux (3.93 MW/m^2 to 61.5 kW/m^2, 2041 K to 722 K equilibrium)
+and an 8.2x gentler collision cost **2.19x the doubling time** -- 0.5106 yr at
+4 solar radii against 1.1169 at 32, each at its own `constrained_growth_optimum()`.
+Per-*cycle* growth falls 11x (85.44 to 7.64 kg per impactor kg), which is the number
+to avoid quoting alone: the clock is unchanged at 3.276 yr either way, so the
+logarithm absorbs most of it.
+_Avoid_: quoting the per-cycle ratio as the cost; comparing rows at different slug
+ratios without saying which ceiling each sits under.
 
 ## Relationships
 
@@ -780,6 +846,17 @@ uncanted upper bound; assuming the paper's solar-dive cycle is free of the same 
   at 1/42, **both clear**, so the failure was an artefact. And the floor carries no
   clock: time-normalised it gives 0.0383 against 0.0540 kg per pad kg per year, the
   paper's dive ahead, agreeing with doubling time. The ranking is unchanged.
+- **The magnetic nozzle's mass is uncharged everywhere it is flown.** ADR 0020 shows
+  the shallow node handles 8.2x less specific energy (724 against 5934 MJ/kg) and the
+  motivating objection was that the energy per impactor kilogram implies a heavy
+  nozzle -- but no mass model turns either figure into kilograms, so the case for
+  backing the dive out stays qualitative on exactly the axis that motivated it.
+  Unresolved, and it applies to `two_leg_nozzle_sweep` and ADR 0014/0015 too.
+- **The opposing projectile stream is uncharged at the dive node.** It costs 1.34% of
+  the vehicle at 4 solar radii and 2.15% at 32 (`DiveNode.opposing_impactor_fraction`),
+  and neither the **impactor-scarce growth** ledger nor the **launch ledger** counts
+  it. Both 85.44 and 7.64 kg per impactor kilogram are upper bounds by roughly that
+  factor, slightly worse at the shallow node.
 - **The paper's "doubling factor at two" does not reproduce.**
   `eq:external_reaction_mass` at `eta_jet` = 0.8 puts the per-cycle survival at the
   4 R_sun node near 0.71, which makes the **single-impulse resonant dive** grow payload
