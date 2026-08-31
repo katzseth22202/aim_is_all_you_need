@@ -697,30 +697,41 @@ cycle** is a trajectory result; this asks whether the node it flies through can 
 built, and prices the answer.
 
 **Expansion floor**:
-The merge energy a plume needs to still be conducting when the nozzle has finished
-taking its work out, `eps_th * (1 - eta_jet^2) >= ` the **ignition bill** --
-211.0 MJ/kg at `eta_jet^2` = 0.60, or **2.50x the ignition bill**
-(`expansion_floor_energy()`). The **plume ignition window** is a condition at the
-instant of the merge; a magnetic nozzle works by letting the plume *expand*, which
-cools it, so a blob on the window's upper root lights and then decouples the moment
-the field draws on it. Roughly halves the admissible slug ratio at every closing
-speed (17.90 against 47.88 at 91.78 km/s) and vanishes entirely below 41.1 km/s,
-where the `k` = 1 peak of `w^2/8` is itself under the floor.
-_Avoid_: reading the **plume ignition window** as sufficient (it is necessary
-only); quoting a slug ratio near its upper root as an operating point; letting an
-optimiser sit on this floor either -- a boundary is not a design point, which is
-why `constrained_growth_optimum()` takes a margin.
+The condition that the plume still be *conducting* when the nozzle has finished
+taking its work out: `eps_th * (1 - eta_jet^2 (1+k)/k) >= ` the **ignition bill**
+(`expansion_residual()`). The **plume ignition window** is a condition at the instant
+of the merge; a magnetic nozzle works by letting the plume *expand*, which cools it,
+so a blob on the window's upper root lights and then decouples the moment the field
+draws on it. As a window on `k` it sits strictly inside the ignition window on
+**both** sides -- [1.93, 16.03] against [0.021, 47.88] at 91.78 km/s -- and vanishes
+entirely below 64.96 km/s at `eta_jet^2` = 0.60, where ignition still permits `k` up
+to 22 (`expansion_limited_slug_ratio_window()`).
+_Avoid_: reading the **plume ignition window** as sufficient (it is necessary only);
+using `1 - eta` for the residual instead of `1 - eta(1+k)/k` (that is 18% too
+*lenient* at `k` = 8.5 -- see **jet energy fraction**); quoting a slug ratio near
+either root as an operating point; letting an optimiser sit on this floor either --
+a boundary is not a design point, which is why `constrained_growth_optimum()` takes
+a margin, stated at 1.5 because the two reference cycles carry 1.76 and 1.55.
+
+**Jet energy fraction**:
+`eta_jet^2 (1+k)/k`, the share of the merge's *internal* energy the jet carries off,
+as against `eta_jet^2` itself which is defined per `sec:jet_efficiency` against the
+ideal one-axis budget `w^2/2` (`jet_energy_fraction()`). 0.671 at `k` = 8.5 rather
+than 0.600. It diverges as `k` falls, and below `k = eta/(1 - eta)` the impulse law
+asks for more than the collision dissipates -- which is what puts a *lower* root on
+the **expansion floor**.
+_Avoid_: treating `eta_jet^2` and this as the same number; the error is lenient.
 
 **Available jet efficiency**:
-`eta_jet^2 <= 1 - frozen / eps_th`, the ceiling energy conservation puts on a
-*stated* efficiency (`maximum_jet_efficiency()`). Follows directly from ADR 0016 --
-the frozen chemistry is charged **inside** `eta_jet^2`, so a jet taking `eta` of the
-merge leaves `1 - eta` to cover a 53.47 MJ/kg bill that does not shrink. At
-84.7 MJ/kg the ceiling is 0.369, so scoring that blob at 0.60 draws more directed
-exhaust from it than it holds. The **expansion floor** is the stricter form and
-subsumes this.
-_Avoid_: treating `eta_jet^2` as a free sweep parameter at low merge energy;
-approaching `eta` = 1, where the **expansion floor** diverges.
+`eta_jet^2 <= (k/(1+k)) (1 - bill/eps_th)`, the ceiling the **expansion floor** puts
+on a *stated* efficiency (`maximum_jet_efficiency()`). **Not a new bound** -- ADR 0016
+already ceilinged the same parameter with the frozen-chemistry argument, implemented
+as `plume_thermal.chemistry_efficiency()`. This one is strictly tighter everywhere
+because it asks that the plume still conduct rather than that the jet stay positive:
+0.759 against 0.874 at 390.5 MJ/kg, and 0.003 against 0.423 at 84.7. They agree on
+every verdict.
+_Avoid_: presenting this as new (it is ADR 0016's bound sharpened); treating
+`eta_jet^2` as a free sweep parameter at low merge energy.
 
 **Derived periapsis survival**:
 Survival at the dive node computed from the **impact-angle impulse law** head-on at
@@ -741,9 +752,9 @@ a 100 m along-track miss).
 
 **Depth trade**:
 A 64x drop in solar flux (3.93 MW/m^2 to 61.5 kW/m^2, 2041 K to 722 K equilibrium)
-and an 8.2x gentler collision cost **2.19x the doubling time** -- 0.5106 yr at
-4 solar radii against 1.1169 at 32, each at its own `constrained_growth_optimum()`.
-Per-*cycle* growth falls 11x (85.44 to 7.64 kg per impactor kg), which is the number
+and an 8.2x gentler collision cost **2.18x the doubling time** -- 0.4961 yr at
+4 solar radii against 1.0795 at 32, each at its own `constrained_growth_optimum()`.
+Per-*cycle* growth falls 12x (97.26 to 8.20 kg per impactor kg), which is the number
 to avoid quoting alone: the clock is unchanged at 3.276 yr either way, so the
 logarithm absorbs most of it.
 _Avoid_: quoting the per-cycle ratio as the cost; comparing rows at different slug
@@ -846,6 +857,15 @@ ratios without saying which ceiling each sits under.
   at 1/42, **both clear**, so the failure was an artefact. And the floor carries no
   clock: time-normalised it gives 0.0383 against 0.0540 kg per pad kg per year, the
   paper's dive ahead, agreeing with doubling time. The ranking is unchanged.
+- **The two-legged nozzle sweep has not been re-run against the expansion floor.**
+  `two_wave_growth.fleet_ignition_windows` uses the ignition-only test, so ADR 0014/0015
+  and `two_leg_nozzle_sweep` allow `k1` to 10.21 and `k2` to 23.32 and sweep `eta` freely.
+  On the same 11 flown cycles the **expansion floor** caps the *available* `eta_jet^2` at
+  **0.430** on leg 1 (best at `k1` = 2.50) and **0.603** on leg 2 (`k2` = 4.05). Whether
+  that moves the plate-versus-nozzle verdict is **not** determined: ADR 0016 split
+  `recovery` (which scales `beta` whole, and is what `e1`/`e2` set) from the geometric
+  factor inside the root, so the `e1` axis is not `eta_jet^2` and the mapping must be
+  done first.
 - **The magnetic nozzle's mass is uncharged everywhere it is flown.** ADR 0020 shows
   the shallow node handles 8.2x less specific energy (724 against 5934 MJ/kg) and the
   motivating objection was that the energy per impactor kilogram implies a heavy
@@ -855,7 +875,7 @@ ratios without saying which ceiling each sits under.
 - **The opposing projectile stream is uncharged at the dive node.** It costs 1.34% of
   the vehicle at 4 solar radii and 2.15% at 32 (`DiveNode.opposing_impactor_fraction`),
   and neither the **impactor-scarce growth** ledger nor the **launch ledger** counts
-  it. Both 85.44 and 7.64 kg per impactor kilogram are upper bounds by roughly that
+  it. Both 97.26 and 8.20 kg per impactor kilogram are upper bounds by roughly that
   factor, slightly worse at the shallow node.
 - **The paper's "doubling factor at two" does not reproduce.**
   `eq:external_reaction_mass` at `eta_jet` = 0.8 puts the per-cycle survival at the

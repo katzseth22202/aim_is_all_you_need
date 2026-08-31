@@ -236,53 +236,68 @@ quoted `eta_jet^2` is never reached.
 
 Maximising growth at 32 solar radii subject only to the ignition window and the
 launch ledger picks a 45 km/s climb-out and **`k` = 23.75**, and reports 23.94 kg
-per impactor kilogram doubling in 0.7151 yr. That result is not merely optimistic.
-**It is unphysical**, and ADR 0016 is what makes it so.
+per impactor kilogram doubling in 0.7151 yr -- three times the growth of the
+proposed point. That result is not merely optimistic. **It is unphysical**, and
+ADR 0016 is most of the reason why.
 
-ADR 0016 established that the dissociation store *defaults* -- the plume crosses
-`Da = 1` at the first station past the nozzle lip with 90-100 percent of it still
-held -- and that the toll is charged **inside** `eta_jet^2` rather than as a
-separate debit. The consequence was never applied to the growth ledgers. A jet
-carrying `eta` of the merge energy leaves `1 - eta` behind, and what is left
-behind must still cover a bill that does not shrink:
+**The efficiency ceiling this implies is not new, and saying so matters.** ADR
+0016 already established that the dissociation store *defaults* -- the plume
+crosses `Da = 1` at the first station past the nozzle lip with 90-100 percent of
+it still held -- charged the toll **inside** `eta_jet^2`, and implemented the
+resulting ceiling as `plume_thermal.chemistry_efficiency()`. What was never
+applied is the ceiling's consequence for the growth ledgers, and what is genuinely
+absent is the *operating* form of it.
 
-    eta_jet^2  <=  1 - frozen / eps_th          (`maximum_jet_efficiency()`)
+`chemistry_efficiency()` asks whether the jet energy stays positive once the
+atomisation toll is paid. A magnetic nozzle needs more than that: the plume must
+still be **conducting** when the expansion is done, or the field decouples partway
+down and the quoted efficiency is never reached. Requiring the residual heat to
+still clear the ignition bill after the jet is drawn:
 
-The ignition bill splits **53.47 MJ/kg frozen** (vaporise, atomise, seed-ionise)
-against **30.94 MJ/kg translational**. At `k` = 23.75 and a 66.09 km/s closing
-speed the merge thermalises only **84.7 MJ/kg**, so the largest efficiency
-available is **0.369** -- and it was being scored at 0.60. The impulse law was
-drawing 52.9 MJ/kg of directed exhaust out of a blob holding 31.2 MJ/kg of
-translational energy.
+    eps_th * (1 - eta*(1+k)/k)  >=  ignition bill
 
-The operating requirement is stricter than that ceiling and subsumes it: the
-plume must still clear the ignition bill *after* the jet has been drawn, so the
-field is still gripping when the expansion finishes.
+Nothing double-charges. The frozen 53.47 MJ/kg sits inside both the residual and
+the bill, so this is the same statement as requiring the residual *translational*
+energy to clear the bill's 30.94 MJ/kg translational term.
 
-    eps_th * (1 - eta)  >=  ignition bill       (`expansion_floor_energy()`)
+**The `(1+k)/k` matters and getting it wrong is lenient, not conservative.**
+`eta_jet^2` is defined against the *ideal one-axis* budget `w^2/2` per impactor
+kilogram, while the merge only has `w^2 k / (2(1+k))` to give. The jet's share of
+what exists is `eta*(1+k)/k` -- 0.671 at `k` = 8.5, not 0.600 -- and it diverges
+as `k` falls, which is why the resulting window has a **lower** root near `k` = 2
+that the ignition window cannot see. The first draft of this ADR used `(1 - eta)`
+and was 18 percent too generous at `k` = 8.5.
 
-At `eta_jet^2` = 0.60 that is **211.0 MJ/kg, 2.50x the ignition bill rather than
-1x**. Call it the **expansion floor**. It roughly halves the admissible slug
-ratio at every closing speed:
+Rearranged, the efficiency ceiling is
+`eta_jet^2 <= (k/(1+k)) * (1 - bill/eps_th)` (`maximum_jet_efficiency()`), which
+is strictly tighter than ADR 0016's and agrees with it on every verdict:
 
-| coldest closing speed | ignition `k_max` | **expansion `k_max`** |
+| point | `eps_th` | ADR 0016 ceiling | expansion ceiling | scored at |
+| --- | ---: | ---: | ---: | ---: |
+| 4 R_sun, `k` = 30, `w` = 158.17 | 390.5 | 0.874 | 0.759 | 0.60 |
+| 32 R_sun, `k` = 8.5, `w` = 91.78 | 396.7 | 0.885 | 0.704 | 0.60 |
+| **ignition-only pick, `k` = 23.75, `w` = 66.09** | **84.7** | **0.423** | **0.003** | **0.60** |
+
+Call the condition the **expansion floor**. As a window on `k` it is a closed
+interval strictly inside the ignition window on *both* sides:
+
+| coldest closing speed | ignition window | **expansion window** |
 | ---: | ---: | ---: |
-| 60.00 km/s | 19.27 | **6.37** |
-| 66.09 km/s | 23.83 | **8.23** |
-| 91.78 km/s | 47.88 | **17.90** |
-| 158.17 km/s | 146.19 | **57.26** |
+| 60.00 km/s | [0.052, 19.27] | **none** |
+| 66.09 km/s | [0.042, 23.83] | **[3.22, 5.13]** |
+| 91.78 km/s | [0.021, 47.88] | **[1.93, 16.03]** |
+| 158.17 km/s | [0.007, 146.19] | **[1.62, 55.66]** |
 
-Below **41.1 km/s** the window vanishes outright -- the merge energy peaks at
-`k` = 1 with `w^2/8`, and below that speed the peak itself is under the floor, so
-no magnetic nozzle of any slug ratio works there at this efficiency.
+Below **64.96 km/s** it vanishes outright at `eta_jet^2` = 0.60 and unit margin --
+no magnetic nozzle of any slug ratio works there -- while ignition still permits
+`k` up to 22. That gap is the whole content of this section.
 
-**The proposed `k` = 8.5 clears the floor, and by the same margin the deep
-reference cycle does.** At the 32 solar-radii cycle's 91.78 km/s the merge holds
-396.7 MJ/kg, **1.88x** the expansion floor; ADR 0019's `k` = 30 at 158.17 km/s
-holds 390.5, **1.85x**. The cap that was proposed to protect the plasma turns out
-to be required by the expansion instead, and lands almost exactly where it needed
-to be. Its real ceiling at that operating point is **17.90**, not 47.88 and not
-5.25.
+**The proposed `k` = 8.5 clears the floor, and by about the headroom the deep
+reference cycle carries.** At the 32 solar-radii cycle's 91.78 km/s the residual
+is 130.7 MJ/kg, **1.55x** the bill; ADR 0019's `k` = 30 at 158.17 km/s leaves
+148.4, **1.76x**. The cap that was proposed to protect the plasma turns out to be
+required by the expansion instead, and its real ceiling at that operating point is
+**16.03**, not 47.88.
 
 ### The two cycles at their own constrained optima
 
@@ -290,40 +305,44 @@ Scored by `constrained_growth_optimum()`, which maximises growth over the
 climb-out excess and the slug ratio together -- they are coupled, since boosting
 less lowers the Earth closing speed and *narrows* the expansion window while
 spending less of the node's propellant -- subject to the expansion floor at
-`DEFAULT_EXPANSION_MARGIN` = 2.0 and the committed 1/15 **return floor**. The
+`DEFAULT_EXPANSION_MARGIN` = 1.5 and the committed 1/15 **return floor**. The
 margin is there because an optimiser sits on whatever boundary it is handed, and
 a boundary is not an operating point; at unit margin both rows land exactly on
 the floor, which is the same mistake as `k` = 23.75 in a milder form.
 
 | | 4 R_sun | 32 R_sun |
 | --- | ---: | ---: |
-| climb-out excess | 187.5 km/s | 62.5 km/s |
-| periapsis boost | 53.00 km/s | 18.06 km/s |
-| Earth closing speed `v_b` | 193.76 km/s | 74.68 km/s |
-| departure slug ratio | 43.50 | **5.50** |
-| coldest closing speed | 196.15 km/s | 80.73 km/s |
-| merge energy | 422.6 MJ/kg (2.00x floor) | 424.3 MJ/kg (2.01x floor) |
-| node survival | 0.4591 | 0.4679 |
-| mass fraction departing | 0.8105 | 0.7480 |
-| round trip | 0.3721 | 0.3500 |
-| **kg per impactor kg** | **85.44** | **7.64** |
-| **doubling** | **0.5106 yr** | **1.1169 yr** |
-| millionfold | 10.18 yr | 22.26 yr |
-| launch ledger vs 1/15 | 1.40x | 1.31x |
+| climb-out excess | 187.5 km/s | 72.5 km/s |
+| periapsis boost | 53.00 km/s | 23.31 km/s |
+| Earth closing speed `v_b` | 193.76 km/s | 82.95 km/s |
+| departure slug ratio | 57.11 | **8.18** |
+| coldest closing speed | 196.15 km/s | 89.55 km/s |
+| residual over the ignition bill | 1.50x | 1.51x |
+| `eta_jet^2` available | 0.728 | 0.698 |
+| node survival | 0.4591 | 0.3751 |
+| mass fraction departing | 0.7877 | 0.7276 |
+| round trip | 0.3616 | 0.2730 |
+| **kg per impactor kg** | **97.26** | **8.20** |
+| **doubling** | **0.4961 yr** | **1.0795 yr** |
+| millionfold | 9.89 yr | 21.52 yr |
+| launch ledger vs 1/15 | 1.36x | 1.02x |
 | limited by | expansion | expansion |
 
-**Both are expansion-limited, both clear the pad, and the trade is 11.2x the
-growth for 2.19x the clock.** That is the number this ADR exists to produce: a
+**Both are expansion-limited, both clear the pad, and the trade is 11.9x the
+growth for 2.18x the clock.** That is the number this ADR exists to produce: a
 64x cooler node, an 8.2x gentler collision and 2.9x looser rendezvous timing cost
 a factor of 2.19 in doubling time, not the factor of 10 the per-cycle growth
 suggests and not the factor of 1 an unconstrained search suggests.
 
-Two footnotes. ADR 0019's own operating point is near-optimal on its own axis --
-83.35 against 85.44 -- so nothing here revises it. And the proposed
-32 R_sun / 75 / `k` = 8.5 point returns *more* per impactor kilogram than the
-constrained optimum (7.97 against 7.64) because it sits just outside the pad
-constraint at 0.96x; the ridge is flat enough that the two are the same cycle for
-practical purposes, and the optimum is the one to quote because it is feasible.
+**The shallow optimum lands at `k` = 8.18.** The cap proposed as a guess at a
+plasma limit sits within 4 percent of the expansion-limited optimum, having been
+argued for on a mechanism (a 60 km/s closing speed at burnout) that does not
+occur. That is a coincidence and is recorded as one, but it is the reason the
+originally proposed operating point needs no revision beyond its climb-out excess.
+
+ADR 0019's own operating point is near-optimal on its own axis -- 83.35 against
+97.26, the gap being slug ratio rather than trajectory -- so nothing here revises
+it either.
 
 ### At a shallow node the Oberth boost is a pure cost
 
@@ -408,6 +427,29 @@ than by assuming the deep node is free.
   answer. The trade shows the shallow node handles 8.2x less specific energy,
   but no mass model turns that into kilograms, so the case for backing out
   remains qualitative on exactly the axis that motivated it.
+- **The expansion floor applies to `two_leg_nozzle_sweep` and ADR 0014/0015, and
+  it has not been worked there.** Those use the same ignition-only window
+  (`two_wave_growth.fleet_ignition_windows`), which gives `k1` in [0.098, 10.209]
+  and `k2` in [0.043, 23.321] and binds in only 1 of 64 swept cells. Applied to
+  the same 11 flown cycles, the expansion floor is far more restrictive: leg 1's
+  coldest closing speeds run 45.6-54.2 km/s and leg 2's 65.4-74.3, so **no slug
+  ratio on leg 1 supports `eta_jet^2` = 0.60 at all**. Read as a ceiling on the
+  efficiency rather than a window on `k` -- the more useful form, since `eta` is
+  what is being swept -- the best fleet-wide available values are:
+
+  | leg | coldest `w` | best `eta_jet^2` available | at `k` |
+  | --- | ---: | ---: | ---: |
+  | 1, overtaking growth push | 45.6-54.2 km/s | **0.430** | 2.50 |
+  | 2, head-on departure | 65.4-74.3 km/s | **0.603** | 4.05 |
+
+  Both optimal slug ratios sit far below the ignition ceilings those sweeps use,
+  so the window would bind in many more than 1 cell in 64. **Whether this moves
+  the plate-versus-nozzle verdict is not determined here and must not be assumed
+  from these numbers.** ADR 0016 deliberately split the one efficiency knob into
+  `recovery` (which multiplies `beta` as a whole, and is what `e1`/`e2` set) and
+  the geometric factor inside the square root, so the `e1` axis those ADRs
+  compare on is *not* the same parameterisation as `eta_jet^2` and the mapping
+  needs doing before any conclusion is drawn. Flagged, not resolved.
 - **The impactor heat shield is not modelled.** `src/cruise_thermal.py` solves
   ice sublimation for the cruise, not a 2041 K or 722 K terminal approach.
 - **`eta_geom` is still unmeasured** (`sec:jet_efficiency`), so `eta_jet^2` =

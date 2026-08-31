@@ -19,11 +19,13 @@ Four things it does that :mod:`src.jovian_solar_dive_cycle` does not:
   **plume ignition window** is a condition at the instant of the merge; a
   magnetic nozzle does its work by letting the plume expand, which cools it.
   Requiring the plume to still clear the ignition bill *after* the jet is drawn
-  gives the **expansion floor**, 2.50x the ignition bill rather than 1x, and it
-  roughly halves the admissible slug ratio (:func:`expansion_floor_energy`).
-  Its stricter cousin follows straight from ADR 0016: the frozen chemistry is
-  charged inside ``eta_jet**2``, so a stated efficiency is only *available*
-  above a threshold merge energy (:func:`maximum_jet_efficiency`).
+  gives the **expansion floor**, a window on ``k`` strictly inside the ignition
+  window on both sides -- [1.93, 16.03] against [0.021, 47.88] at a 91.78 km/s
+  closing speed (:func:`expansion_limited_slug_ratio_window`).  The efficiency
+  ceiling it implies (:func:`maximum_jet_efficiency`) is **not** new: ADR 0016
+  put a frozen-chemistry ceiling on the same parameter and implemented it as
+  ``plume_thermal.chemistry_efficiency``.  This one is strictly tighter, because
+  it asks that the plume still *conduct* rather than that the jet stay positive.
 * **The slug ratio has three ceilings, and they pull opposite ways.**  Ignition
   and expansion cap ``k`` from above because thin slug cannot hold a plasma;
   the **launch ledger** caps it from above too, because every kilogram of slug
@@ -38,9 +40,9 @@ The headline, against ADR 0019's reference cycle:
 
 * **Three synodic periods still closes at 32 solar radii**, prograde and
   unpowered, with +54.48 degrees of Jovian bend margin against +58.80.
-* **Growth falls about 11x** at each depth's own constrained optimum, 85.44 to
-  7.64 kg returned per impactor kilogram -- but **doubling time only 2.19x**,
-  0.5106 yr against 1.1169.  A 64x cooler node costs a factor of two in the
+* **Growth falls about 12x** at each depth's own constrained optimum, 97.26 to
+  8.20 kg returned per impactor kilogram -- but **doubling time only 2.18x**,
+  0.4961 yr against 1.0795.  A 64x cooler node costs a factor of two in the
   clock, not a factor of ten.
 * **The cap on the slug ratio is the expansion floor, and at the shallow node
   the launch ledger is close behind.**  Neither is the plume ignition window,
@@ -109,8 +111,10 @@ CONSERVATIVE_SLUG_RATIO = 8.5
 # Thermal headroom demanded above the **expansion floor** at the design point.
 # 1.0 is the floor itself, where the plume reaches nozzle exit at exactly the
 # ignition temperature and the caloric model's own ~3% disagreement with the
-# solved surface is the whole margin.  2.0 is what the recommended point carries.
-DEFAULT_EXPANSION_MARGIN = 2.0
+# solved surface is the whole margin.  1.5 is a stated design margin, not a
+# derived one, chosen to sit below both reference cycles: ADR 0019's k = 30 at
+# 158 km/s carries 1.76 and the 32 R_sun k = 8.5 point carries 1.55.
+DEFAULT_EXPANSION_MARGIN = 1.5
 
 # Slug ratio at the *dive* node.  Held at the departure module's own default so
 # the deep and shallow rows are scored on one device -- and because at 30 it
@@ -382,67 +386,109 @@ def ignition_bill() -> float:
     return float(plume_ignition_energy().to_value(u.MJ / u.kg))
 
 
-def maximum_jet_efficiency(thermalised_energy: float) -> float:
-    """Largest ``eta_jet**2`` energy conservation allows at this merge energy.
+def jet_energy_fraction(
+    slug_ratio: float,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+) -> float:
+    """Fraction of the merge's internal energy the jet actually carries off.
 
-    ADR 0016 charges the frozen chemistry *inside* ``eta_jet**2`` rather than as
-    a separate debit.  That has a consequence the growth ledgers never applied:
-    a jet carrying ``eta`` of the merge energy leaves ``1 - eta`` behind, and
-    what is left behind must still cover a bill that does not shrink.  So
+    Not ``eta_jet**2`` itself, and the difference is worth a paragraph because
+    getting it wrong is lenient rather than conservative.  ``eta_jet**2`` is
+    defined against the *ideal one-axis* budget ``w**2 / 2`` per impactor
+    kilogram, while the energy the merge really has to give is
+    ``w**2 k / (2(1+k))``.  The jet's share of what exists is therefore
 
-        eta_jet**2  <=  1 - frozen / eps_th
+        eta * (1 + k) / k
 
-    and a stated efficiency is only honourable above a threshold merge energy.
-    At 84.7 MJ/kg -- where the ignition window's upper root sits at a 66 km/s
-    closing speed -- the ceiling is 0.369, so scoring that point at 0.60 draws
-    more directed exhaust out of the blob than the blob holds.
+    which is 0.671 at ``k`` = 8.5 rather than 0.600, and diverges as ``k``
+    falls -- below ``k`` = ``eta / (1 - eta)`` the impulse law asks for more
+    than the collision dissipates, which is why the **expansion floor** has a
+    lower root as well as an upper one.
 
     Args:
-        thermalised_energy: The merge's specific internal energy (MJ/kg).
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
 
     Returns:
-        The largest physically available ``eta_jet**2``, clipped to [0, 1].
+        The jet's share of the internal energy, clipped at 1.0.
+
+    Raises:
+        ValueError: If the slug ratio is not positive.
     """
-    if thermalised_energy <= 0.0:
-        return 0.0
-    return float(
-        min(1.0, max(0.0, 1.0 - frozen_ignition_energy() / thermalised_energy))
+    if slug_ratio <= 0.0:
+        raise ValueError("slug_ratio must be positive")
+    return float(min(1.0, jet_energy_efficiency * (1.0 + slug_ratio) / slug_ratio))
+
+
+def expansion_residual(
+    closing_speed: float,
+    slug_ratio: float,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+) -> float:
+    """Heat left in the plume once the nozzle has taken its work out (MJ/kg).
+
+    ``eps_th * (1 - jet share)``.  The frozen chemistry sits inside both this
+    and the **ignition bill** it is compared against, so nothing is
+    double-charged: requiring the residual to clear the whole bill is the same
+    statement as requiring the residual *translational* energy to clear the
+    bill's 30.94 MJ/kg translational term.
+
+    Args:
+        closing_speed: Impactor speed relative to the vehicle at the coldest
+            instant of the burn (km/s).
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+
+    Returns:
+        Residual specific internal energy (MJ/kg); zero when the jet would take
+        everything.
+    """
+    thermalised = float(
+        specific_thermal_energy(closing_speed * u.km / u.s, slug_ratio).to_value(
+            u.MJ / u.kg
+        )
+    )
+    return max(
+        0.0,
+        thermalised * (1.0 - jet_energy_fraction(slug_ratio, jet_energy_efficiency)),
     )
 
 
-def expansion_floor_energy(
-    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
-    margin: float = 1.0,
-) -> float:
-    """Merge energy a plume needs to still be conducting at nozzle exit.
+def maximum_jet_efficiency(closing_speed: float, slug_ratio: float) -> float:
+    """Largest ``eta_jet**2`` that leaves a conducting plume at nozzle exit.
 
-    A magnetic nozzle does its work by letting the plume expand, which cools it.
-    The **plume ignition window** is a condition at the *start* of that
-    expansion, so a blob sitting on the window's upper root ignites and then
-    drops out of conduction the moment the field takes any work out of it --
-    the nozzle would decouple partway down and the quoted ``eta_jet**2`` would
-    never be reached.  Requiring the plume to still clear the ignition bill
-    *after* the jet has been drawn:
+    From ``eps_th * (1 - eta*(1+k)/k) >= bill``:
 
-        eps_th * (1 - eta)  >=  ignition bill
+        eta_jet**2  <=  (k / (1+k)) * (1 - bill / eps_th)
 
-    which at ``eta`` = 0.60 is 211.0 MJ/kg, **2.50x the ignition bill rather
-    than 1x**.  This is a stricter statement than :func:`maximum_jet_efficiency`
-    and subsumes it.
+    **This is not a new bound, it is a stricter one.**  ADR 0016 already put a
+    frozen-chemistry ceiling on the same parameter and implemented it as
+    :func:`plume_thermal.chemistry_efficiency`, which charges the 50.9 MJ/kg
+    atomisation toll against the ideal one-axis budget.  That bound asks only
+    that the jet energy stay positive after the chemistry is paid; this one
+    asks that the plume still be *conducting* when the expansion is done, which
+    is what a magnetic nozzle actually needs.  The two agree on verdicts and
+    differ on margin -- at 396.7 MJ/kg ADR 0016's ceiling is 0.885 and this one
+    is 0.704; at the 84.7 MJ/kg point where an ignition-only search parks, ADR
+    0016 gives 0.423 and this gives 0.003, and both are far under a stated 0.60.
 
     Args:
-        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1).
-        margin: Headroom demanded above the floor; 1.0 is the floor itself.
+        closing_speed: Impactor speed relative to the vehicle at the coldest
+            instant of the burn (km/s).
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
 
     Returns:
-        The required merge energy (MJ/kg).
-
-    Raises:
-        ValueError: If the efficiency is not in (0, 1).
+        The largest available ``eta_jet**2``, clipped to [0, 1].
     """
-    if not 0.0 < jet_energy_efficiency < 1.0:
-        raise ValueError("jet_energy_efficiency must lie in (0, 1)")
-    return margin * ignition_bill() / (1.0 - jet_energy_efficiency)
+    thermalised = float(
+        specific_thermal_energy(closing_speed * u.km / u.s, slug_ratio).to_value(
+            u.MJ / u.kg
+        )
+    )
+    if thermalised <= 0.0:
+        return 0.0
+    ratio = slug_ratio / (1.0 + slug_ratio) * (1.0 - ignition_bill() / thermalised)
+    return float(min(1.0, max(0.0, ratio)))
 
 
 def expansion_limited_slug_ratio_window(
@@ -452,11 +498,21 @@ def expansion_limited_slug_ratio_window(
 ) -> Optional[Tuple[float, float]]:
     """Slug ratios whose plume survives its own expansion at this closing speed.
 
-    The same quadratic :func:`plume_thermal.slug_ratio_window` solves, against
-    :func:`expansion_floor_energy` instead of the bare ignition bill, so it is
-    the same two-sided window drawn tighter.  It roughly halves the upper root:
-    at a 91.78 km/s closing speed the ignition window runs to ``k`` = 47.88 and
-    this one to 17.90.
+    A magnetic nozzle does its work by letting the plume expand, which cools it.
+    The **plume ignition window** is a condition at the *start* of that
+    expansion, so a blob on its upper root lights and then drops out of
+    conduction the moment the field takes any work out of it -- the nozzle would
+    decouple partway down and the quoted ``eta_jet**2`` would never be reached.
+    Requiring the plume to still clear the **ignition bill** after the jet is
+    drawn, with ``P = w**2 / 2`` and ``B`` the bill at the demanded margin:
+
+        B k**2 + (2B - P(1 - eta)) k + (B + P eta)  <=  0
+
+    a closed interval like the ignition window and strictly inside it, with a
+    lower root that is *not* small: below about ``k`` = 2 the jet's share of the
+    internal energy (:func:`jet_energy_fraction`) is what excludes it, not the
+    merge energy.  At a 91.78 km/s closing speed this gives [1.93, 16.03]
+    against the ignition window's [0.021, 47.88].
 
     Args:
         closing_speed: Impactor speed relative to the vehicle at the *coldest*
@@ -466,19 +522,24 @@ def expansion_limited_slug_ratio_window(
 
     Returns:
         ``(k_min, k_max)``, or None when no slug ratio clears the floor at this
-        closing speed -- a real outcome, not an error.  The merge energy peaks
-        at ``k`` = 1 with ``w**2 / 8``, so at ``eta`` = 0.60 and unit margin the
-        window vanishes below **41.1 km/s** and no nozzle of any slug ratio
-        works there.
+        closing speed -- a real outcome, not an error.
+
+    Raises:
+        ValueError: If the efficiency is not in (0, 1).
     """
-    peak_scale = 0.5 * (closing_speed * 1000.0) ** 2
-    required = expansion_floor_energy(jet_energy_efficiency, margin) * 1.0e6
-    discriminant = peak_scale * (peak_scale - 4.0 * required)
+    if not 0.0 < jet_energy_efficiency < 1.0:
+        raise ValueError("jet_energy_efficiency must lie in (0, 1)")
+    peak = 0.5 * (closing_speed * 1000.0) ** 2
+    bill = margin * ignition_bill() * 1.0e6
+    linear = 2.0 * bill - peak * (1.0 - jet_energy_efficiency)
+    discriminant = linear * linear - 4.0 * bill * (bill + peak * jet_energy_efficiency)
     if discriminant < 0.0:
         return None
     root = float(np.sqrt(discriminant))
-    lower = (peak_scale - 2.0 * required - root) / (2.0 * required)
-    upper = (peak_scale - 2.0 * required + root) / (2.0 * required)
+    lower = (-linear - root) / (2.0 * bill)
+    upper = (-linear + root) / (2.0 * bill)
+    if upper <= 0.0:
+        return None
     return max(lower, 0.0), upper
 
 
@@ -504,9 +565,9 @@ class SlugRatioCeilings:
             the nozzle has finished taking its work out.  Roughly half the
             plasma ceiling, and None when no slug ratio clears the floor.
         thermalised_energy: Merge energy at the design slug ratio (MJ/kg).
-        expansion_margin: That energy over the **expansion floor**.  Below 1.0
-            the quoted ``eta_jet**2`` is not reachable and the cycle is not
-            merely inefficient but unphysical.
+        expansion_margin: Heat left once the jet is drawn, over the **ignition
+            bill**.  Below 1.0 the quoted ``eta_jet**2`` is not reachable and
+            the cycle is not merely inefficient but unphysical.
         maximum_jet_efficiency: Largest ``eta_jet**2`` energy conservation
             allows at that merge energy.
         launch_peak_slug_ratio: Slug ratio maximising kilograms returned per
@@ -653,7 +714,6 @@ def slug_ratio_ceilings(
     thermalised = float(
         specific_thermal_energy(coldest * u.km / u.s, slug_ratio).to_value(u.MJ / u.kg)
     )
-    floor_energy = expansion_floor_energy(jet_energy_efficiency)
 
     peak = minimize_scalar(
         lambda k: -_returned_per_pad_kg(
@@ -722,8 +782,11 @@ def slug_ratio_ceilings(
         plasma_ceiling=plasma_ceiling,
         expansion_ceiling=expansion_ceiling,
         thermalised_energy=thermalised,
-        expansion_margin=thermalised / floor_energy,
-        maximum_jet_efficiency=maximum_jet_efficiency(thermalised),
+        expansion_margin=(
+            expansion_residual(coldest, slug_ratio, jet_energy_efficiency)
+            / ignition_bill()
+        ),
+        maximum_jet_efficiency=maximum_jet_efficiency(coldest, slug_ratio),
         launch_peak_slug_ratio=peak_ratio,
         launch_peak_margin=peak_value / RETURN_FLOOR,
         launch_ceiling=launch_ceiling,
@@ -1352,8 +1415,10 @@ def describe_row(row: DepthTradeRow) -> str:
         f"    expansion ceiling            "
         f"{_format_ceiling(k.expansion_ceiling, False)}"
         f"   (plume still conducting at nozzle exit)",
-        f"    merge energy at this k       {k.thermalised_energy:.1f} MJ/kg"
-        f"   = {k.expansion_margin:.2f}x the expansion floor",
+        f"    merge energy at this k       {k.thermalised_energy:.1f} MJ/kg",
+        f"    heat left after the jet      "
+        f"{k.expansion_margin * ignition_bill():.1f} MJ/kg"
+        f"   = {k.expansion_margin:.2f}x the ignition bill",
         f"    eta_jet^2 available          {k.maximum_jet_efficiency:.3f}",
         f"    launch ledger peaks at k     {k.launch_peak_slug_ratio:.3f}"
         f"   ({k.launch_peak_margin:.3f}x the committed 1/15 floor)",

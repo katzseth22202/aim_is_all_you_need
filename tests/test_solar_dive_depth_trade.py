@@ -19,7 +19,7 @@ from src.jovian_solar_dive_cycle import (
     DEFAULT_SLUG_RATIO,
     solve_synodic_closure,
 )
-from src.plume_thermal import slug_ratio_window
+from src.plume_thermal import chemistry_efficiency, slug_ratio_window
 from src.retrograde_return_legs import _powered_flyby_params
 from src.two_leg_nozzle_sweep import RETURN_FLOOR
 
@@ -457,47 +457,73 @@ def test_the_frozen_bill_is_most_of_the_ignition_bill() -> None:
     )
 
 
-def test_a_stated_efficiency_is_not_always_physically_available() -> None:
-    # The failure the ignition window cannot see. At the window's own upper root
-    # at a 66 km/s closing speed the merge holds 84.7 MJ/kg, of which 53.5 never
-    # comes back -- so no jet can carry off 0.60 of it, and scoring one that does
-    # draws more directed exhaust from the blob than the blob contains.
-    assert trade.maximum_jet_efficiency(84.7) == pytest.approx(0.369, abs=0.005)
-    assert trade.maximum_jet_efficiency(390.5) == pytest.approx(0.863, abs=0.005)
-    assert trade.maximum_jet_efficiency(trade.frozen_ignition_energy()) == 0.0
-    assert trade.maximum_jet_efficiency(0.0) == 0.0
-
-
-def test_the_expansion_floor_is_two_and_a_half_times_the_ignition_bill() -> None:
-    # eps_th * (1 - eta) >= bill, so the plume is still conducting once the
-    # nozzle has taken its work out rather than only when it lights.
-    floor = trade.expansion_floor_energy()
-    assert floor == pytest.approx(211.0, abs=0.5)
-    assert floor / trade.ignition_bill() == pytest.approx(2.50, abs=0.01)
-    assert floor * (1.0 - 0.60) == pytest.approx(trade.ignition_bill())
+def test_the_jet_takes_more_than_its_stated_share_of_what_exists() -> None:
+    # eta_jet**2 is defined against the ideal one-axis budget w**2/2, but the
+    # merge only has w**2 k / (2(1+k)) to give. Reading the two as the same
+    # quantity is lenient, not conservative, and it is what made the first
+    # version of the expansion floor too generous by 18% at k = 8.5.
+    assert trade.jet_energy_fraction(8.5) == pytest.approx(0.671, abs=1e-3)
+    assert trade.jet_energy_fraction(30.0) == pytest.approx(0.620, abs=1e-3)
+    assert trade.jet_energy_fraction(100.0) == pytest.approx(0.606, abs=1e-3)
+    # Below k = eta/(1 - eta) the law asks for more than the collision gives.
+    assert trade.jet_energy_fraction(1.0) == 1.0
     with pytest.raises(ValueError):
-        trade.expansion_floor_energy(1.0)
+        trade.jet_energy_fraction(0.0)
 
 
-def test_the_expansion_window_roughly_halves_the_ignition_window() -> None:
-    for speed, ignition_max, expansion_max in (
-        (66.09, 23.83, 8.23),
-        (91.78, 47.88, 17.90),
-        (158.17, 146.19, 57.26),
+def test_the_efficiency_ceiling_is_stricter_than_adr_0016s_not_new() -> None:
+    # Recorded because it would be easy to present as a discovery: ADR 0016
+    # already put a frozen-chemistry ceiling on eta_jet**2 and implemented it as
+    # plume_thermal.chemistry_efficiency. This one asks the harder question --
+    # is the plume still *conducting* at exit, not merely is the jet positive --
+    # so it must be stricter everywhere, and agree on the verdict.
+    for speed, ratio in ((158.17, 30.0), (91.78, 8.5), (66.09, 23.75)):
+        strict = trade.maximum_jet_efficiency(speed, ratio)
+        loose = float(chemistry_efficiency(speed * u.km / u.s, ratio)) ** 2
+        assert strict < loose
+    # And both condemn the point an ignition-only search picks.
+    assert trade.maximum_jet_efficiency(66.09, 23.75) < 0.01
+    assert float(chemistry_efficiency(66.09 * u.km / u.s, 23.75)) ** 2 < 0.60
+    # The two reference cycles clear the stated 0.60 on the strict bound.
+    assert trade.maximum_jet_efficiency(158.17, 30.0) == pytest.approx(0.759, abs=5e-3)
+    assert trade.maximum_jet_efficiency(91.78, 8.5) == pytest.approx(0.704, abs=5e-3)
+
+
+def test_the_residual_is_what_the_ignition_bill_is_compared_against() -> None:
+    # Nothing double-charges: the frozen chemistry sits inside both the residual
+    # and the bill, so "residual >= bill" is the same statement as "residual
+    # translation >= the bill's translational term".
+    residual = trade.expansion_residual(91.78, 8.5)
+    assert residual == pytest.approx(130.7, abs=0.5)
+    frozen = trade.frozen_ignition_energy()
+    thermal_floor = trade.ignition_bill() - frozen
+    assert residual - frozen == pytest.approx(130.7 - frozen, abs=0.5)
+    assert (residual - frozen) > thermal_floor
+    assert trade.expansion_residual(66.09, 23.75) == pytest.approx(31.7, abs=0.5)
+
+
+def test_the_expansion_window_is_far_tighter_than_the_ignition_window() -> None:
+    for speed, ignition_max, expansion in (
+        (66.09, 23.83, (3.22, 5.13)),
+        (91.78, 47.88, (1.93, 16.03)),
+        (158.17, 146.19, (1.615, 55.66)),
     ):
         window = slug_ratio_window(speed * u.km / u.s)
         assert window is not None
         assert window[1] == pytest.approx(ignition_max, rel=1e-3)
         tighter = trade.expansion_limited_slug_ratio_window(speed)
         assert tighter is not None
-        assert tighter[1] == pytest.approx(expansion_max, rel=1e-3)
-        assert tighter[1] < window[1]
-    # The window vanishes below 41.1 km/s, where the k = 1 peak of w^2/8 drops
-    # under the floor -- a result rather than an error.
-    assert trade.expansion_limited_slug_ratio_window(42.0) is not None
-    assert trade.expansion_limited_slug_ratio_window(40.0) is None
-    cutoff = float(np.sqrt(8.0 * trade.expansion_floor_energy() * 1.0e6)) / 1000.0
-    assert cutoff == pytest.approx(41.1, abs=0.1)
+        assert tighter[0] == pytest.approx(expansion[0], rel=2e-3)
+        assert tighter[1] == pytest.approx(expansion[1], rel=2e-3)
+        # Strictly inside on *both* sides -- the lower root is the jet asking
+        # for more than the merge dissipates, which ignition cannot see.
+        assert window[0] < tighter[0] and tighter[1] < window[1]
+    # It vanishes below about 65 km/s, where ignition still permits k up to 22.
+    assert trade.expansion_limited_slug_ratio_window(64.9) is None
+    assert trade.expansion_limited_slug_ratio_window(65.1) is not None
+    assert slug_ratio_window(60.0 * u.km / u.s) is not None
+    with pytest.raises(ValueError):
+        trade.expansion_limited_slug_ratio_window(90.0, 1.0)
 
 
 def test_the_proposed_slug_ratio_clears_the_expansion_floor(
@@ -505,11 +531,11 @@ def test_the_proposed_slug_ratio_clears_the_expansion_floor(
 ) -> None:
     # The point of the whole correction: k = 8.5 was proposed to protect the
     # plasma and turns out to be needed for the expansion instead -- and it
-    # carries the same headroom the deep reference cycle does.
-    assert shallow.ceilings.expansion_ceiling == pytest.approx(17.90, rel=1e-3)
+    # carries about the headroom the deep reference cycle does.
+    assert shallow.ceilings.expansion_ceiling == pytest.approx(16.03, rel=2e-3)
     assert trade.CONSERVATIVE_SLUG_RATIO < shallow.ceilings.expansion_ceiling
-    assert shallow.ceilings.expansion_margin == pytest.approx(1.88, abs=0.02)
-    assert deep.ceilings.expansion_margin == pytest.approx(1.85, abs=0.02)
+    assert shallow.ceilings.expansion_margin == pytest.approx(1.55, abs=0.02)
+    assert deep.ceilings.expansion_margin == pytest.approx(1.76, abs=0.02)
     assert shallow.ceilings.maximum_jet_efficiency > 0.60
 
 
@@ -517,8 +543,8 @@ def test_the_ignition_windows_own_upper_root_is_unphysical() -> None:
     # Scored honestly, the point a plasma-only search picks fails outright.
     row = trade.depth_trade_row(32.0, 45.0, 23.75, params=_PARAMS)
     assert row is not None
-    assert row.ceilings.expansion_margin < 0.5
-    assert row.ceilings.maximum_jet_efficiency < 0.40
+    assert row.ceilings.expansion_margin == pytest.approx(0.38, abs=0.02)
+    assert row.ceilings.maximum_jet_efficiency < 0.01
     assert row.ceilings.binding == "expansion"
     assert row.ceilings.expansion_ceiling is not None
     assert 23.75 > row.ceilings.expansion_ceiling
@@ -529,17 +555,20 @@ def test_the_constrained_optimum_lands_where_adr_0020_says() -> None:
     shallow = trade.constrained_growth_optimum(32.0, params=_PARAMS)
     assert shallow is not None
     assert shallow.limited_by == "expansion"
-    assert shallow.return_excess == pytest.approx(62.5, abs=0.01)
-    assert shallow.slug_ratio == pytest.approx(5.5, abs=0.01)
-    assert shallow.row.growth.doubling_years == pytest.approx(1.117, abs=5e-3)
+    assert shallow.return_excess == pytest.approx(72.5, abs=0.01)
+    # The proposed cap was a guess at a plasma limit and lands within 4% of the
+    # expansion-limited optimum, which is the ADR's headline coincidence.
+    assert shallow.slug_ratio == pytest.approx(8.18, abs=0.01)
+    assert shallow.slug_ratio == pytest.approx(trade.CONSERVATIVE_SLUG_RATIO, rel=0.05)
+    assert shallow.row.growth.doubling_years == pytest.approx(1.0795, abs=5e-3)
     assert shallow.row.launch.stated_margin > 1.0
 
     deep = trade.constrained_growth_optimum(4.0, params=_PARAMS)
     assert deep is not None
     assert deep.limited_by == "expansion"
-    assert deep.row.growth.doubling_years == pytest.approx(0.511, abs=5e-3)
+    assert deep.row.growth.doubling_years == pytest.approx(0.4961, abs=5e-3)
     assert deep.row.launch.stated_margin > 1.0
     # The whole trade in one number: a 64x cooler node costs 2.2x the clock.
     assert (
         shallow.row.growth.doubling_years / deep.row.growth.doubling_years
-    ) == pytest.approx(2.19, rel=0.02)
+    ) == pytest.approx(2.18, rel=0.02)
