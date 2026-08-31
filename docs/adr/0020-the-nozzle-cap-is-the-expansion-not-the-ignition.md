@@ -437,11 +437,16 @@ than by assuming the deep node is free.
   efficiency rather than a window on `k` -- the more useful form, since `eta` is
   what is being swept -- the best fleet-wide available values are:
 
-  | leg | coldest `w` | best `eta_jet^2` available | at `k` |
-  | --- | ---: | ---: | ---: |
-  | 1, overtaking growth push | 45.6-54.2 km/s | **0.430** | 2.50 |
-  | 2, head-on departure | 65.4-74.3 km/s | **0.603** | 4.05 |
+  | reserve assumption | leg 1, overtaking | leg 2, head-on |
+  | --- | ---: | ---: |
+  | water + K at 15,000 K -- the conservative end | 0.430 @ `k` = 2.5 | 0.603 @ `k` = 4.0 |
+  | water + K at 6,000 K | 0.496 @ `k` = 3.0 | 0.649 @ `k` = 4.7 |
+  | frozen chemistry only -- the hard end | **0.546** @ `k` = 3.4 | **0.684** @ `k` = 5.3 |
 
+  **Leg 1 cannot reach 0.60 at either end of the bracket**, which is the robust
+  part; only the severity is uncertain. Coldest closing speeds run 45.6-54.2 km/s
+  on leg 1 and 65.4-74.3 on leg 2, against 92-158 for the solar-dive cycles, which
+  is why this bites there and not here.
   Both optimal slug ratios sit far below the ignition ceilings those sweeps use,
   so the window would bind in many more than 1 cell in 64. **Whether this moves
   the plate-versus-nozzle verdict is not determined here and must not be assumed
@@ -450,6 +455,60 @@ than by assuming the deep node is free.
   the geometric factor inside the square root, so the `e1` axis those ADRs
   compare on is *not* the same parameterisation as `eta_jet^2` and the mapping
   needs doing before any conclusion is drawn. Flagged, not resolved.
+- **The conduction reserve is a bracket and the ADR quotes its conservative end.**
+  Reserving the whole ignition bill puts the plume at nozzle exit still at
+  15,000 K, which is *sufficient* but not necessary -- and ADR 0016's own finding
+  argues against it. If dissociation freezes past the lip, so does the seed's
+  ionisation, by the same three-body argument at the same density: the electrons
+  survive the cooling, Spitzer conductivity falls only as `T^1.5`, and the grip
+  degrades smoothly rather than cliff-edging. Reserving only the frozen chemistry
+  is the hard end. `conduction_reserve()` spans the two, and the nozzle floor is
+  itself a design choice -- a potassium-seeded plume is usually taken to stay
+  workable near 6,000 K, dropping the bill from 84.41 to 65.85 MJ/kg:
+
+  | | reserve | 4 R_sun `eta` ceiling | 32 R_sun `eta` ceiling |
+  | --- | ---: | ---: | ---: |
+  | 15,000 K, all reserved | 84.41 | 0.759 | 0.704 |
+  | 6,000 K | 65.85 | 0.805 | 0.746 |
+  | frozen chemistry only | 53.47 | 0.835 | 0.774 |
+
+  **Every row clears the 0.60 these cycles are scored at**, so nothing in this
+  ADR's own numbers depends on where in the bracket the truth sits. What closes it
+  is the magnetic Reynolds number at nozzle exit, `Rm = mu0 sigma v L >~ 1`, which
+  nobody here has computed.
+- **A monatomic slug may retire the dissociation toll entirely, and the model
+  cannot be trusted to say so.** Argon pays no atomisation, and -- the larger
+  effect -- one kilogram of it is 1.49e25 atoms against water's 1.00e26, so
+  *every* per-particle toll shrinks 6.7x: dissociation, translation and
+  ionisation alike. Full single ionisation costs argon 37.7 MJ/kg against water's
+  218.7. At 6,000 K the bill falls from 84.41 to **2.16 MJ/kg**.
+
+  The catch is that argon's own ionisation becomes the new frozen toll, by the
+  same `Da < 1` argument, and at leg-1 merge energies of 145-195 MJ/kg the plume
+  is well past Ar(1+):
+
+  | reserve | leg 1 ceiling | leg 2 ceiling |
+  | --- | ---: | ---: |
+  | argon, ionisation ignored | 0.909 @ `k` = 20.9 | 0.936 @ `k` = 30.5 |
+  | argon + Ar(1+) frozen, 37.7 MJ/kg | 0.608 @ `k` = 4.1 | 0.727 @ `k` = 6.3 |
+  | argon + Ar(2+) frozen, 103.8 MJ/kg | 0.361 @ `k` = 2.1 | 0.555 @ `k` = 3.5 |
+
+  So argon spans 0.36 to 0.91 on leg 1 -- a large win or slightly worse than
+  water -- and the Saha state decides. `plume_state.py` solves it for water off a
+  vendored table; there is no argon one. **Water has the identical problem and
+  the current bill hides it**: `plume_ignition_energy` sets
+  `ionisation_fraction = 0` by design, answering "what does it cost to light the
+  plume", while ADR 0016 records ~125 MJ/kg of stripped electrons at the hot pulse.
+
+  Two counterweights the impulse law cannot see. **Larmor radius goes as
+  `sqrt(m)`**, so argon ions are 1.6x harder to magnetise than oxygen and 6.3x
+  harder than hydrogen -- a direct `eta_geom` penalty pushing the other way. And
+  **storage**: ADR 0018's axial bag with its ice plug and `cruise_thermal.py`'s
+  sublimation balance are water-specific, though a cryogen is far more tractable
+  at 32 R_sun's 722 K than at 4 R_sun's 2041 K, which makes argon and the shallow
+  dive complementary. CONTEXT.md already warns against exactly this optimisation
+  -- the impulse law has no molar-mass dependence and would always pick the
+  heaviest species -- so the model will say "use argon" whether or not it is right.
 - **The impactor heat shield is not modelled.** `src/cruise_thermal.py` solves
   ice sublimation for the cruise, not a 2041 K or 722 K terminal approach.
 - **`eta_geom` is still unmeasured** (`sec:jet_efficiency`), so `eta_jet^2` =

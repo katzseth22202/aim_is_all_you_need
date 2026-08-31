@@ -14,6 +14,7 @@ from astropy import units as u
 
 from src import solar_dive_depth_trade as trade
 from src.jovian_solar_dive_cycle import (
+    DEFAULT_JET_ENERGY_EFFICIENCY,
     DEFAULT_PERIAPSIS_SURVIVAL,
     DEFAULT_RETURN_EXCESS,
     DEFAULT_SLUG_RATIO,
@@ -548,6 +549,49 @@ def test_the_ignition_windows_own_upper_root_is_unphysical() -> None:
     assert row.ceilings.binding == "expansion"
     assert row.ceilings.expansion_ceiling is not None
     assert 23.75 > row.ceilings.expansion_ceiling
+
+
+def test_the_conduction_reserve_is_a_bracket_not_a_number() -> None:
+    # The conservative end reserves the whole bill so the plume exits at
+    # 15,000 K; the hard end reserves only what cannot come back. ADR 0016's
+    # frozen-recombination finding argues for the hard end, so the ADR quotes the
+    # conservative one and records both.
+    assert trade.conduction_reserve() == pytest.approx(84.41, abs=0.05)
+    assert trade.conduction_reserve(6000.0 * u.K) == pytest.approx(65.85, abs=0.05)
+    hard = trade.conduction_reserve(reserve_thermal=False)
+    assert hard == pytest.approx(trade.frozen_ignition_energy())
+    assert hard < trade.conduction_reserve(6000.0 * u.K) < trade.conduction_reserve()
+
+
+def test_both_ends_of_the_bracket_clear_what_the_cycles_are_scored_at() -> None:
+    # The reason ADR 0020's own numbers do not depend on where in the bracket the
+    # truth sits: the solar-dive closing speeds are 92-158 km/s, hot enough that
+    # even the conservative reserve leaves eta well above the 0.60 scored.
+    hard = trade.conduction_reserve(reserve_thermal=False)
+    warm = trade.conduction_reserve(6000.0 * u.K)
+    for speed, ratio, expected in (
+        (158.17, 30.0, (0.759, 0.805, 0.835)),
+        (91.78, 8.5, (0.704, 0.746, 0.774)),
+    ):
+        ceilings = (
+            trade.maximum_jet_efficiency(speed, ratio),
+            trade.maximum_jet_efficiency(speed, ratio, warm),
+            trade.maximum_jet_efficiency(speed, ratio, hard),
+        )
+        for got, want in zip(ceilings, expected):
+            assert got == pytest.approx(want, abs=5e-3)
+        assert ceilings[0] < ceilings[1] < ceilings[2]
+        assert min(ceilings) > DEFAULT_JET_ENERGY_EFFICIENCY
+
+
+def test_a_looser_reserve_widens_the_window_both_ways() -> None:
+    tight = trade.expansion_limited_slug_ratio_window(91.78)
+    loose = trade.expansion_limited_slug_ratio_window(
+        91.78, reserve=trade.conduction_reserve(reserve_thermal=False)
+    )
+    assert tight is not None and loose is not None
+    assert loose[0] < tight[0] and loose[1] > tight[1]
+    assert loose == pytest.approx((1.74, 27.77), abs=0.02)
 
 
 @pytest.mark.slow

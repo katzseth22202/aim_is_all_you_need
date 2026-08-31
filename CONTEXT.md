@@ -713,6 +713,21 @@ either root as an operating point; letting an optimiser sit on this floor either
 a boundary is not a design point, which is why `constrained_growth_optimum()` takes
 a margin, stated at 1.5 because the two reference cycles carry 1.76 and 1.55.
 
+**Conduction reserve**:
+The merge energy the jet may not spend if the plume is to still conduct at nozzle exit
+(`conduction_reserve()`). **A bracket, not a number.** The conservative end reserves the
+whole **ignition bill** (84.41 MJ/kg, plume still at 15,000 K); the hard end reserves only
+the frozen chemistry (53.47), and is defensible because ADR 0016's finding is that
+recombination *freezes* past the lip -- if dissociation does not recombine, neither does
+the seed's ionisation, so the electrons survive the cooling and Spitzer conductivity falls
+only as `T^1.5`. The nozzle floor is itself a design choice: a potassium-seeded plume is
+usually taken to stay workable near 6,000 K, which gives 65.85. Every reading clears the
+0.60 the solar-dive cycles are scored at, so ADR 0020's numbers do not depend on it; the
+two-leg legs at 46-74 km/s do. Closed by the exit magnetic Reynolds number
+`Rm = mu0 sigma v L >~ 1`, uncomputed.
+_Avoid_: quoting the conservative end as *the* ceiling; assuming the plume must hold
+15,000 K all the way down (that is sufficient, not necessary).
+
 **Jet energy fraction**:
 `eta_jet^2 (1+k)/k`, the share of the merge's *internal* energy the jet carries off,
 as against `eta_jet^2` itself which is defined per `sec:jet_efficiency` against the
@@ -857,11 +872,26 @@ ratios without saying which ceiling each sits under.
   at 1/42, **both clear**, so the failure was an artefact. And the floor carries no
   clock: time-normalised it gives 0.0383 against 0.0540 kg per pad kg per year, the
   paper's dive ahead, agreeing with doubling time. The ranking is unchanged.
+- **A monatomic slug may retire the dissociation toll, and the model cannot adjudicate.**
+  Argon pays no atomisation, and one kilogram of it is 1.49e25 atoms against water's
+  1.00e26, so every per-particle toll shrinks 6.7x -- dissociation, translation and
+  ionisation alike. The bill falls 84.41 -> 2.16 MJ/kg at 6,000 K. But argon's own
+  ionisation becomes the new frozen toll (37.7 MJ/kg singly, 103.8 to Ar2+) and at leg-1
+  merge energies of 145-195 MJ/kg the plume is past Ar1+, so leg 1's ceiling spans 0.36
+  to 0.91 depending on the Saha state, which nobody has solved for argon. Water has the
+  same problem hidden: the **ignition bill** sets `ionisation_fraction = 0` by design.
+  Counterweights the impulse law cannot see: Larmor radius goes as `sqrt(m)`, so argon is
+  1.6x harder to magnetise than oxygen; and ADR 0018's ice-plug bag and `cruise_thermal.py`
+  are water-specific, though a cryogen is far easier at 32 R_sun's 722 K than 4 R_sun's
+  2041 K. See the **ignition bill**'s own _Avoid_: this model always picks the heaviest
+  species, so it cannot be used to choose one.
 - **The two-legged nozzle sweep has not been re-run against the expansion floor.**
   `two_wave_growth.fleet_ignition_windows` uses the ignition-only test, so ADR 0014/0015
   and `two_leg_nozzle_sweep` allow `k1` to 10.21 and `k2` to 23.32 and sweep `eta` freely.
-  On the same 11 flown cycles the **expansion floor** caps the *available* `eta_jet^2` at
-  **0.430** on leg 1 (best at `k1` = 2.50) and **0.603** on leg 2 (`k2` = 4.05). Whether
+  On the same 11 flown cycles the **expansion floor** caps the *available* `eta_jet^2` on
+  leg 1 at **0.430** (`k1` = 2.5) reserving the whole bill and **0.546** (`k1` = 3.4)
+  reserving only the frozen chemistry, and on leg 2 at 0.603 / 0.684. Leg 1 misses 0.60
+  at *both* ends of the **conduction reserve**, which is the robust part. Whether
   that moves the plate-versus-nozzle verdict is **not** determined: ADR 0016 split
   `recovery` (which scales `beta` whole, and is what `e1`/`e2` set) from the geometric
   factor inside the root, so the `e1` axis is not `eta_jet^2` and the mapping must be

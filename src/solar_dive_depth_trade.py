@@ -377,6 +377,49 @@ def frozen_ignition_energy() -> float:
     return float(plume_ignition_energy(0.0 * u.K).to_value(u.MJ / u.kg))
 
 
+def conduction_reserve(
+    temperature: u.Quantity = NOZZLE_FLOOR_TEMPERATURE,
+    reserve_thermal: bool = True,
+) -> float:
+    """Merge energy the jet may not spend, if the plume is to still conduct (MJ/kg).
+
+    **A bracket, not a number.**  Two readings are defensible and they differ by
+    the translational term:
+
+    * ``reserve_thermal=True`` (the conservative end, and the default) reserves
+      the whole **ignition bill**, so the plume reaches nozzle exit still at
+      ``temperature``.  Sufficient, certainly, but not necessary.
+    * ``reserve_thermal=False`` reserves only the frozen chemistry -- the *hard*
+      end, energy that cannot come back under any assumption.  It is defensible
+      because ADR 0016's own finding is that recombination **freezes** past the
+      nozzle lip.  If dissociation does not recombine on the expansion clock,
+      neither does the seed's ionisation: the electrons survive the cooling,
+      Spitzer conductivity falls only as ``T**1.5``, and the field's grip
+      degrades smoothly rather than cliff-edging at the ignition temperature.
+
+    ``temperature`` is a design choice rather than a constant of nature -- a
+    potassium-seeded plume is generally taken to stay workable near 6,000 K,
+    which drops the bill from 84.41 to 65.85 MJ/kg.
+
+    What closes the bracket is the magnetic Reynolds number at nozzle exit,
+    ``Rm = mu0 * sigma * v * L >~ 1``, which nobody in this repository has
+    computed.  It needs the exit density, velocity, scale length and the frozen
+    ionisation fraction; ``puffsat_impact_simulation`` has the machinery, having
+    produced the ``Da = 1`` crossing for ADR 0016.
+
+    Args:
+        temperature: Plume temperature the nozzle requires.
+        reserve_thermal: Whether to reserve the translational term as well as
+            the frozen chemistry.
+
+    Returns:
+        The reserved specific energy (MJ/kg).
+    """
+    if reserve_thermal:
+        return float(plume_ignition_energy(temperature).to_value(u.MJ / u.kg))
+    return frozen_ignition_energy()
+
+
 def ignition_bill() -> float:
     """Specific energy to reach a conducting plume at the nozzle floor temperature.
 
@@ -454,7 +497,11 @@ def expansion_residual(
     )
 
 
-def maximum_jet_efficiency(closing_speed: float, slug_ratio: float) -> float:
+def maximum_jet_efficiency(
+    closing_speed: float,
+    slug_ratio: float,
+    reserve: Optional[float] = None,
+) -> float:
     """Largest ``eta_jet**2`` that leaves a conducting plume at nozzle exit.
 
     From ``eps_th * (1 - eta*(1+k)/k) >= bill``:
@@ -476,6 +523,9 @@ def maximum_jet_efficiency(closing_speed: float, slug_ratio: float) -> float:
         closing_speed: Impactor speed relative to the vehicle at the coldest
             instant of the burn (km/s).
         slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of :func:`conduction_reserve`.  Pass
+            ``conduction_reserve(reserve_thermal=False)`` for the hard end.
 
     Returns:
         The largest available ``eta_jet**2``, clipped to [0, 1].
@@ -487,7 +537,8 @@ def maximum_jet_efficiency(closing_speed: float, slug_ratio: float) -> float:
     )
     if thermalised <= 0.0:
         return 0.0
-    ratio = slug_ratio / (1.0 + slug_ratio) * (1.0 - ignition_bill() / thermalised)
+    held = conduction_reserve() if reserve is None else reserve
+    ratio = slug_ratio / (1.0 + slug_ratio) * (1.0 - held / thermalised)
     return float(min(1.0, max(0.0, ratio)))
 
 
@@ -495,6 +546,7 @@ def expansion_limited_slug_ratio_window(
     closing_speed: float,
     jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
     margin: float = 1.0,
+    reserve: Optional[float] = None,
 ) -> Optional[Tuple[float, float]]:
     """Slug ratios whose plume survives its own expansion at this closing speed.
 
@@ -519,6 +571,8 @@ def expansion_limited_slug_ratio_window(
             instant of the burn (km/s).
         jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1).
         margin: Headroom demanded above the floor.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of :func:`conduction_reserve`.
 
     Returns:
         ``(k_min, k_max)``, or None when no slug ratio clears the floor at this
@@ -530,7 +584,8 @@ def expansion_limited_slug_ratio_window(
     if not 0.0 < jet_energy_efficiency < 1.0:
         raise ValueError("jet_energy_efficiency must lie in (0, 1)")
     peak = 0.5 * (closing_speed * 1000.0) ** 2
-    bill = margin * ignition_bill() * 1.0e6
+    held = conduction_reserve() if reserve is None else reserve
+    bill = margin * held * 1.0e6
     linear = 2.0 * bill - peak * (1.0 - jet_energy_efficiency)
     discriminant = linear * linear - 4.0 * bill * (bill + peak * jet_energy_efficiency)
     if discriminant < 0.0:
