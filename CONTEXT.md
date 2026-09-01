@@ -898,6 +898,188 @@ ratios without saying which ceiling each sits under; presenting 32 R☉ as a slo
 option rather than a ruled-out one; quoting 21.09 R☉ (ADR 0021's crossing, on a dial
 whose 75 km/s climb-out conducts at no depth).
 
+### Split dive injection
+
+Paying the solar-dive injection at *two* nodes instead of one: a small prograde
+push at Earth that only raises aphelion, a long coast, and the dive injection
+taken at the far end where the vehicle is barely moving
+(`src/bielliptic_dive_split.py`, `make split-dive`, ADR
+`0023-the-split-dive-buys-the-pad-not-the-clock`). 1 AU to 4 solar radii is a
+**54:1 radius ratio**, far past the ~15.6:1 where a bi-elliptic route always
+beats a direct one, so the impulse falls from 24.09 km/s to 16.94 through 3 AU
+and towards a 12.34 km/s floor.
+
+**Outbound perihelion** (`q`):
+The one knob that names a member of the split family, and the only honest way to
+say "how much is split". `q` = 4 solar radii is the **single-impulse resonant
+dive** exactly -- the outbound ellipse *is* the dive ellipse, the outer burn is
+zero, and the loop reproduces its 1.9259 AU closing aphelion and 0.8925 yr clock.
+`q` = 1 AU is the pure bi-elliptic. Everything interesting is interior.
+_Avoid_: describing the split as "raise then drop" as though the paper's dive
+were not already one -- its boost is 28.80 km/s radially outward plus 24.07
+retrograde, and its **radial-outward push axis** cant is a favourable 31-38 deg.
+
+**Coast-leg tax**:
+Why the split costs clock, in one sentence: the paper's ellipse crosses 1 AU at
+true anomaly 169.09 deg -- eleven degrees short of aphelion -- so its raise leg
+costs 0.385 yr, while a small prograde push puts 1 AU at the outbound ellipse's
+*perihelion* and makes the raise leg a half orbit (0.823 yr to a comparable
+aphelion). Same destination, 2.1x the coast, on a loop that was 0.89 yr long.
+_Avoid_: attributing the split's slower clock to the dive or the return; both are
+nearly unchanged.
+
+**Partial split**:
+Stopping the family short of the bi-elliptic end. At `q` = 0.4918 AU on the
+shortest re-intercept resonance the cycle doubles in **0.2969 yr against the
+paper's 0.3048** and spends **1.536 kg of launched slug per delivered kilogram
+against 2.365** -- better on both axes at once, the only strictly dominating
+result in this repository's solar-dive work. The pure bi-elliptic end (`q` =
+0.99 AU) is 6 percent *worse* on doubling than the paper's dive, so the family
+punishes the intuition that a cheaper injection must be better.
+_Avoid_: quoting the partial split as though it were phased -- its outer node
+misses the beam by 110 deg and needs a dedicated delivery.
+
+**Outer-node co-location**:
+The condition that the far burn happen on a ray a returning beam is already
+flying down: `360*(t_coast - t_beam) = lam_coast + lam_beam` (mod 360). It is
+satisfiable at all only because the boosted climb-out is **radial** -- 2.34 deg
+off at 1 AU, 0.73 at 3.3 -- so a beam's 1 AU crossing and its 3 AU crossing are
+one ray, 21.1 days and 1.54 deg apart. The far node therefore eats what Earth did
+not intercept: no second launch, no second aim.
+_Avoid_: treating the outer node as needing its own projectile stream; reading
+the 21-day transit as a phasing solution (the vehicle takes 1.48 yr to get there,
+so the beam must come from a *later* Earth node).
+
+**Beam reuse fraction** (`j/m`):
+The offset between a beam's Earth crossing and the outer burn it feeds, divided
+by the cycle -- and it must be **rational**, because the chains have to close
+into a group under adding that offset. The denominator `m` is the number of
+interleaved payload chains in flight, and it is the architecture's real price:
+5, 8 or 13 vehicles, not propellant. The reachable band at the fixed 4 R☉ depth
+and 35.98 km/s perihelion burn is ~0.61 to 0.63, which is why 1/2 and 2/3 have no
+root.
+_Avoid_: reading `m` as a fleet-size nicety -- it is a closure condition, and
+choosing it wrong means the pattern does not repeat.
+
+**Off-aphelion injection**:
+The third knob, and the one that makes the phasing solvable. **Earth
+re-intercept** and **outer-node co-location** on two knobs never intersect (the
+gap runs +109.45 to +121.86 deg at zero extra revolutions, -55.63 to -81.46 at
+one). Taking the injection a few degrees past aphelion closes it: out there the
+vehicle is slow and Earth is not, so one degree of burn point buys about 3.4 deg
+of phasing, and every closure lands within 9.8-11.3 deg of aphelion. With it the
+system is three conditions on three knobs and the solutions are **discrete**,
+indexed by `(revolutions, j, m)` -- the same shape as **synodic closure**.
+_Avoid_: calling the burn "at aphelion" once it is phased; searching for a
+closure without it and concluding none exists.
+
+**Self-cooling departure**:
+The Earth push is the one burn in this architecture that lowers its own closing
+speed. It departs 31 deg off the arriving stream -- nearly *along* it -- so the
+vehicle accelerates away from what feeds it and `w` falls right through the burn:
+148.3 to 125.0 km/s at 4 R☉, 95.4 to 76.3 at 23. The coldest instant is the
+*end*, so the constraint is a burn-size constraint, not a beam-speed one.
+_Avoid_: quoting a departure's closing speed without saying which end of the burn
+it is; assuming the **closing speed** rises through every departure (it does on
+the Jovian cycle's near head-on burn and falls on this one -- the sign is set by
+the aim, not by the word "departure").
+
+**Depth conduction crossing**:
+The depth at which the **self-cooling departure** of the paper's single-impulse
+dive drops through ADR 0022's **overtaking-leg conduction floor** --
+**19.80 R☉ at expansion margin 1.5**, 27.40 at 1.25, 40.72 at 1.0
+(`direct_departure_conduction_depth()`). Bisected on the constraint, not sampled
+near it. It matters because ADR 0022 already put the shallow end of the depth
+dial at **23 R☉**, which is past it: at the depth this repository recommends
+flying first, the single-impulse architecture has no conducting departure and the
+**phased split cycle** does. This, and not the Delta-v saving, is what the split
+is for.
+_Avoid_: reading the shallow dive's difficulty as "the slower beam cannot deliver
+the boost" -- the boost falls with the beam (37.53 to 28.43 km/s against 157 to
+97), and doubling degrades only 0.305 to 0.358 yr across the whole dial; quoting a
+crossing without its expansion margin.
+
+**Perpendicular node**:
+Why the far node survives what kills the direct departure, despite carrying the
+*larger* burn: the beam arrives within a degree of radial and the injection
+thrusts tangentially, so the impact angle is 86.3-90.1 deg and the closing speed
+moves 153.50 to 153.17 km/s across a 10.26 km/s burn -- three tenths of a percent.
+**A burn cannot run away from a stream it is not travelling along.** The same
+cant costs the node about a fifth of its `beta`.
+_Avoid_: treating the 90 deg cant purely as a cost -- it is also the immunity;
+worrying about the far node's larger burn going cold.
+
+**Two-leg depth asymmetry**:
+The dive node needs *two* arrivals, and the depth dial moves them opposite ways.
+The payload's injection gets **cheaper** as the dive is backed out (24.09 to 14.62
+km/s from 4 to 32 R☉) because there is less to fall; the **opposing stream**'s
+retrograde placement gets **dearer** (35.48 to 44.94) because a shallower
+perihelion keeps more angular momentum and reversing its sign costs more. They
+cross, and past ~8 R☉ the opposing stream is the dominant Earth-side cost. A
+near-radial plunge is the third option -- flat at Earth's own 29.78 km/s at every
+depth -- but it arrives *across* the payload's path, so the node closing speed
+falls by about root two and **derived periapsis survival** with it.
+_Avoid_: quoting "the boost falls with the beam" as an architecture-level claim
+(it is the payload leg alone); conflating this leg's problem with the
+**depth conduction crossing** -- the opposing stream aims retrograde against a
+radial stream, never runs along what feeds it, and conducts at every depth. Its
+problem is cost, not conduction.
+
+**Opposing-stream split saving**:
+What the bi-elliptic route saves on the leg that is getting worse: **1.70x at
+4 R☉ rising to 1.84x at 32** (`opposing_stream_placement_trade()`), the mirror of
+the payload leg's saving falling 1.42x to 1.08x. The raise costs the same either
+way and only the flip term differs, and the flip is exactly what the depth dial
+inflates. So **the split's case at a shallow dive rests more on this leg than on
+the payload's** -- at 32 R☉ it places the opposing stream for 24.37 km/s, less
+than the paper's single-impulse payload dive costs at 4 R☉. The flip is a
+**perpendicular node** too, so reversing 17.77 km/s of tangential motion moves the
+closing speed 0.70 km/s.
+_Avoid_: scoring the split on the payload leg alone and concluding it barely pays
+at depth.
+
+**Plunger node**:
+The dive node with the opposing stream arriving on a zero-angular-momentum drop
+instead of head-on. It arrives at **135 deg, not 90** -- payload and plunger reach
+perihelion within a percent of the same speed, so their relative velocity bisects
+the axes -- and the closing speed falls by exactly 1/root 2 at every depth (612.0
+to 432.7 km/s at 4 R☉). But `beta` *rises*, because the **impact-angle impulse
+law**'s `cos theta` debit is the impactor's own momentum arriving backwards and a
+135 deg arrival pays only 0.707 of it. `dive_node()` hardcodes 180 deg, so the
+whole **depth trade** of ADR 0020/0021/0022 assumes the head-on node -- and
+therefore the retrograde placement, the expensive half of the **two-leg depth
+asymmetry**.
+_Avoid_: reading the plunger as a 90 deg arrival; assuming a lower closing speed
+means proportionally less impulse (the debit falls with it).
+
+**Plunger Isp toll**:
+What the **plunger node** costs in effective exhaust speed, and it is entirely a
+**slug ratio** question, because the `cos theta` debit is `k`-independent while
+the useful term grows as `sqrt(k)`: **4% at `k` = 1, 14% at 3, 20% at 8.5, 24% at
+30**. So "it costs root two" and "it costs nothing" are both wrong. What it buys
+is a clean **halving of the collision heat at every `k`** (thermalised energy goes
+as `w**2`), which read as depth is worth about a factor of two -- a plunger at
+4 R☉ collides as gently as a head-on node at **7.86**
+(`plunger_equivalent_depth()`). Collision term only: the node's solar flux still
+goes as `1/r**2`. Framing that keeps it honest: the node's own exhaust speed peaks
+near `k` = 3 (112.0 km/s) and is falling by `k` = 30 (67.6), so the ratio at which
+the plunger looks worst is already past the node's Isp optimum.
+_Avoid_: quoting the toll without its `k`; comparing the plunger's heat relief
+against the *solar* flux (it does not touch it).
+
+**Phased split cycle**:
+The result. At 5/8 reuse: `q` = 0.9193 AU, aphelion 2.9400 AU, injection 11.296
+deg past aphelion, **2.2789 yr** cycle, 8 interleaved chains, a beam at Earth
+every 0.2849 yr split 30.5 percent caught / 69.5 percent flying on. It doubles in
+**0.5223 yr against the paper's 0.3048** and spends **0.875 kg/kg against 2.365**
+-- so it lands on the **Jovian solar-dive cycle**'s clock (0.513 yr) without
+needing Jupiter, and 4x behind it on slug. Same verdict shape as ADR 0008 and
+0019 for the fourth time: **impulse enters growth logarithmically and the clock
+enters linearly**, so 2.7x less slug is 1.3x in e-foldings against 2.55x more
+clock.
+_Avoid_: quoting the Delta-v saving as the result; time-normalising the pad side
+and calling 0.301 against 0.288 kg per launched-slug kg per year a reversal.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
@@ -970,6 +1152,41 @@ whose 75 km/s climb-out conducts at no depth).
 - The **radial-outward push axis** is the **push axis** of the near-Sun architecture,
   and it constrains the *paper's* solar-dive cycle as well as the **Jovian solar-dive
   cycle** -- the two differ in how much cant they need, not in whether they need it.
+- The same **radial-outward push axis** that costs the Earth node a cant is what
+  makes **outer-node co-location** possible at all: a beam radial enough to be
+  badly aimed at Earth is radial enough that its 1 AU and 3 AU crossings are one
+  ray. The architecture's biggest liability at one node is its enabling
+  condition at the other.
+- **Outer-node co-location**, **Earth re-intercept** and the **beam reuse
+  fraction** are three conditions on the **outbound perihelion**, the aphelion
+  and the **off-aphelion injection** -- so the **phased split cycle** is discrete
+  in exactly the way a **synodic closure** is, and for the same reason: knobs
+  exhausted by conditions, with the integers left over as the index.
+- The **partial split** and the **phased split cycle** are the two ends of one
+  family and they buy different things. The first is free and strictly dominates
+  the paper's dive; the second is phased and does not. Nothing in between is both.
+- The **self-cooling departure** and the **perpendicular node** are the same
+  geometric fact read at two nodes: closing speed falls through a burn exactly in
+  proportion to how much the thrust runs along the stream. That is why the big
+  burn is safe and the aimed one is not, which is the opposite of the intuition.
+- The **depth conduction crossing** and the **two-leg depth asymmetry** are two
+  independent reasons a shallow dive is hard, and they bind different legs: the
+  payload's injection goes cold, the opposing stream's gets expensive. The split
+  answers both, and by different mechanisms -- a twentieth-size Earth burn for the
+  first, a **perpendicular node** flip for the second.
+- The **plunger node** is a third answer to the **two-leg depth asymmetry**, and
+  the only one that attacks it at the node rather than at the placement: it
+  retires the retrograde leg entirely for a flat 29.78 km/s, at a **plunger Isp
+  toll** that is small exactly where the node is slug-poor. It composes with the
+  **phased split cycle** rather than competing with it -- one cuts the placement,
+  the other removes the need for a retrograde placement at all.
+- The **depth conduction crossing** at 19.80 R☉ sits *inside* the band the
+  **pad-charged launch ledger** admits, (4, 22.93] R☉ -- so the two do not
+  exclude each other, and the direct route is fine over (4, 19.80]. What the
+  **phased split cycle** opens is the last **19.80 to 22.93 R☉**, which is
+  exactly the end ADR 0022 recommends starting at. A narrow window, and the only
+  one there is: past 22.93 the cycle stops paying for its launch whichever
+  architecture flies it.
 
 ## Example dialogue
 

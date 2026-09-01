@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -72,6 +72,9 @@ jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S work
 
 dive-depth:  ## Price a shallower solar dive against the 4 Rsun cycle, launch ledger charged from the pad (ADR 0020/0021/0022; --optimum and --pad-frontier add the searches)
 	python -m src.solar_dive_depth_trade
+
+split-dive:  ## Split the dive injection across two nodes and phase the far one (ADR 0023)
+	python -m src.bielliptic_dive_split
 
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp

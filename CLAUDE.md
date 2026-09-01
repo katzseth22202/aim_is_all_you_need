@@ -47,6 +47,7 @@ pytest tests/test_orbit_utils.py -s
 # Opt-in analyses (not part of 'make all'; see `make help` for the full list)
 make jovian-dive    # Earth→Jupiter→4 R☉→Earth synodic closure (ADR 0019)
 make dive-depth     # what a shallower (32 R☉) dive costs (ADR 0020)
+make split-dive     # splitting the dive injection across two nodes (ADR 0023)
 
 # Conda environment
 conda env create -f environment.yml
@@ -93,6 +94,13 @@ solar_dive_depth_trade.py    ← jovian_solar_dive_cycle + plume_thermal: what a
                                 survival, and adds the **expansion floor** — the
                                 plume must still conduct after the jet is drawn,
                                 not merely ignite (ADR 0020)
+
+bielliptic_dive_split.py     ← conic_kernel + jovian_solar_dive_cycle: splits the
+                                solar-dive injection across an Earth node and a
+                                far node on a raised ellipse, and phases the far
+                                one onto the returning beam. Three closure
+                                conditions on three knobs, so the phased
+                                solutions are discrete (ADR 0023)
 
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius
