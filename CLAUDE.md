@@ -29,11 +29,13 @@ LaTeX source instead.
 ## Commands
 
 ```bash
-# Run all checks (format → mypy → test → run → export-env)
+# Run all checks (format → mypy → FAST tests → run → export-env)
 make all
 
 # Individual steps
-make test           # pytest -s
+make test           # pytest -s -m "not slow"  — 371 tests, ~1 min
+make test-slow      # pytest -s -m "slow"      — 33 tests, ~8 min
+make test-all       # pytest -s                — everything, ~9 min
 make mypy           # mypy src/
 make format         # black + isort
 make check-format   # check only, no changes
@@ -176,3 +178,18 @@ When running an interview/grill session in this repo:
 ## Testing
 
 Tests live in `tests/` with one file per source module. `tests/test_helpers.py` has shared utilities including floating-point comparison helpers for physics quantities. Use `pytest markers` `slow` and `integration` when appropriate (defined in `pyproject.toml`).
+
+### The slow split
+
+`make all` and `make test` deselect the `slow` marker, because **89% of the suite's
+runtime sits in 8% of its tests**: 371 fast tests take ~1 minute, 33 slow ones take
+~8. Run `make test-all` before committing, and whenever you are about to quote a
+number — the slow tests are the ones that pin the optimiser sweeps and multi-minute
+searches (`pad_return_frontier`, `conduction_bracket_frontier`,
+`constrained_growth_optimum`, the assist-chain and two-wave grids), so a fast-only
+run does *not* protect the headline figures in the ADRs.
+
+Mark a test `slow` when it takes more than about a second. Note that a plain `pytest`
+still runs everything — the deselection lives in the Makefile, not in `addopts`, so
+that naming a slow test directly on the command line does what you asked instead of
+silently collecting nothing.

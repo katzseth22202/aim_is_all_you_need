@@ -1,4 +1,4 @@
-.PHONY: help install clean test mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -14,7 +14,13 @@ clean:  ## Clean up build artifacts
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
 
-test:  ## Run tests
+test:  ## Run the fast tests (~1 min); deselects the 'slow' marker
+	pytest -s -m "not slow"
+
+test-slow:  ## Run only the slow tests (~8 min): optimiser sweeps and multi-minute searches
+	pytest -s -m "slow"
+
+test-all:  ## Run every test (~9 min). The gate before committing or quoting a number
 	pytest -s
 
 mypy:  ## Run mypy type checking
@@ -71,4 +77,4 @@ export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp
 	mv environment.yml.tmp environment.yml
 
-all: format mypy test run  ## Format code, run mypy, tests, and main script (run export-env separately)
+all: format mypy test run  ## Format, mypy, FAST tests, main script (slow tests: 'make test-all'; export-env separately)
