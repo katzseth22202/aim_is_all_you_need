@@ -17,10 +17,10 @@ clean:  ## Clean up build artifacts
 test:  ## Run the fast tests (~1 min); deselects the 'slow' marker
 	pytest -s -m "not slow"
 
-test-slow:  ## Run only the slow tests (~8 min): optimiser sweeps and multi-minute searches
+test-slow:  ## Run only the slow tests (~12 min): optimiser sweeps and multi-minute searches
 	pytest -s -m "slow"
 
-test-all:  ## Run every test (~9 min). The gate before committing or quoting a number
+test-all:  ## Run every test (~13 min). The gate before committing or quoting a number
 	pytest -s
 
 mypy:  ## Run mypy type checking
@@ -70,7 +70,7 @@ resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered
 jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S works, 2S does not (ADR 0019)
 	python -m src.jovian_solar_dive_cycle
 
-dive-depth:  ## Price a shallower solar dive against the 4 Rsun cycle, launch ledger charged from the pad (ADR 0020/0021; --optimum and --pad-frontier add the searches)
+dive-depth:  ## Price a shallower solar dive against the 4 Rsun cycle, launch ledger charged from the pad (ADR 0020/0021/0022; --optimum and --pad-frontier add the searches)
 	python -m src.solar_dive_depth_trade
 
 export-env:  ## Export the current conda environment to environment.yml

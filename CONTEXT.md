@@ -729,7 +729,8 @@ doubling 0.724 yr, millionfold 14.4 yr; 32 R☉ 3.49x, 1.816 yr, 36.2 yr.**
 _Avoid_: quoting the free-parking-orbit figures (0.513 / 1.094 yr — both wrong for the
 same reason); assuming one canted push is equivalent (it costs 1.4x the growth at 32 R☉);
 scoring the **launch ledger** without it (see **pad-charged launch ledger** — that is
-what ADR 0021 fixes, and it retires the shallow cycle).
+what ADR 0021 fixes, and it retires the 32 R☉ node; ADR 0022 puts the shallowest depth
+that still pays at 23 R☉).
 
 **Parking-orbit period trade**:
 What the **split push** actually trades. The apoapsis re-aim costs `2 v_apo sin(cant/2)`,
@@ -751,10 +752,12 @@ a third". Result: **4 R☉ `k` = 30 returns 0.0695 per pad kg, 1.043x the commit
 32 R☉ `k` = 8.5 returns 0.0412, 0.618x, and fails at every `k`** (peak 0.761x at
 `k` = 1.93) **and under the speed-rescaled floor too** (0.904x), because the rescale is
 worth 1.46x at an 85 km/s return where it was worth 2.80x at 158. The committed floor is
-lost at **21.09 R☉** on the depth dial (`pad_floor_depth()`).
+lost at **22.93 R☉** on the depth dial (`admissible_pad_floor_depth()`, ADR 0022), with
+every depth flown at its own best conducting climb-out; `pad_floor_depth()`'s 21.09 holds
+the climb-out at 75 km/s, which conducts at no depth at all.
 Sensitivity: at the 1.5x margin and the conservative reserve, passing 32 R☉ at an
-*admissible* point needs the floor moved from 1/15 to **1/24**, and the cycle that then
-passes doubles in **3.993 yr** — losing to the Jupiter-only chain's 1.74. The verdict does
+*admissible* point needs the floor moved from 1/15 to **1/22.5**, and the cycle that then
+passes doubles in **2.852 yr** — losing to the Jupiter-only chain's 1.74. The verdict does
 not rest on the floor's exact value. The deep cycle's 4% at `k` = 30 does, but it has
 somewhere to go: the same cycle returns **1/11.3** at `k` = 8.5, for 0.835 yr instead of
 0.724. For the plume-physics sensitivity see **conduction bracket sweep**.
@@ -774,26 +777,41 @@ excess* at every depth — below about 85 km/s the overtaking plume stops conduc
 it is the second, independent reason the shallow cycle has no operating point. The
 threshold is **79.56 km/s** of coldest closing speed at `eta_jet^2` = 0.60 and a 1.5x
 margin (64.96 at unit margin), and it bars a 75 km/s climb-out at *both* depths.
+Carried onto the climb-out — the knob the trade actually leaves free — that threshold is
+**81.22 km/s at 32 R☉ and 75.78 at 4** (`conduction_threshold_excess()`, ADR 0022). The
+map is depth-dependent even though the threshold is not: the same climb-out arrives at
+Earth faster from a deeper perihelion.
 _Avoid_: reading the coldest instant off the departure leg (that is
-`slug_ratio_ceilings()`'s reading and it is the warmer of the two).
+`slug_ratio_ceilings()`'s reading and it is the warmer of the two); scoring anything on a
+climb-out *grid* — on this frontier every optimum hugs its own threshold, which is what
+made ADR 0021's bracket a grid artefact.
 
 **Conduction bracket sweep**:
 Whether the pad verdict survives every reading of the plume physics
-(`conduction_bracket_frontier()`, ADR 0021). **The coupling is indirect and that is why
+(`conduction_bracket_frontier()`, ADR 0021, re-scored by ADR 0022). **The coupling is
+indirect and that is why
 it was nearly missed**: the **conduction reserve** cannot change the pad return at any
 `k` — that is a mass quantity, this is plume thermodynamics — but it sets the coldest
 closing speed at which anything conducts, hence the lowest climb-out flyable, and the pad
-return is won at low climb-out. At 32 R☉, **at the 1.5x operating margin every reading
-fails** (0.625 / 0.794 / 0.979x for 15,000 K / 6,000 K / frozen). At **unit margin** the
-15,000 K reading still fails at 0.966x but 6,000 K clears at **1.159x** (55 km/s
-climb-out, `k` = 3.41) and frozen at **1.291x** (50 km/s, `k` = 2.86) — and both double in
-**1.92–1.98 yr**, losing to the Jupiter-only chain's 1.74. At 4 R☉ all six cells clear
-(2.42–2.59x, doubling 0.953–1.057), so the same uncertainty is decisive at 32 and
+return is won at low climb-out. Each cell is scored at *its own* conduction threshold
+(`pad_frontier_optimum()`), which is where its optimum sits; reading them off
+`PAD_FRONTIER_EXCESS_GRID` instead understated all six, and that is the correction ADR
+0022 makes. At 32 R☉, at the **1.5x operating margin** the two conservative readings fail
+(**0.665** / **0.849x** for 15,000 K / 6,000 K) and frozen chemistry **clears at 1.009x**
+(62.34 km/s climb-out, `k` = 3.52). At **unit margin** 15,000 K fails at 0.970x, 6,000 K
+clears at **1.159x** (54.97 km/s, `k` = 3.42) and frozen at **1.312x** (47.65, `k` = 3.31).
+**Every cell that pays doubles in 1.81–2.07 yr against the Jupiter-only chain's 1.74** —
+which is what carries the verdict, not the pad floor. At 4 R☉ all six cells clear
+(2.42–2.59x, doubling 0.95–1.06) and the grid was already right there to one part in two
+thousand, because the deep node's optima are interior peaks 8–26 km/s above their
+thresholds rather than pinned against them. So the same uncertainty is decisive at 32 and
 irrelevant at 4.
 _Avoid_: arguing the reserve cannot matter because it does not enter the ledger (it
 enters through which climb-out is admissible — an earlier ADR 0021 draft made exactly
 this error); quoting the unit-margin rows as a rescue without their doubling times, or
-without saying that unit margin is the boundary the margin exists to keep off.
+without saying that unit margin is the boundary the margin exists to keep off; repeating
+ADR 0021's "fails at every reading at the 1.5x margin" (retired by ADR 0022 — the frozen
+end clears, marginally).
 
 **Pad frontier**:
 The scan that turns "fails at the reference point" into "ruled out"
@@ -801,11 +819,13 @@ The scan that turns "fails at the reference point" into "ruled out"
 the climb-out excess is free, and the two caps pull opposite ways on it: a smaller node
 boost spends less propellant and raises the pad return, while the **expansion floor**
 needs the closing speed a big boost buys. **At 32 R☉ every admissible point fails the pad
-floor (best 0.63x at an 85 km/s climb-out) and every point that would have paid is
-inadmissible** — 40 km/s returns 1.13x the floor and doubles in 1.363 yr, but its
-overtaking leg closes at 47 km/s. At 4 R☉ every admissible point clears, 1.25x to 2.42x,
-and the fastest is `k` = 30.40 at 150 km/s, **doubling 0.684 yr**.
-_Avoid_: reading the gap as a tuning problem — it is the whole width of the grid.
+floor (best 0.63x on the grid, 0.665x at the threshold itself) and every point that would
+have paid is inadmissible** — 40 km/s returns 1.13x the floor and doubles in 1.363 yr, but
+its overtaking leg closes at 47 km/s. At 4 R☉ every admissible point clears, 1.25x to
+2.42x, and the fastest is `k` = 30.40 at 150 km/s, **doubling 0.684 yr**.
+_Avoid_: reading the gap as a tuning problem — it is the whole width of the grid; quoting
+this grid's best as *the* optimum (that is `pad_frontier_optimum()`, ADR 0022 — the peak
+sits about a km/s above the conduction threshold, between two grid points).
 
 **Conduction reserve**:
 The merge energy the jet may not spend if the plume is to still conduct at nozzle exit
@@ -866,13 +886,17 @@ and an 8.2x gentler collision cost **2.51x the doubling time** -- 0.724 yr at
 the pad. Per-*cycle* growth falls 6.6x (23.0 to 3.49 kg per impactor kg), the number
 to avoid quoting alone: the clock is unchanged at 3.276 yr either way, so the
 logarithm absorbs most of it.
-The dial is **not free down its whole length**: past **21.09 R☉** the cycle stops
+The dial is **not free down its whole length**: past **22.93 R☉** the cycle stops
 returning the fifteenth of liftoff it committed to (**pad-charged launch ledger**), so
 below that depth what is being traded away is no longer growth rate but whether the
-architecture is worth flying at all.
+architecture is worth flying at all. A shallower version flown first therefore starts at
+**23 R☉, not 32** — which still divides the flux by 33 and the equilibrium temperature by
+2.4 against 4 R☉, so most of the thermal relief survives. The cycle at the crossing
+doubles in **1.746 yr**, within half a percent of the Jupiter-only chain's 1.74.
 _Avoid_: quoting the per-cycle ratio as the cost; comparing rows at different slug
 ratios without saying which ceiling each sits under; presenting 32 R☉ as a slower
-option rather than a ruled-out one.
+option rather than a ruled-out one; quoting 21.09 R☉ (ADR 0021's crossing, on a dial
+whose 75 km/s climb-out conducts at no depth).
 
 ## Relationships
 
@@ -1015,8 +1039,12 @@ option rather than a ruled-out one.
   number set against "roughly 150 t to LEO from a ~5000 t liftoff", with the
   speed rescale applied as a check rather than as the number. The shallow cycle
   fails both readings (0.618x committed, 0.904x rescaled) so it does not turn on
-  which one is used — but a floor of 1/25 would pass it, and nothing here says
-  1/15 is right to within that. Unresolved, and it belongs to the paper repo.
+  which one is used — but a floor of **1/22.5** would pass its best admissible
+  point, and nothing here says 1/15 is right to within that. ADR 0022 reduces
+  how much rests on this: the corrected bracket has the node *paying* at the
+  hard end of the **conduction reserve**, and what rules it out there is the
+  doubling comparison (1.81–2.07 yr against the Jupiter-only chain's 1.74), which
+  the floor does not enter. Unresolved, and it belongs to the paper repo.
 - **The magnetic nozzle's mass is uncharged everywhere it is flown.** ADR 0020 shows
   the shallow node handles 8.2x less specific energy (724 against 5934 MJ/kg) and the
   motivating objection was that the energy per impactor kilogram implies a heavy

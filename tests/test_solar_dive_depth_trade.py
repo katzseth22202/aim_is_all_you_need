@@ -11,6 +11,12 @@ The last section tests ADR 0021, which re-scores the **launch ledger** on the
 **split push**.  Where the two disagree the pad-charged figure is the current
 one; the free-parking numbers earlier in this file are pinned as the superseded
 reading, marked as such, so the size of the correction stays checkable.
+
+ADR 0022 then corrects ADR 0021 in one place: the **conduction bracket sweep**
+was scored off a climb-out grid, and each cell's optimum hugs its own conduction
+threshold, so every cell was understated.  The tests for it assert the *shape*
+that made the grid wrong -- the optimum sitting between the threshold and the
+next grid point up -- rather than only the corrected digits.
 """
 
 from typing import List
@@ -906,15 +912,30 @@ def test_the_pad_floor_is_lost_partway_down_the_depth_dial() -> None:
     assert crossing == pytest.approx(21.09, abs=0.05)
     # The reference shallow cycle sits well past it, and the deep one well short.
     assert 4.0 < crossing < 32.0
+    # Pinned as the superseded reading: this dial holds the climb-out at 75
+    # km/s, which conducts at no depth, so ADR 0022 quotes
+    # admissible_pad_floor_depth()'s 22.93 as the recommendation instead.
+
+
+@pytest.fixture(scope="module")
+def shallow_grid_frontier() -> List[trade.PadFrontierRow]:
+    """The 32 solar-radii climb-out grid, shared by the two claims about it.
+
+    Fifteen closures, so it is worth running once: the squeeze's shape reads off
+    it, and so does the size of the grid artefact ADR 0022 corrects.
+    """
+    return trade.pad_return_frontier(32.0, params=_PARAMS)
 
 
 @pytest.mark.slow
-def test_no_climb_out_rescues_the_shallow_cycle() -> None:
+def test_no_climb_out_rescues_the_shallow_cycle(
+    shallow_grid_frontier: List[trade.PadFrontierRow],
+) -> None:
     # The squeeze, and the reason the verdict is "ruled out" rather than
     # "mis-tuned": the pad ledger wants a cheap node boost and the expansion
     # floor wants the hot closing speed a big one buys. At 32 solar radii the
     # two never overlap on a point that pays.
-    rows = trade.pad_return_frontier(32.0, params=_PARAMS)
+    rows = shallow_grid_frontier
     assert rows, "no closure anywhere on the frontier grid"
     assert not any(row.clears_committed_floor for row in rows)
     admissible = [row for row in rows if row.expansion_window is not None]
@@ -1101,17 +1122,27 @@ def shallow_bracket() -> List[trade.ConductionBracketRow]:
 
 
 @pytest.mark.slow
-def test_the_shallow_failure_is_robust_at_the_operating_margin(
+def test_the_operating_margin_verdict_is_the_clock_not_the_floor(
     shallow_bracket: List[trade.ConductionBracketRow],
 ) -> None:
-    # The claim that matters: at ADR 0020's 1.5x margin the shallow cycle fails
-    # at every reading of the conduction reserve, so the verdict does not rest
-    # on where in that bracket the truth sits.
-    rows = [row for row in shallow_bracket if row.expansion_margin == 1.5]
+    # ADR 0021 claimed the shallow cycle failed at *every* reading of the
+    # reserve at ADR 0020's 1.5x margin. Scored at each cell's own conduction
+    # threshold rather than off a climb-out grid, the hard end clears -- so the
+    # 1.5x row is two failures and one marginal pass, and what carries the
+    # verdict there is the doubling time rather than the pad floor (ADR 0022).
+    rows = {
+        row.reserve_label: row for row in shallow_bracket if row.expansion_margin == 1.5
+    }
     assert len(rows) == len(trade.CONDUCTION_RESERVE_BRACKET)
-    assert not any(row.clears_committed_floor for row in rows)
-    # The hard end gets close, which is worth pinning rather than rounding away.
-    assert max(row.best_margin or 0.0 for row in rows) == pytest.approx(0.979, abs=0.01)
+    assert not rows["15000 K, all reserved"].clears_committed_floor
+    assert not rows["6000 K"].clears_committed_floor
+    frozen = rows["frozen chemistry only"]
+    assert frozen.clears_committed_floor
+    assert frozen.best_margin == pytest.approx(1.009, abs=0.01)
+    # Marginally, and slowly: the Jupiter-only chain doubles in 1.74 yr.
+    assert frozen.best_doubling_years is not None
+    assert frozen.best_doubling_years == pytest.approx(2.066, abs=0.02)
+    assert frozen.best_doubling_years > 1.74
 
 
 @pytest.mark.slow
@@ -1134,3 +1165,105 @@ def test_but_it_does_not_survive_unit_margin_plus_a_cooler_outlet(
         # Jupiter-only chain doubles in 1.74 yr.
         assert winner.best_doubling_years is not None
         assert winner.best_doubling_years > 1.74
+
+
+# --------------------------------------------------------------------------
+# ADR 0022: the bracket was read off a grid, and the depth dial was flown at a
+# climb-out nothing may fly
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_the_conduction_threshold_carries_over_onto_the_climb_out() -> None:
+    # The bridge ADR 0022 adds. The expansion floor states its threshold as a
+    # closing speed, which is depth-independent; the knob the trade leaves free
+    # is the climb-out, and the same climb-out arrives faster from a deeper
+    # perihelion. So the threshold has to be carried across before it can be
+    # optimised against, and this is that map, checked in both directions.
+    closing = trade.conduction_threshold_closing_speed(0.60, 1.5)
+    assert closing is not None
+    for depth, expected in ((32.0, 81.22), (4.0, 75.78)):
+        excess = trade.conduction_threshold_excess(depth, 0.60, 1.5, params=_PARAMS)
+        assert excess is not None
+        assert excess == pytest.approx(expected, abs=0.05)
+        # Round trip: fly that climb-out and the overtaking leg ends exactly on
+        # the floor.
+        coldest = trade.overtaking_coldest_closing_at(depth, excess, params=_PARAMS)
+        assert coldest is not None
+        assert coldest == pytest.approx(closing, abs=1e-3)
+    # And a looser reserve buys a slower admissible climb-out, in order.
+    excesses = [
+        trade.conduction_threshold_excess(32.0, 0.60, 1.5, reserve, params=_PARAMS)
+        for _, reserve in trade.CONDUCTION_RESERVE_BRACKET
+    ]
+    assert all(value is not None for value in excesses)
+    assert excesses == sorted(excesses, reverse=True)
+
+
+@pytest.mark.slow
+def test_the_reference_climb_out_conducts_at_no_depth_at_all() -> None:
+    # Why pad_floor_depth()'s 21.09 crossing is not a recommendation: its dial
+    # holds the climb-out at CONSERVATIVE_RETURN_EXCESS, and that climb-out
+    # leaves the overtaking leg below the expansion floor at both ends of the
+    # depth dial -- so every row on it is inadmissible, not just the shallow
+    # ones.
+    closing = trade.conduction_threshold_closing_speed(0.60, 1.5)
+    assert closing is not None
+    for depth, coldest in ((4.0, 78.91), (32.0, 74.21)):
+        got = trade.overtaking_coldest_closing_at(
+            depth, trade.CONSERVATIVE_RETURN_EXCESS, params=_PARAMS
+        )
+        assert got is not None
+        assert got == pytest.approx(coldest, abs=0.05)
+        assert got < closing
+
+
+@pytest.mark.slow
+def test_the_climb_out_grid_understated_the_pad_return(
+    shallow_grid_frontier: List[trade.PadFrontierRow],
+) -> None:
+    # The artefact itself, asserted as a shape rather than as a pair of digits.
+    # The pad return rises as the climb-out falls and the expansion window
+    # pinches shut at the threshold, so the optimum sits just above the
+    # threshold -- and a grid that steps 5 to 15 km/s lands above it and scores
+    # the cell at whatever point it happened to reach.
+    threshold = trade.conduction_threshold_excess(32.0, params=_PARAMS)
+    optimum = trade.pad_frontier_optimum(32.0, params=_PARAMS)
+    assert threshold is not None and optimum is not None
+    assert optimum.best_returned_per_pad_kg is not None
+    admissible = [
+        row for row in shallow_grid_frontier if row.best_returned_per_pad_kg is not None
+    ]
+    grid_best = max(row.best_returned_per_pad_kg or 0.0 for row in admissible)
+    next_grid_point = min(row.return_excess for row in admissible)
+    # Strictly better than anything on the grid, and strictly below the first
+    # grid point that was admissible: that gap is the whole defect.
+    assert optimum.best_returned_per_pad_kg > grid_best
+    assert threshold < optimum.return_excess < next_grid_point
+    assert optimum.best_margin == pytest.approx(0.665, abs=0.01)
+    assert grid_best / RETURN_FLOOR == pytest.approx(0.625, abs=0.01)
+    # Still fails, which is why the correction moves a headline and not the
+    # verdict at the conservative reading.
+    assert not optimum.clears_committed_floor
+
+
+@pytest.mark.slow
+def test_the_admissible_depth_crossing_is_shallower_than_the_fixed_dial() -> None:
+    # What the correction actually costs the recommendation. Flying each depth
+    # at its own best conducting climb-out rather than at a fixed 75 km/s moves
+    # the crossing out from 21.09 to about 22.9 solar radii, so the shallow end
+    # of the dial worth proposing starts at 23 rather than at 32.
+    #
+    # Bracketed on [22, 24] rather than on the module's own wider default: each
+    # endpoint costs a full climb-out optimisation, the root is the same either
+    # way because the dial is monotone, and brentq needs a sign change across
+    # the bracket -- so passing this asserts 22 clears and 24 fails as well.
+    crossing = trade.admissible_pad_floor_depth(bracket=(22.0, 24.0), params=_PARAMS)
+    assert crossing is not None
+    assert crossing == pytest.approx(22.93, abs=0.07)  # xtol is 0.05 R_sun
+    assert trade.ADMISSIBLE_PAD_FLOOR_DEPTH_BRACKET == (16.0, 32.0)
+    # Shallower than the fixed-climb-out dial's crossing, which is the whole
+    # point: that dial holds a climb-out no depth may fly.
+    fixed = trade.pad_floor_depth(params=_PARAMS)
+    assert fixed is not None
+    assert fixed < crossing

@@ -62,9 +62,20 @@ The headline, against ADR 0019's reference cycle:
   return at both depths: the deep cycle clears the committed 1/15 floor at
   1.043x and the shallow one fails at 0.618x -- at *every* slug ratio, and under
   the speed-rescaled floor too (:func:`split_push_launch_ledger`).
+* **The frontier is bisected to its constraint, not stepped past it.**  Every
+  optimum on the pad frontier hugs the climb-out at which the **overtaking
+  leg**'s plume stops conducting, and that threshold moves with the **conduction
+  reserve** while a grid does not (:func:`conduction_threshold_excess`,
+  :func:`pad_frontier_optimum`).  Scored that way the shallow node reaches
+  1.009x at the hard end of the bracket rather than 0.979x -- it *pays*, and
+  what rules it out is that it doubles in 2.07 yr against the Jupiter-only
+  chain's 1.74.  The depth crossing moves with it, from 21.09 solar radii on a
+  dial that conducts nowhere to **22.93** on one that does
+  (:func:`admissible_pad_floor_depth`).
 
-ADR ``0020-the-nozzle-cap-is-the-expansion-not-the-ignition`` and
-ADR ``0021-the-shallow-dive-does-not-pay-for-its-launch``.
+ADR ``0020-the-nozzle-cap-is-the-expansion-not-the-ignition``,
+ADR ``0021-the-shallow-dive-does-not-pay-for-its-launch`` and
+ADR ``0022-the-conduction-bracket-was-read-off-a-grid``.
 Run with ``make dive-depth``; ``--pad-frontier`` adds the scan that rules the
 shallow node out rather than merely scoring it badly.
 """
@@ -1892,7 +1903,10 @@ def main() -> None:
         print(
             f"The committed 1/15 floor is lost at {crossing:.2f} R_sun on this"
             " dial: a shallower dive than that does not return the fifteenth of"
-            " liftoff it committed to."
+            " liftoff it committed to.  SUPERSEDED as a recommendation (ADR"
+            f" 0022): a {args.return_excess:g} km/s climb-out does not conduct on"
+            " the overtaking leg at any depth, so this crossing sits on a dial"
+            " nothing may fly.  --pad-frontier reports the admissible one."
         )
     print()
 
@@ -1927,6 +1941,19 @@ def main() -> None:
                         params=params,
                     )
                 )
+            )
+            print()
+        admissible = admissible_pad_floor_depth(
+            jet_energy_efficiency=args.jet_efficiency,
+            expansion_margin=args.expansion_margin,
+            params=params,
+        )
+        if admissible is not None:
+            print(
+                f"Flying each depth at its own best conducting climb-out, the"
+                f" committed 1/15 floor is lost at {admissible:.2f} R_sun."
+                " That is the dial a mission designer has, and the crossing on"
+                " it is the shallowest dive worth proposing."
             )
             print()
 
@@ -2538,6 +2565,33 @@ PAD_FLOOR_DEPTH_BRACKET = (4.0, 48.0)
 #: Wide enough to contain the threshold at every reading of the **conduction
 #: reserve** bracket, which spans 51.7 to 79.6 km/s.
 _CONDUCTION_THRESHOLD_BRACKET = (5.0, 200.0)
+#: Climb-out excesses :func:`conduction_threshold_excess` bisects between (km/s).
+#: Both ends sit inside where the three-synodic closure exists at every depth on
+#: ``PAD_FLOOR_DEPTH_BRACKET`` -- at 32 solar radii it still closes at 170 km/s
+#: and no longer does at 180 -- and they straddle the threshold at every reading
+#: of the **conduction reserve** bracket, which lands between 38 and 82 km/s.
+_CONDUCTION_EXCESS_BRACKET = (20.0, 150.0)
+#: How far above the conduction threshold :func:`pad_frontier_optimum` searches
+#: for the pad return's peak (km/s).  The peak sits within 1 km/s of the
+#: threshold at 32 solar radii and up to 26 at 4, where the node is cheap enough
+#: that the pinched window costs more than the boost does; 40 keeps it interior
+#: at both, which the tests assert rather than assume.
+PAD_OPTIMUM_EXCESS_SPAN = 40.0
+#: Climb-out tolerance of that search (km/s).  The pad return is flat to about
+#: one part in a million across 0.02 km/s at the peak, so this is far inside the
+#: precision any figure is quoted to.
+_PAD_OPTIMUM_EXCESS_XATOL = 0.02
+#: Depths :func:`admissible_pad_floor_depth` brackets its crossing in.  Narrower
+#: than ``PAD_FLOOR_DEPTH_BRACKET`` because each end costs a full climb-out
+#: optimisation: 16 solar radii clears the committed floor with room and 32
+#: fails at every reading of the **conduction reserve**, so the crossing is
+#: interior.
+ADMISSIBLE_PAD_FLOOR_DEPTH_BRACKET = (16.0, 32.0)
+#: Depth tolerance of that bisection (solar radii).  The dial moves the pad
+#: margin by about 0.05 per solar radius here, so this pins the crossing to
+#: about a part in four hundred of the floor -- past what the floor's own
+#: calibration supports.
+_ADMISSIBLE_PAD_FLOOR_XTOL = 0.05
 
 
 @dataclass(frozen=True)
@@ -2984,6 +3038,14 @@ def pad_floor_depth(
     this the cycle does not return the fifteenth of liftoff it committed to, at
     this climb-out and this slug ratio.
 
+    Both of those are held fixed, and at the defaults both are *inadmissible*:
+    a 75 km/s climb-out leaves the **overtaking leg** below the **expansion
+    floor** at every depth, so the 21.09 solar radii this reports is a crossing
+    on a dial nothing may fly.  :func:`admissible_pad_floor_depth` flies each
+    depth at its own best conducting climb-out instead, and puts the crossing
+    shallower (ADR 0022).  Keep this one for the comparison it makes and quote
+    that one for the recommendation.
+
     Args:
         return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
         slug_ratio: Departure slug ratio.
@@ -3244,12 +3306,21 @@ class ConductionBracketRow:
     reachable.  So the two are coupled through the frontier and not through any
     single cycle, which is why this has to be swept rather than argued.
 
+    Each cell's optimum is found by :func:`pad_frontier_optimum`, which bisects
+    to the cell's own conduction threshold and searches upward from there.  It
+    was originally read off ``PAD_FRONTIER_EXCESS_GRID``, and since every cell's
+    optimum sits within about a kilometre per second of a threshold that moves
+    with the reserve, a grid stepping 5 to 15 km/s understated all six of them
+    (ADR 0022).
+
     Attributes:
         reserve_label: Which end of the bracket this is.
         reserve: Merge energy the jet may not spend (MJ/kg).
         expansion_margin: Headroom demanded above the **expansion floor**.
         threshold_closing_speed: Coldest closing speed below which no slug ratio
             conducts at this reading (km/s), or None if the search found none.
+        threshold_return_excess: The same threshold as a climb-out excess at this
+            depth (km/s) -- the slowest climb-out the cycle may be flown at.
         best_return_excess: Climb-out excess of the best admissible point (km/s).
         best_slug_ratio: Its slug ratio.
         best_returned_per_pad_kg: What it returns per pad kilogram.
@@ -3261,6 +3332,7 @@ class ConductionBracketRow:
     reserve: float
     expansion_margin: float
     threshold_closing_speed: Optional[float]
+    threshold_return_excess: Optional[float]
     best_return_excess: Optional[float]
     best_slug_ratio: Optional[float]
     best_returned_per_pad_kg: Optional[float]
@@ -3310,12 +3382,273 @@ def conduction_threshold_closing_speed(
     return float(brentq(admits, low, high, xtol=1e-4))
 
 
+def overtaking_coldest_closing_at(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    return_excess: float = CONSERVATIVE_RETURN_EXCESS,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[float]:
+    """Coldest instant of the **overtaking leg** at one climb-out excess.
+
+    The bridge between the two halves of the squeeze.
+    :func:`conduction_threshold_closing_speed` says how cold the plume may get;
+    this says how cold the first push actually gets at a given climb-out, so the
+    two can be equated for the slowest climb-out the cycle may be flown at.
+
+    Slug ratio does not enter -- the coldest instant is
+    ``_leg_coldest_closing(0, stream, lob, v_park)``, which is set by the stream
+    speed and the two ends of the burn -- and neither does the node survival.
+    Depth does, through the closure: the same climb-out excess arrives at Earth
+    faster from a deeper perihelion.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The coldest closing speed in km/s, or None when no closure exists there.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    closure = solve_synodic_closure(3, p, dive_solar_radii, float(return_excess), 1.0)
+    if closure is None:
+        return None
+    node = dive_node(
+        dive_solar_radii,
+        closure.periapsis_boost,
+        DEFAULT_PERIAPSIS_SLUG_RATIO,
+        jet_energy_efficiency,
+        p,
+    )
+    row = split_push_from_state(
+        f"{dive_solar_radii:g} R_sun / v_inf {return_excess:g}",
+        closure.departure_excess,
+        closure.departure_aim_deg,
+        closure.total_tof_years,
+        closure.return_excess,
+        closure.push_axis_deg,
+        node.survival,
+        CONSERVATIVE_SLUG_RATIO,
+        parking_period_days,
+        jet_energy_efficiency,
+        p,
+    )
+    return None if row is None else row.overtaking_coldest_closing
+
+
+def conduction_threshold_excess(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    reserve: Optional[float] = None,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    bracket: Tuple[float, float] = _CONDUCTION_EXCESS_BRACKET,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[float]:
+    """Slowest climb-out whose **overtaking leg** still leaves the plume conducting.
+
+    The same threshold :func:`conduction_threshold_closing_speed` states as a
+    closing speed, carried back onto the knob the trade actually leaves free.
+    This is the number the **conduction bracket sweep** has to be anchored on:
+    the pad return rises as the climb-out falls, so wherever the paying end of
+    the dial is, it is just above this.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        expansion_margin: Headroom demanded above the **expansion floor**.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of the **conduction reserve**.
+        parking_period_days: Period of the ellipse between the two pushes.
+        bracket: Climb-out excesses to bisect between (km/s).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The threshold climb-out in km/s, or None when the bracket does not
+        contain one -- either because no closing-speed threshold exists at this
+        reading, or because the bracket does not straddle it.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    threshold = conduction_threshold_closing_speed(
+        jet_energy_efficiency, expansion_margin, reserve
+    )
+    if threshold is None:
+        return None
+
+    def excess_of(excess: float) -> float:
+        """Coldest instant at this climb-out, less the threshold."""
+        coldest = overtaking_coldest_closing_at(
+            dive_solar_radii,
+            float(excess),
+            parking_period_days,
+            jet_energy_efficiency,
+            p,
+        )
+        return -threshold if coldest is None else coldest - threshold
+
+    low, high = bracket
+    if excess_of(low) * excess_of(high) >= 0.0:
+        return None
+    return float(brentq(excess_of, low, high, xtol=1e-4))
+
+
+def pad_frontier_optimum(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    reserve: Optional[float] = None,
+    span: float = PAD_OPTIMUM_EXCESS_SPAN,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[PadFrontierRow]:
+    """Best pad return a depth can reach, found by bisection rather than off a grid.
+
+    :func:`pad_return_frontier` reports what a *stated* list of climb-outs
+    returns, and ``PAD_FRONTIER_EXCESS_GRID`` steps 5 to 15 km/s.  That is fine
+    for showing the shape of the squeeze and wrong for reporting its optimum,
+    because at the shallow node the optimum sits within about a kilometre per
+    second of the conduction threshold, and that threshold moves with every
+    reading of the **conduction reserve** while the grid does not -- so each cell
+    of the bracket sweep was being scored at whatever grid point happened to fall
+    above its own threshold, always understating it.  ADR 0022.
+
+    The peak is interior and the search is one-dimensional because the two
+    effects pull opposite ways in a single knob.  Dropping the climb-out raises
+    the pad return, since less of the node's propellant is spent; but it also
+    narrows the **expansion floor**'s window, which pinches shut at the
+    threshold, and a pinched window forces a slug ratio well above the one the
+    pad return peaks at.  So the pad return rises as the climb-out falls until
+    the pinch costs more than the boost saves, and that crossing is the optimum.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        expansion_margin: Headroom demanded above the **expansion floor**.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of the **conduction reserve**.
+        span: How far above the threshold to search (km/s).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`PadFrontierRow` at the optimising climb-out, or None when no
+        climb-out at this depth conducts at all.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    threshold = conduction_threshold_excess(
+        dive_solar_radii,
+        jet_energy_efficiency,
+        expansion_margin,
+        reserve,
+        parking_period_days,
+        params=p,
+    )
+    if threshold is None:
+        return None
+
+    def row_at(excess: float) -> Optional[PadFrontierRow]:
+        """The frontier row at one climb-out, or None where nothing closes."""
+        rows = pad_return_frontier(
+            dive_solar_radii,
+            (float(excess),),
+            parking_period_days,
+            jet_energy_efficiency,
+            expansion_margin,
+            reserve,
+            p,
+        )
+        return rows[0] if rows else None
+
+    def negative_pad_return(excess: float) -> float:
+        """Pad return at one climb-out, negated for minimising."""
+        row = row_at(float(excess))
+        return (
+            0.0
+            if row is None or row.best_returned_per_pad_kg is None
+            else -row.best_returned_per_pad_kg
+        )
+
+    found = minimize_scalar(
+        negative_pad_return,
+        bounds=(threshold, threshold + span),
+        method="bounded",
+        options={"xatol": _PAD_OPTIMUM_EXCESS_XATOL},
+    )
+    return row_at(float(found.x))
+
+
+def admissible_pad_floor_depth(
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    reserve: Optional[float] = None,
+    bracket: Tuple[float, float] = ADMISSIBLE_PAD_FLOOR_DEPTH_BRACKET,
+    span: float = PAD_OPTIMUM_EXCESS_SPAN,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[float]:
+    """How shallow the dive may go when each depth flies its own best climb-out.
+
+    :func:`pad_floor_depth` answers the same question down a dial that holds the
+    climb-out at ``CONSERVATIVE_RETURN_EXCESS`` = 75 km/s and the slug ratio at
+    8.5.  Both are inadmissible: 75 km/s leaves the **overtaking leg** at 74.21
+    km/s at 32 solar radii and 78.91 at 4, and the **expansion floor** wants
+    79.57 at the operating margin, so that dial is barred at *every* depth.  Its
+    21.09 crossing is therefore a crossing at an operating point nothing may fly.
+
+    Here every depth is flown at the climb-out that maximises its own pad return
+    subject to conducting -- :func:`pad_frontier_optimum` -- and the slug ratio
+    that maximises it there.  That is the dial a mission designer actually has,
+    and the crossing on it is the shallowest dive that pays for its launch.
+    ADR 0022.
+
+    Args:
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        expansion_margin: Headroom demanded above the **expansion floor**.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of the **conduction reserve**.
+        bracket: Depths to bisect between (solar radii).
+        span: How far above each threshold to search for the peak (km/s).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The crossing depth in solar radii, or None when the bracket does not
+        straddle it.
+    """
+    p = params if params is not None else _powered_flyby_params()
+
+    def margin(depth: float) -> float:
+        """Best admissible pad return at one depth, less the committed floor."""
+        row = pad_frontier_optimum(
+            float(depth),
+            parking_period_days,
+            jet_energy_efficiency,
+            expansion_margin,
+            reserve,
+            span,
+            p,
+        )
+        return (
+            -RETURN_FLOOR
+            if row is None or row.best_returned_per_pad_kg is None
+            else row.best_returned_per_pad_kg - RETURN_FLOOR
+        )
+
+    low, high = bracket
+    if margin(low) * margin(high) >= 0.0:
+        return None
+    return float(brentq(margin, low, high, xtol=_ADMISSIBLE_PAD_FLOOR_XTOL))
+
+
 def conduction_bracket_frontier(
     dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
     reserves: Sequence[Tuple[str, float]] = CONDUCTION_RESERVE_BRACKET,
     margins: Sequence[float] = CONDUCTION_MARGIN_GRID,
-    excesses: Sequence[float] = PAD_FRONTIER_EXCESS_GRID,
     jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    span: float = PAD_OPTIMUM_EXCESS_SPAN,
     params: Optional[_FlybyParams] = None,
 ) -> List[ConductionBracketRow]:
     """Ask whether the pad verdict survives every reading of the plume physics.
@@ -3328,12 +3661,20 @@ def conduction_bracket_frontier(
     the reserve sets the lowest climb-out the overtaking plume survives and the
     pad return is won at low climb-outs.
 
+    Each cell is scored by :func:`pad_frontier_optimum`, which bisects to that
+    cell's own conduction threshold rather than reading the best of a fixed
+    climb-out grid.  The grid reading -- ``pad_return_frontier`` on
+    ``PAD_FRONTIER_EXCESS_GRID``, which is still what plots the shape of the
+    squeeze -- understated every cell, because each optimum sits within about a
+    kilometre per second of a threshold that the grid steps past in 5 to 15
+    (ADR 0022).
+
     Args:
         dive_solar_radii: Perihelion distance in solar radii.
         reserves: ``(label, MJ/kg)`` readings to sweep.
         margins: Expansion margins to sweep.
-        excesses: Climb-out excesses to scan at each cell (km/s).
         jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        span: How far above each threshold to search for the peak (km/s).
         params: Float parameter block; built with defaults when omitted.
 
     Returns:
@@ -3343,23 +3684,16 @@ def conduction_bracket_frontier(
     out: List[ConductionBracketRow] = []
     for label, reserve in reserves:
         for margin in margins:
-            rows = [
-                row
-                for row in pad_return_frontier(
-                    dive_solar_radii,
-                    excesses,
-                    jet_energy_efficiency=jet_energy_efficiency,
-                    expansion_margin=float(margin),
-                    reserve=float(reserve),
-                    params=p,
-                )
-                if row.best_returned_per_pad_kg is not None
-            ]
-            best = (
-                max(rows, key=lambda row: row.best_returned_per_pad_kg or 0.0)
-                if rows
-                else None
+            best = pad_frontier_optimum(
+                dive_solar_radii,
+                jet_energy_efficiency=jet_energy_efficiency,
+                expansion_margin=float(margin),
+                reserve=float(reserve),
+                span=span,
+                params=p,
             )
+            if best is not None and best.best_returned_per_pad_kg is None:
+                best = None
             out.append(
                 ConductionBracketRow(
                     reserve_label=label,
@@ -3367,6 +3701,13 @@ def conduction_bracket_frontier(
                     expansion_margin=float(margin),
                     threshold_closing_speed=conduction_threshold_closing_speed(
                         jet_energy_efficiency, float(margin), float(reserve)
+                    ),
+                    threshold_return_excess=conduction_threshold_excess(
+                        dive_solar_radii,
+                        jet_energy_efficiency,
+                        float(margin),
+                        float(reserve),
+                        params=p,
                     ),
                     best_return_excess=None if best is None else best.return_excess,
                     best_slug_ratio=None if best is None else best.best_slug_ratio,
@@ -3588,8 +3929,13 @@ def conduction_bracket_text(rows: Sequence[ConductionBracketRow]) -> str:
                     ),
                     (
                         "--"
+                        if r.threshold_return_excess is None
+                        else f"{r.threshold_return_excess:.2f}"
+                    ),
+                    (
+                        "--"
                         if r.best_return_excess is None
-                        else f"{r.best_return_excess:g}"
+                        else f"{r.best_return_excess:.2f}"
                     ),
                     "--" if r.best_slug_ratio is None else f"{r.best_slug_ratio:.2f}",
                     (
@@ -3612,6 +3958,7 @@ def conduction_bracket_text(rows: Sequence[ConductionBracketRow]) -> str:
                 "MJ/kg",
                 "margin",
                 "dies below",
+                "slowest v_inf",
                 "best v_inf",
                 "k",
                 "kg/pad kg",

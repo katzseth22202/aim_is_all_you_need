@@ -1,6 +1,7 @@
 # The launch ledger charged from the pad: 4 solar radii pays for its launch and 32 does not
 
-Status: accepted
+Status: accepted, with the conduction-bracket figures and the depth crossing
+superseded by ADR 0022
 
 Date: 2026-09-01
 
@@ -193,6 +194,13 @@ sweeps both.
 | 32 R_sun, best over `k` ignoring conduction | 0.0507 | 1/19.7 |
 | 32 R_sun, **best admissible anywhere** | 0.0417 | **1/24.0** |
 
+> **Superseded by ADR 0022.** The last row is a grid reading. Scored at the
+> conduction threshold itself the best admissible point at 32 solar radii
+> returns **0.0443, or 1/22.5**, and doubles in **2.852 yr** rather than 3.993.
+> Substitute those two figures in the two paragraphs below; the argument they
+> carry is unchanged, since 2.852 yr still loses to the Jupiter-only chain's
+> 1.74 and 1/22.5 is still a 50 percent relaxation of the committed floor.
+
 **The deep cycle's 4 percent is thin but it is not the whole story**, because
 `k` is a free choice and the pad return rises as it falls: at `k` = 8.5 the same
 cycle returns 1/11.3, comfortably clear, at the cost of doubling in 0.835 yr
@@ -243,6 +251,17 @@ At 32 solar radii:
 | 15000 K, all reserved | 1.0 | 64.97 | 65 km/s, `k` = 3.30 | 0.0644 | **0.966** | 2.225 | fails |
 | 6000 K | 1.0 | 57.38 | 55 km/s, `k` = 3.41 | 0.0773 | **1.159** | 1.917 | **CLEARS** |
 | frozen chemistry only | 1.0 | 51.71 | 50 km/s, `k` = 2.86 | 0.0861 | **1.291** | 1.981 | **CLEARS** |
+
+> **Superseded by ADR 0022.** Every cell here was scored off
+> `PAD_FRONTIER_EXCESS_GRID`, and each cell's optimum sits within about a
+> kilometre per second of its *own* conduction threshold — which moves 46.7 to
+> 81.2 km/s across the six cells while the grid steps 5 to 15. So all six were
+> understated: 0.665 / 0.849 / **1.009** at the 1.5x margin and 0.970 / 1.159 /
+> 1.312 at unit margin. **The frozen-chemistry cell clears at the operating
+> margin**, and the paragraph immediately below is wrong. What survives, and is
+> ADR 0022's replacement for it: every cell that pays doubles in 1.81 to 2.07 yr
+> against the Jupiter-only chain's 1.74. The rest of this section is kept as
+> written.
 
 **At the 1.5x operating margin the shallow cycle fails at every reading of the
 bracket**, so the headline verdict does not rest on plume physics nobody has
@@ -321,6 +340,14 @@ The committed floor is lost at **21.09 solar radii** (`pad_floor_depth()`).
 Almost all of the fall is the node: the chain to the transfer moves only 0.611
 to 0.441 across the whole dial while survival falls 0.870 to 0.222.
 
+> **Superseded by ADR 0022.** This dial holds the climb-out at 75 km/s, and the
+> section above shows that 75 km/s leaves the **overtaking leg** below the
+> **expansion floor** at *both* depths — so every row here is inadmissible and
+> 21.09 is a crossing between two operating points nothing may fly. Flying each
+> depth at its own best conducting climb-out puts the crossing at **22.9 solar
+> radii** (`admissible_pad_floor_depth()`), and the cycle there doubles in
+> 1.75 yr. The paragraph below still holds with 22.9 in place of 21.09.
+
 **The dial is not a free parameter down its whole length.** ADR 0020 framed the
 depth as a dial where every step inward is bought with thermal engineering and
 paid back in growth. That still holds between 4 and 21 solar radii. Past 21 the
@@ -383,6 +410,11 @@ sixth time.**
   at the 1.5x margin, and not robust to unit margin plus a 6000 K or looser
   outlet, where the shallow cycle pays at 1.159x while doubling in 1.917 yr.
   What closes it is the exit magnetic Reynolds number, still uncomputed.
+  **ADR 0022 narrows this further**: scored at each cell's own threshold rather
+  than off the climb-out grid, the hard end of the bracket clears at the 1.5x
+  margin too, by 0.9 percent. The failure is not robust across the bracket at
+  either margin; what is robust is that every corner which pays doubles slower
+  than the Jupiter-only chain.
 - **The parking-orbit period is held at 5 days throughout.** ADR 0020 showed the
   growth saturates there, but the pad ledger was not swept against it. A longer
   coast makes the re-aim cheaper and would move `chain_to_departure` up by at

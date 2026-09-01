@@ -34,8 +34,8 @@ make all
 
 # Individual steps
 make test           # pytest -s -m "not slow"  — 371 tests, ~1 min
-make test-slow      # pytest -s -m "slow"      — 33 tests, ~8 min
-make test-all       # pytest -s                — everything, ~9 min
+make test-slow      # pytest -s -m "slow"      — 37 tests, ~12 min
+make test-all       # pytest -s                — everything, ~13 min
 make mypy           # mypy src/
 make format         # black + isort
 make check-format   # check only, no changes
@@ -181,15 +181,39 @@ Tests live in `tests/` with one file per source module. `tests/test_helpers.py` 
 
 ### The slow split
 
-`make all` and `make test` deselect the `slow` marker, because **89% of the suite's
-runtime sits in 8% of its tests**: 371 fast tests take ~1 minute, 33 slow ones take
-~8. Run `make test-all` before committing, and whenever you are about to quote a
-number — the slow tests are the ones that pin the optimiser sweeps and multi-minute
-searches (`pad_return_frontier`, `conduction_bracket_frontier`,
-`constrained_growth_optimum`, the assist-chain and two-wave grids), so a fast-only
-run does *not* protect the headline figures in the ADRs.
+`make all` and `make test` deselect the `slow` marker, because **92% of the suite's
+runtime sits in 9% of its tests**: 371 fast tests take ~1 minute, 37 slow ones take ~12.
+The two suites protect different things. The fast one protects *structure* — it catches
+a broken import, a changed dataclass field or a renamed argument in under a minute. The
+slow one protects *figures*: it is the only thing that runs the optimiser sweeps and
+multi-minute searches (`pad_return_frontier`, `conduction_bracket_frontier`,
+`pad_frontier_optimum`, `admissible_pad_floor_depth`, `constrained_growth_optimum`, the
+assist-chain and two-wave grids).
 
-Mark a test `slow` when it takes more than about a second. Note that a plain `pytest`
-still runs everything — the deselection lives in the Makefile, not in `addopts`, so
-that naming a slow test directly on the command line does what you asked instead of
-silently collecting nothing.
+So the question to ask is not "is this a commit?" but **"am I about to change or quote a
+number a sweep produces?"** Three tiers:
+
+1. **Prose, docstrings, comments, ADR text** — fast suite only. Nothing numeric moves.
+2. **A module that feeds a sweep** — that file's slow tests, e.g.
+   `pytest tests/test_solar_dive_depth_trade.py -m slow`. Most edits land here, and for
+   a leaf module (nothing in `src/` imports `solar_dive_depth_trade`) it is the whole
+   exposure.
+3. **Committing, or writing a figure into an ADR, CONTEXT.md or the paper** — the full
+   `make test-all`.
+
+A fast-only run does *not* protect the headline figures in the ADRs. ADR 0022 is the
+worked example: every number in it came from a slow-marked path, and the 371 fast tests
+passed unchanged throughout — including while the conduction-bracket cells were still
+being scored 3-6% low.
+
+Mark a test `slow` when it takes more than about a second, and watch what the expensive
+ones cost: the conduction-bracket fixture is ~230 s and the depth-crossing bisection
+~210 s, together 73% of that file's slow time. When one gets too dear, bracket its
+search around the answer you already know rather than dropping coverage —
+`test_the_admissible_depth_crossing_is_shallower_than_the_fixed_dial` bisects on
+(22, 24) instead of the module's (16, 32) default, which is three times cheaper and
+still asserts that 22 clears the floor and 24 fails it.
+
+Note that a plain `pytest` still runs everything — the deselection lives in the Makefile,
+not in `addopts`, so that naming a slow test directly on the command line does what you
+asked instead of silently collecting nothing.
