@@ -13,6 +13,7 @@ import pytest
 from astropy import units as u
 
 from src import solar_dive_depth_trade as trade
+from src.circular_resonance_impulse import impulse_per_impactor_kg
 from src.jovian_solar_dive_cycle import (
     DEFAULT_JET_ENERGY_EFFICIENCY,
     DEFAULT_PERIAPSIS_SURVIVAL,
@@ -616,3 +617,94 @@ def test_the_constrained_optimum_lands_where_adr_0020_says() -> None:
     assert (
         shallow.row.growth.doubling_years / deep.row.growth.doubling_years
     ) == pytest.approx(2.18, rel=0.02)
+
+
+# --------------------------------------------------------------------------
+# Two pushes: charging the payload's trip from the pad
+# --------------------------------------------------------------------------
+
+
+def test_the_lob_does_not_deliver_anything_like_escape_speed() -> None:
+    # The inconsistency the split-push ledger exists to fix. The launch ledger
+    # assumes a 4.09 km/s lob; cycle_growth_ledger starts the burn at 11.0086.
+    assert trade.lob_arrival_speed() == pytest.approx(3.60, abs=0.02)
+    assert trade.lob_arrival_speed() < 0.4 * _PARAMS.v_esc_leo
+    assert trade.lob_arrival_speed(1.0) == 0.0  # too slow to reach 200 km at all
+
+
+def test_periapsis_speed_barely_notices_a_much_shorter_parking_orbit() -> None:
+    # Why the phasing objection is weaker than it looks: v_p is dominated by
+    # 2 mu / r_p, so a 6-hour ellipse still reaches 90% of escape speed.
+    for days, speed in ((0.25, 9.870), (1.0, 10.571), (5.0, 10.861), (20.0, 10.950)):
+        assert trade.parking_orbit_periapsis_speed(days) == pytest.approx(
+            speed, abs=5e-3
+        )
+    assert trade.parking_orbit_periapsis_speed(0.25) > 0.89 * _PARAMS.v_esc_leo
+
+
+def test_the_reaim_is_cheap_only_on_a_long_parking_orbit() -> None:
+    # The split's enabling trick and its binding cost are the same term.
+    assert trade.apoapsis_reaim_cost(20.0, 124.8) == pytest.approx(0.207, abs=2e-3)
+    assert trade.apoapsis_reaim_cost(5.0, 124.8) == pytest.approx(0.527, abs=2e-3)
+    assert trade.apoapsis_reaim_cost(0.25, 124.8) == pytest.approx(4.271, abs=5e-3)
+    # It scales as sin(cant/2), so a squarer cant is cheaper to turn through.
+    assert trade.apoapsis_reaim_cost(5.0, 89.9) < trade.apoapsis_reaim_cost(5.0, 124.8)
+
+
+def test_the_overtaking_leg_is_twice_the_engine_the_canted_one_is() -> None:
+    # The entire reason to split: at theta = 0 the impactor's own momentum adds.
+    along = impulse_per_impactor_kg(0.0 * u.deg, 8.5, 0.60)
+    canted = impulse_per_impactor_kg(124.8 * u.deg, 8.5, 0.60)
+    square = impulse_per_impactor_kg(89.9 * u.deg, 8.5, 0.60)
+    assert along == pytest.approx(3.387, abs=5e-3)
+    assert canted == pytest.approx(1.671, abs=5e-3)
+    assert along / canted == pytest.approx(2.03, rel=0.02)
+    # 4 R_sun's cant lands at 90 degrees, where the bulk term vanishes entirely.
+    assert square > canted
+
+
+def test_the_split_push_ledger_at_both_reference_depths() -> None:
+    shallow = trade.split_push_ledger(32.0, 75.0, 8.5, node_survival=1.0 / 3.0)
+    assert shallow is not None
+    assert shallow.cant_deg == pytest.approx(124.8, abs=0.1)
+    assert shallow.overtaking_fraction == pytest.approx(0.7911, abs=1e-3)
+    assert shallow.departure_fraction == pytest.approx(0.7201, abs=1e-3)
+    assert shallow.split_growth == pytest.approx(3.49, abs=0.02)
+    assert shallow.split_doubling_years == pytest.approx(1.816, abs=5e-3)
+
+    deep = trade.split_push_ledger(4.0, 150.0, 30.0, node_survival=0.5)
+    assert deep is not None
+    assert deep.cant_deg == pytest.approx(89.9, abs=0.1)
+    assert deep.split_growth == pytest.approx(23.00, abs=0.05)
+    assert deep.split_doubling_years == pytest.approx(0.724, abs=5e-3)
+
+    # The depth penalty, charged honestly on both sides.
+    assert shallow.split_doubling_years / deep.split_doubling_years == pytest.approx(
+        2.51, rel=0.02
+    )
+
+
+def test_the_split_beats_one_push_and_both_beat_the_committed_fiction() -> None:
+    for depth, rex, k, s in ((32.0, 75.0, 8.5, 1.0 / 3.0), (4.0, 150.0, 30.0, 0.5)):
+        row = trade.split_push_ledger(depth, rex, k, node_survival=s)
+        assert row is not None
+        assert row.single_growth < row.split_growth < row.free_parking_growth
+        assert row.split_advantage > 1.0
+        assert (
+            row.free_parking_doubling_years
+            < row.split_doubling_years
+            < row.single_doubling_years
+        )
+
+
+def test_the_split_saturates_long_before_the_phasing_gets_awkward() -> None:
+    rows = trade.split_push_period_sweep()
+    growth = [r.split_growth for r in rows]
+    assert growth == sorted(growth)  # monotone in the parking period
+    by_period = {r.parking_period_days: r.split_growth for r in rows}
+    # 5 days captures most of what 40 days offers, at a quarter of Earth's drift.
+    assert by_period[5.0] / by_period[40.0] > 0.94
+    # Below half a day the re-aim has eaten the whole advantage.
+    short = trade.split_push_ledger(parking_period_days=0.125, node_survival=1.0 / 3.0)
+    assert short is not None
+    assert short.split_growth < short.single_growth

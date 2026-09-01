@@ -420,6 +420,113 @@ costs, so the choice between a 0.513 yr doubling through a 2041 K node and a
 1.094 yr doubling through a 722 K one can be made on engineering grounds rather
 than by assuming the deep node is free.
 
+## Addendum: the departure was charged from Earth escape, and it starts from a lob
+
+Date: 2026-09-01
+
+Everything above scores the Earth departure with `cycle_growth_ledger`, which
+starts the burn at `v_depart_from` = 11.0086 km/s -- **already at Earth escape**.
+The **launch ledger**, in the same module, assumes the payload arrives on a
+4.09 km/s ballistic lob (`LAUNCH_PROPELLANT_FRACTION` = 2/3 at 380 s is exactly
+that), which reaches the 200 km burn point at about **3.6 km/s**. Nothing charged
+the ~7.4 km/s between them. The two ledgers disagreed with each other and the
+growth number came from the generous one.
+
+ADR 0019 inherited the same defect and so did its comparison against the paper's
+resonant dive.
+
+### Charging it changes the architecture, not just the number
+
+The correction is not simply "make the burn 13 km/s instead of 5.6", because the
+two halves of that burn want **opposite geometries**, and the impulse law's bulk
+term is what separates them:
+
+| geometry | `beta` at `k` = 8.5 | `cos theta` |
+| --- | ---: | ---: |
+| overtaking, `theta` = 0 (stream from behind) | **3.387** | +1.000 |
+| square, `theta` = 90 (4 R_sun's cant) | 2.170 | +0.002 |
+| this cycle's cant, `theta` = 124.8 | **1.671** | -0.571 |
+
+A single push must fly all 13 km/s canted, at `beta` = 1.67. Splitting it buys
+the cheap geometry for the larger half:
+
+1. Orient the parking orbit **along the push axis** and take an **overtaking
+   push** from the lob to near-escape -- `beta` = 3.39, the impactor's own
+   momentum adding rather than fighting.
+2. Coast to apoapsis and **rotate the orbit** there, where velocity is small.
+3. Fall back to a periapsis now aimed for departure and fly the short canted leg.
+
+Step 2 is what CONTEXT.md's **free-aim departure** entry already called the
+apoapsis reversal. Its cost, `2 v_apo sin(cant/2)`, is the split's enabling trick
+and its binding constraint at once, because `v_apo` grows fast as the parking
+orbit shortens.
+
+### The parking-orbit period is the real trade, and it saturates early
+
+| period | `v_p` | re-aim | growth | doubling | Earth advances |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.125 d | 9.135 | 7.325 | 1.07 | 34.03 yr | 0.12 deg |
+| 0.25 d | 9.870 | 4.271 | 1.89 | 3.57 yr | 0.25 deg |
+| 1 d | 10.571 | 1.582 | 2.96 | 2.09 yr | 0.99 deg |
+| 2 d | 10.735 | 0.982 | 3.26 | 1.92 yr | 1.97 deg |
+| **5 d** | **10.861** | **0.527** | **3.49** | **1.816 yr** | **4.93 deg** |
+| 20 d | 10.950 | 0.207 | 3.67 | 1.75 yr | 19.71 deg |
+| 40 d | 10.972 | 0.130 | 3.71 | 1.73 yr | 39.43 deg |
+
+Two things make this less demanding than it first appears. Periapsis speed is
+dominated by `2 mu / r_p`, so even a **6-hour** ellipse reaches 9.87 km/s, 90
+percent of escape -- the split does not need a long coast to work. And the growth
+**saturates**: 5 days captures 95 percent of what 40 days offers while advancing
+Earth only 4.93 degrees, so the second wave's trajectory differs from the first's
+by very little. Below about half a day the re-aim has eaten the entire advantage
+and a single push is better.
+
+**Two waves separated by ~5 days is therefore the reference**, and the phasing
+objection against it is weak. `DEFAULT_PARKING_PERIOD_DAYS` = 5.
+
+### The corrected reference numbers
+
+Scored by `split_push_ledger()`, with the node survival rounded to the nearest
+defensible fraction and deliberately conservative against the impulse-law
+derivation (0.5977 at 4 solar radii, 0.3537 at 32):
+
+| | 4 R_sun, `k` = 30 | 4 R_sun, `k` = 8.5 | 32 R_sun, `k` = 8.5 |
+| --- | ---: | ---: | ---: |
+| cant at the departure burn | 89.9 deg | 89.9 deg | 124.8 deg |
+| stream speed at Earth | 157.82 km/s | 157.82 | 85.07 |
+| burn, lob to departure | 11.64 km/s | 11.64 | 13.06 |
+| overtaking leg `f1` | 0.7615 | 0.8860 | 0.7911 |
+| departure leg `f2` | 0.8174 | 0.8935 | 0.7201 |
+| apoapsis re-aim | 0.420 km/s | 0.420 | 0.527 |
+| **node survival `s`** | **1/2** | **1/2** | **1/3** |
+| **growth per cycle** | **23.00x** | 15.16x | **3.49x** |
+| **doubling** | **0.724 yr** | 0.835 yr | **1.816 yr** |
+| **millionfold** | **14.44 yr** | 16.65 yr | **36.19 yr** |
+| one canted push instead | 21.25x / 0.743 yr | 12.31x / 0.905 | 2.53x / 2.448 yr |
+| parking orbit uncharged (**what this ADR reported**) | 67.15x / 0.540 yr | 35.67x / 0.635 | 7.29x / 1.143 yr |
+
+**The headline moves from 1.094 to 1.816 yr at 32 solar radii and from 0.513 to
+0.724 at 4.** The depth penalty grows with it, **2.51x rather than 2.18x**,
+because the shallow cycle is hurt twice over: it has more of the burn to fly
+(13.06 km/s against 11.64, since its departure is hotter) and it flies it at a
+worse angle.
+
+### Why 4 solar radii keeps winning, now in three independent ways
+
+| | 4 R_sun | 32 R_sun |
+| --- | ---: | ---: |
+| perihelion speed rise the boost asks for | **11.4%** | 23.0% |
+| node exhaust speed, `beta w / k` at `w = 2 v_peri` | **68.09 km/s** | 23.78 |
+| departure cant, and its `cos theta` | **89.9 deg, +0.002** | 124.8 deg, -0.571 |
+
+The first is the Oberth effect: deeper, a smaller *fractional* speed rise buys
+the same energy. The second is that the node's exhaust speed scales with the
+opposing streams' closing speed, which is twice the perihelion speed. The third
+is new here -- **4 solar radii's cant lands almost exactly square, where the
+impactor's bulk momentum neither helps nor hurts**, while the shallow cycle's
+124.8 degrees has the bulk term actively subtracting. All three compound, and all
+three favour the node that is hardest to build.
+
 ## What this does not settle
 
 - **The nozzle mass is still uncharged.** Objection 4 -- that the energy per

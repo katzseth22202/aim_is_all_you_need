@@ -713,6 +713,29 @@ either root as an operating point; letting an optimiser sit on this floor either
 a boundary is not a design point, which is why `constrained_growth_optimum()` takes
 a margin, stated at 1.5 because the two reference cycles carry 1.76 and 1.55.
 
+**Split push** (**two-wave departure**):
+Charging the payload's whole trip from the pad rather than from a free parking orbit,
+and splitting it because the two halves want opposite geometries (`split_push_ledger()`).
+The **launch ledger** assumes a 4.09 km/s ballistic lob, about 3.6 km/s at the 200 km
+burn point; `cycle_growth_ledger` started the burn at 11.0086 km/s, already at escape.
+Nothing charged the ~7.4 km/s between them. The fix: an **overtaking push** (`theta` = 0,
+`beta` = 3.39 at `k` = 8.5, the impactor's momentum *adding*) from the lob to a parking
+orbit, an **apoapsis reversal** to re-aim, then the short canted departure leg
+(`beta` = 1.67). Reference numbers, node survival 1/2 and 1/3: **4 R☉ 23.0x per cycle,
+doubling 0.724 yr, millionfold 14.4 yr; 32 R☉ 3.49x, 1.816 yr, 36.2 yr.**
+_Avoid_: quoting the free-parking-orbit figures (0.513 / 1.094 yr — both wrong for the
+same reason); assuming one canted push is equivalent (it costs 1.4x the growth at 32 R☉).
+
+**Parking-orbit period trade**:
+What the **split push** actually trades. The apoapsis re-aim costs `2 v_apo sin(cant/2)`,
+and `v_apo` grows fast as the period shortens — 0.207 km/s at 20 days, 4.271 at 6 hours.
+But periapsis speed is dominated by `2 mu / r_p`, so even a 6-hour ellipse reaches
+9.87 km/s (90% of escape), and growth **saturates**: 5 days captures 95% of what 40 days
+offers while Earth advances only 4.93°. Below ~0.5 days the re-aim eats the whole
+advantage and one push is better. `DEFAULT_PARKING_PERIOD_DAYS` = 5.
+_Avoid_: rejecting the split on phasing grounds by anchoring on the 20-day
+`PUFFSAT_CYCLE_ORBIT_PERIOD` default — the coast can be far shorter at little cost.
+
 **Conduction reserve**:
 The merge energy the jet may not spend if the plume is to still conduct at nozzle exit
 (`conduction_reserve()`). **A bracket, not a number.** The conservative end reserves the
@@ -767,9 +790,9 @@ a 100 m along-track miss).
 
 **Depth trade**:
 A 64x drop in solar flux (3.93 MW/m^2 to 61.5 kW/m^2, 2041 K to 722 K equilibrium)
-and an 8.2x gentler collision cost **2.18x the doubling time** -- 0.4961 yr at
-4 solar radii against 1.0795 at 32, each at its own `constrained_growth_optimum()`.
-Per-*cycle* growth falls 12x (97.26 to 8.20 kg per impactor kg), which is the number
+and an 8.2x gentler collision cost **2.51x the doubling time** -- 0.724 yr at
+4 solar radii against 1.816 at 32, on the **split push** with the departure charged from
+the pad. Per-*cycle* growth falls 6.6x (23.0 to 3.49 kg per impactor kg), the number
 to avoid quoting alone: the clock is unchanged at 3.276 yr either way, so the
 logarithm absorbs most of it.
 _Avoid_: quoting the per-cycle ratio as the cost; comparing rows at different slug
@@ -896,6 +919,15 @@ ratios without saying which ceiling each sits under.
   `recovery` (which scales `beta` whole, and is what `e1`/`e2` set) from the geometric
   factor inside the root, so the `e1` axis is not `eta_jet^2` and the mapping must be
   done first.
+- **ADR 0019's growth figures give the parking orbit away free, and so does its
+  comparison against the paper.** `cycle_growth_ledger` starts the departure burn at
+  Earth escape while the **launch ledger** in the same module assumes a 4.09 km/s lob;
+  nothing charges the ~7.4 km/s between. Charged, the 3S Jovian dive doubles in
+  **0.724 yr, not 0.513**, and returns 23.0x per cycle, not 83.35 — see **split push**.
+  The paper's own single-impulse resonant dive carries the identical defect (its 0.305 yr
+  is scored the same way), so the *ranking* is probably unaffected, but neither figure
+  should be quoted until both are re-derived on `split_push_ledger()`. Unresolved for the
+  paper's row.
 - **The magnetic nozzle's mass is uncharged everywhere it is flown.** ADR 0020 shows
   the shallow node handles 8.2x less specific energy (724 against 5934 MJ/kg) and the
   motivating objection was that the energy per impactor kilogram implies a heavy

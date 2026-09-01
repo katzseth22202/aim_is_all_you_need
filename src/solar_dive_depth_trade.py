@@ -7,7 +7,7 @@ it sits in 3.9 MW/m^2 of sunlight, and the opposing streams meet at 617 km/s.
 Backing the perihelion out trades growth for a node a spacecraft can plausibly
 be built for.  This module prices that trade.
 
-Four things it does that :mod:`src.jovian_solar_dive_cycle` does not:
+Five things it does that :mod:`src.jovian_solar_dive_cycle` does not:
 
 * **The dive node is derived, not stated.**  ``periapsis_survival`` there is a
   constant; here it comes from the same **impact-angle impulse law** the Earth
@@ -31,6 +31,11 @@ Four things it does that :mod:`src.jovian_solar_dive_cycle` does not:
   the **launch ledger** caps it from above too, because every kilogram of slug
   was lifted.  They are far apart and the binding one is never the obvious one
   (:func:`slug_ratio_ceilings`).
+* **The departure is charged from the pad.**  ``cycle_growth_ledger`` starts the
+  burn at Earth escape; the **launch ledger** in the same module assumes a
+  4.09 km/s ballistic lob, about 3.6 km/s at the burn point, and nothing charged
+  the gap.  Charging it splits the burn in two, because the overtaking half and
+  the canted half want opposite geometries (:func:`split_push_ledger`).
 * **The opposing stream is placed, not assumed.**  Backing the dive out makes
   the *prograde* placement cheaper and the *retrograde* placement dearer, which
   is the one direction nothing else in the trade runs
@@ -40,10 +45,11 @@ The headline, against ADR 0019's reference cycle:
 
 * **Three synodic periods still closes at 32 solar radii**, prograde and
   unpowered, with +54.48 degrees of Jovian bend margin against +58.80.
-* **Growth falls about 12x** at each depth's own constrained optimum, 97.26 to
-  8.20 kg returned per impactor kilogram -- but **doubling time only 2.18x**,
-  0.4961 yr against 1.0795.  A 64x cooler node costs a factor of two in the
-  clock, not a factor of ten.
+* **Growth falls about 6.6x** once the departure is charged from the pad rather
+  than from a free parking orbit, 23.0 to 3.49 kg returned per impactor kilogram
+  -- but **doubling time only 2.51x**, 0.724 yr against 1.816, and millionfold
+  14.4 yr against 36.2.  A 64x cooler node costs a factor of 2.5 in the clock,
+  not a factor of seven (:func:`split_push_ledger`).
 * **The cap on the slug ratio is the expansion floor, and at the shallow node
   the launch ledger is close behind.**  Neither is the plume ignition window,
   which is the only one the repository had: a search given only that constraint
@@ -60,12 +66,16 @@ from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from astropy import units as u
+from boinor.bodies import Earth
 from scipy.optimize import brentq, minimize_scalar
 from tabulate import tabulate
 
 from src.astro_constants import SOLAR_DIVE_PERIAPSIS_SOLAR_RADII
 from src.circular_resonance_impulse import impulse_per_impactor_kg
+from src.conic_kernel import half_turn_angle, hyperbolic_eccentricity
 from src.jovian_solar_dive_cycle import (
+    _BURN_RADIUS,
+    _MU_EARTH,
     DEFAULT_JET_ENERGY_EFFICIENCY,
     DEFAULT_RETURN_EXCESS,
     DEFAULT_SLUG_RATIO,
@@ -73,6 +83,7 @@ from src.jovian_solar_dive_cycle import (
     LaunchLedgerVerdict,
     SynodicCycleClosure,
     _dive_periapsis_radius,
+    _vehicle_frame_impact,
     cycle_growth_ledger,
     departure_nozzle_ledger,
     dive_placement_excess_floor,
@@ -1765,3 +1776,381 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# --------------------------------------------------------------------------
+# Two pushes, not one: where the payload actually starts from
+# --------------------------------------------------------------------------
+
+# Speed a payload carries at the 200 km burn point after the launch ledger's own
+# ballistic lob.  LAUNCH_PROPELLANT_FRACTION = 2/3 at 380 s is exactly a 4.09
+# km/s lob, and a 4.09 km/s lob is nowhere near orbital: flown vertically it
+# arrives at 200 km with about 3.6 km/s.  Approximate -- a real lofted trajectory
+# trades some of that for downrange velocity -- but it is the right *scale*, and
+# the point is that it is 3.6 and not the 11.0 km/s the growth ledger assumed.
+LOB_DELTA_V = 4.09
+_LOB_GRAVITY = 9.5e-3  # km/s^2, mean over the first 200 km
+
+# Parking-orbit period between the two pushes (days).  5 days captures 95
+# percent of the split's benefit while advancing Earth only 4.93 degrees during
+# the coast, so the second wave's trajectory differs from the first's by very
+# little.  20 days is worth 5 percent more and moves Earth 19.7 degrees.
+DEFAULT_PARKING_PERIOD_DAYS = 5.0
+
+# Node survival proposed for each reference depth, rounded from the impulse-law
+# derivation (0.5977 at 4 solar radii, 0.3537 at 32) to the nearest defensible
+# fraction and deliberately on the conservative side of both.
+PROPOSED_NODE_SURVIVAL = {4.0: 0.5, 32.0: 1.0 / 3.0}
+
+# Parking-orbit periods swept by split_push_period_sweep() (days).  The floor is
+# below where the apoapsis re-aim destroys the split's advantage; the ceiling is
+# past where the growth has saturated.
+PARKING_PERIOD_GRID: Tuple[float, ...] = (
+    0.125,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    40.0,
+)
+# Steps used to integrate each leg of the split.  Both the closing speed and the
+# impact angle move as the vehicle accelerates, and the legs are long (7-13 km/s
+# against the 4-6 km/s the single-leg ledger integrates), so a midpoint
+# evaluation is not good enough.
+_LEG_INTEGRATION_STEPS = 3000
+
+
+def lob_arrival_speed(
+    lob_delta_v: float = LOB_DELTA_V, altitude: float = 200.0
+) -> float:
+    """Speed at the burn point after the launch ledger's own ballistic lob (km/s).
+
+    Args:
+        lob_delta_v: Ground-rocket delta-v (km/s).
+        altitude: Burn altitude above the surface (km).
+
+    Returns:
+        Arrival speed (km/s); zero when the lob does not reach the altitude.
+    """
+    residual = lob_delta_v * lob_delta_v - 2.0 * _LOB_GRAVITY * altitude
+    return float(np.sqrt(residual)) if residual > 0.0 else 0.0
+
+
+def _burn_leg(
+    start_speed: float,
+    end_speed: float,
+    stream_axis_offset_deg: float,
+    stream_speed: float,
+    slug_ratio: float,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+) -> float:
+    """Mass fraction surviving one slug-nozzle burn between two periapsis speeds.
+
+    Args:
+        start_speed: Vehicle speed when the burn lights (km/s).
+        end_speed: Speed when it finishes (km/s).
+        stream_axis_offset_deg: Angle from the vehicle's thrust axis to the
+            direction the stream travels.  Zero is a pure overtaking push.
+        stream_speed: Impactor speed at the burn radius (km/s).
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+
+    Returns:
+        The delivered mass fraction, or 0.0 if the impulse ever goes non-positive.
+    """
+    speeds = np.linspace(start_speed, end_speed, _LEG_INTEGRATION_STEPS + 1)
+    log_fraction = 0.0
+    for lower, upper in zip(speeds[:-1], speeds[1:]):
+        angle, closing = _vehicle_frame_impact(
+            stream_axis_offset_deg,
+            0.0,
+            stream_speed,
+            0.5 * (float(lower) + float(upper)),
+        )
+        beta = impulse_per_impactor_kg(angle * u.rad, slug_ratio, jet_energy_efficiency)
+        if beta <= 0.0:
+            return 0.0
+        log_fraction -= (float(upper) - float(lower)) / (beta * closing / slug_ratio)
+    return float(np.exp(log_fraction))
+
+
+def parking_orbit_periapsis_speed(period_days: float, altitude: float = 200.0) -> float:
+    """Periapsis speed of a bound ellipse of this period (km/s).
+
+    Dominated by ``2*mu/r_p``, which is why the split survives a *short* parking
+    orbit far better than intuition suggests: a 6-hour ellipse still reaches
+    9.87 km/s, 90 percent of the 11.01 km/s escape speed.
+
+    Args:
+        period_days: Orbital period (days).
+        altitude: Periapsis altitude above the surface (km).
+
+    Returns:
+        Periapsis speed (km/s).
+    """
+    r_p = float(Earth.R.to_value(u.km)) + altitude
+    seconds = period_days * 86400.0
+    semi_major = float(np.cbrt(_MU_EARTH * seconds * seconds / (4.0 * np.pi**2)))
+    return float(np.sqrt(_MU_EARTH * (2.0 / r_p - 1.0 / semi_major)))
+
+
+def apoapsis_reaim_cost(
+    period_days: float, cant_deg: float, altitude: float = 200.0
+) -> float:
+    """Delta-v to rotate the parking orbit by ``cant_deg`` at apoapsis (km/s).
+
+    The **split push**'s enabling trick and its binding cost at the same time.
+    Rotating a velocity vector by ``theta`` costs ``2 v sin(theta/2)``, and at
+    apoapsis ``v`` is small -- 0.117 km/s on a 20-day ellipse, so a 125 degree
+    turn costs 0.207 km/s.  But ``v_apo`` grows fast as the period shortens:
+    2.41 km/s on a 6-hour ellipse, where the same turn costs 4.27 km/s and
+    destroys the split it was meant to enable.
+
+    Args:
+        period_days: Parking-orbit period (days).
+        cant_deg: Angle the periapsis velocity must be rotated through (deg).
+        altitude: Periapsis altitude above the surface (km).
+
+    Returns:
+        The re-aim delta-v (km/s).
+    """
+    r_p = float(Earth.R.to_value(u.km)) + altitude
+    seconds = period_days * 86400.0
+    semi_major = float(np.cbrt(_MU_EARTH * seconds * seconds / (4.0 * np.pi**2)))
+    v_p = parking_orbit_periapsis_speed(period_days, altitude)
+    r_a = 2.0 * semi_major - r_p
+    v_apo = r_p * v_p / r_a
+    return 2.0 * v_apo * float(np.sin(0.5 * np.radians(cant_deg)))
+
+
+@dataclass(frozen=True)
+class SplitPushLedger:
+    """Growth when the payload is pushed from the pad, not from a free parking orbit.
+
+    The correction ADR 0020's first two versions needed.  ``cycle_growth_ledger``
+    starts the departure burn at ``v_depart_from`` = 11.0086 km/s -- already at
+    Earth escape -- while the **launch ledger** in the same module assumes the
+    payload arrives on a 4.09 km/s ballistic lob, about 3.6 km/s at the burn
+    point.  Nothing charged the ~7.4 km/s between them.
+
+    Charging it changes the *architecture*, not just the number, because the two
+    halves want opposite geometries:
+
+    * The **overtaking push** from the lob to a parking orbit runs at
+      ``theta`` = 0, where the impactor's own momentum *adds*:
+      ``beta = 1 + sqrt(eta(1+k))`` = 3.387 at ``k`` = 8.5.
+    * The **departure push** must leave along the aim the **synodic closure**
+      demands, which the stream does not point at, so it runs canted --
+      ``beta`` = 1.67 at this cycle's 124.8 degrees.
+
+    A single push must fly the whole thing in the canted geometry.  Splitting it
+    buys the cheap geometry for the larger half, and pays for the re-aim at
+    apoapsis where velocity is small.
+
+    Attributes:
+        label: Which cycle this is.
+        cant_deg: Angle from the thrust axis to the stream at the departure burn.
+        stream_speed: Earth-relative collision speed of the returning stream (km/s).
+        lob_speed: Speed the payload carries at the burn point off the lob (km/s).
+        departure_speed: Speed the departure needs at 200 km (km/s).
+        parking_period_days: Period of the ellipse between the two pushes.
+        parking_periapsis_speed: Its periapsis speed (km/s).
+        reaim_delta_v: Apoapsis rotation the split costs (km/s).
+        reaim_fraction: Mass surviving that rotation, flown on methalox because
+            there is no stream at apoapsis.
+        overtaking_fraction: Mass fraction surviving the first push.
+        departure_fraction: Mass fraction surviving the second.
+        single_push_fraction: Mass fraction if one canted push does it all.
+        node_survival: Mass fraction surviving the solar-periapsis collision.
+        split_growth: Kilograms returned per impactor kilogram, split.
+        single_growth: The same for one canted push.
+        free_parking_growth: The same when the parking orbit is not charged --
+            what ADR 0019 and ADR 0020's first version reported.
+        cycle_years: Departure-to-return time (yr).
+    """
+
+    label: str
+    cant_deg: float
+    stream_speed: float
+    lob_speed: float
+    departure_speed: float
+    parking_period_days: float
+    parking_periapsis_speed: float
+    reaim_delta_v: float
+    reaim_fraction: float
+    overtaking_fraction: float
+    departure_fraction: float
+    single_push_fraction: float
+    node_survival: float
+    split_growth: float
+    single_growth: float
+    free_parking_growth: float
+    cycle_years: float
+
+    def _doubling(self, growth: float) -> float:
+        """Doubling time for a per-cycle multiplier (yr); inf when it does not grow."""
+        return (
+            float(self.cycle_years * np.log(2.0) / np.log(growth))
+            if growth > 1.0
+            else float("inf")
+        )
+
+    @property
+    def split_doubling_years(self) -> float:
+        """Doubling time on the split push (yr)."""
+        return self._doubling(self.split_growth)
+
+    @property
+    def single_doubling_years(self) -> float:
+        """Doubling time on one canted push (yr)."""
+        return self._doubling(self.single_growth)
+
+    @property
+    def free_parking_doubling_years(self) -> float:
+        """Doubling time with the parking orbit uncharged (yr)."""
+        return self._doubling(self.free_parking_growth)
+
+    @property
+    def split_advantage(self) -> float:
+        """How much the split beats a single canted push."""
+        return self.split_growth / self.single_growth
+
+
+def split_push_ledger(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    return_excess: float = CONSERVATIVE_RETURN_EXCESS,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    node_survival: Optional[float] = None,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    label: Optional[str] = None,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[SplitPushLedger]:
+    """Score a cycle with the departure charged from the pad, split into two pushes.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        slug_ratio: Departure slug ratio, used on both pushes.
+        node_survival: Mass fraction surviving the solar-periapsis collision;
+            defaults to ``PROPOSED_NODE_SURVIVAL`` at a reference depth, or the
+            impulse-law derivation otherwise.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        label: Name for the row; derived from the inputs when omitted.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`SplitPushLedger`, or None when no closure exists or a leg
+        delivers nothing.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    closure = solve_synodic_closure(3, p, dive_solar_radii, return_excess, 1.0)
+    if closure is None:
+        return None
+    node = dive_node(
+        dive_solar_radii,
+        closure.periapsis_boost,
+        DEFAULT_PERIAPSIS_SLUG_RATIO,
+        jet_energy_efficiency,
+        p,
+    )
+    survival = (
+        node_survival
+        if node_survival is not None
+        else PROPOSED_NODE_SURVIVAL.get(dive_solar_radii, node.survival)
+    )
+    # The departure-hyperbola mirror puts the thrust axis off the outgoing aim;
+    # the cant is measured from that axis to the stream (CONTEXT.md, and the
+    # correction in ADR 0019's addendum -- the SOI aim separation is the wrong
+    # angle to feed the impulse law).
+    mirror = float(
+        np.degrees(
+            half_turn_angle(
+                hyperbolic_eccentricity(
+                    _MU_EARTH, _BURN_RADIUS, closure.departure_excess
+                )
+            )
+        )
+    )
+    cant = abs(closure.push_axis_deg - (closure.departure_aim_deg + mirror))
+    stream = closure.earth_closing_speed
+    lob = lob_arrival_speed()
+    v_end = closure.departure_speed_200km
+    v_park = parking_orbit_periapsis_speed(parking_period_days)
+    if not lob < v_park < v_end:
+        return None
+    reaim = apoapsis_reaim_cost(parking_period_days, cant)
+    reaim_fraction = float(np.exp(-reaim / p.exhaust_speed))
+    f1 = _burn_leg(lob, v_park, 0.0, stream, slug_ratio, jet_energy_efficiency)
+    f2 = _burn_leg(v_park, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
+    f_one = _burn_leg(lob, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
+    if min(f1, f2, f_one) <= 0.0 or max(f1, f2, f_one) >= 1.0:
+        return None
+    # Impactors consumed per kilogram placed on the Jupiter trajectory: the
+    # departure leg's own, plus the overtaking leg's, scaled up because that
+    # mass still has to survive the re-aim and the departure.
+    impactors = (1.0 / f2 - 1.0) / slug_ratio + (1.0 / (f2 * reaim_fraction)) * (
+        1.0 / f1 - 1.0
+    ) / slug_ratio
+    return SplitPushLedger(
+        label=label
+        or f"{dive_solar_radii:g} R_sun / k {slug_ratio:g} / {parking_period_days:g} d",
+        cant_deg=cant,
+        stream_speed=stream,
+        lob_speed=lob,
+        departure_speed=v_end,
+        parking_period_days=parking_period_days,
+        parking_periapsis_speed=v_park,
+        reaim_delta_v=reaim,
+        reaim_fraction=reaim_fraction,
+        overtaking_fraction=f1,
+        departure_fraction=f2,
+        single_push_fraction=f_one,
+        node_survival=survival,
+        split_growth=survival / impactors,
+        single_growth=survival * f_one * slug_ratio / (1.0 - f_one),
+        free_parking_growth=survival * f2 * slug_ratio / (1.0 - f2),
+        cycle_years=closure.total_tof_years,
+    )
+
+
+def split_push_period_sweep(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    return_excess: float = CONSERVATIVE_RETURN_EXCESS,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    periods: Sequence[float] = PARKING_PERIOD_GRID,
+    params: Optional[_FlybyParams] = None,
+) -> List[SplitPushLedger]:
+    """Sweep the parking-orbit period, which is what the split trades against.
+
+    Short periods keep the two waves close together -- Earth advances only 0.25
+    degrees over a 6-hour coast -- but make the apoapsis re-aim ruinous.  Long
+    periods make the re-aim nearly free and the phasing demanding.  The growth
+    saturates well before the phasing becomes awkward.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        slug_ratio: Departure slug ratio.
+        periods: Parking-orbit periods to sweep (days).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        One :class:`SplitPushLedger` per period that closes.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    out = [
+        split_push_ledger(
+            dive_solar_radii,
+            return_excess,
+            slug_ratio,
+            parking_period_days=float(period),
+            params=p,
+        )
+        for period in periods
+    ]
+    return [row for row in out if row is not None]
