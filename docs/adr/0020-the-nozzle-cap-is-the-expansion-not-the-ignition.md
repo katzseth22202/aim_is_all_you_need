@@ -1,6 +1,6 @@
 # A shallower solar dive costs 2.2x the clock, and the nozzle cap is the expansion not the ignition
 
-Status: accepted
+Status: accepted, with the pad-ledger figures superseded by ADR 0021
 
 Date: 2026-08-31
 
@@ -328,6 +328,12 @@ the floor, which is the same mistake as `k` = 23.75 in a milder form.
 | launch ledger vs 1/15 | 1.36x | 1.02x |
 | limited by | expansion | expansion |
 
+> **Superseded by ADR 0021.** This table's pad constraint used the free-parking
+> launch ledger, and both its rows are past the caps once the lob is charged.
+> Charged from the pad the fastest admissible deep cycle is `k` = 30.40 at a
+> 150 km/s climb-out, doubling in **0.684 yr**; at 32 solar radii there is no
+> admissible row at all. The paragraph below is kept as written.
+
 **Both are expansion-limited, both clear the pad, and the trade is 11.9x the
 growth for 2.18x the clock.** That is the number this ADR exists to produce: a
 64x cooler node, an 8.2x gentler collision and 2.9x looser rendezvous timing cost
@@ -510,6 +516,16 @@ derivation (0.5977 at 4 solar radii, 0.3537 at 32):
 because the shallow cycle is hurt twice over: it has more of the burn to fly
 (13.06 km/s against 11.64, since its departure is hotter) and it flies it at a
 worse angle.
+
+### The launch ledger is still owed a re-run
+
+Everything above scores the pad ledger with `cycle_growth_ledger`, so the whole
+of it -- the `k` = 5.25 ceiling, the 2.10x at 4 solar radii, the 0.96x at 32 --
+is the free-parking reading and moves with this addendum. **ADR 0021 runs it**,
+and the verdict changes rather than the digits: charging the lob costs about a
+third of the pad return at both depths, which the deep cycle survives at 1.043x
+and the shallow one does not at 0.618x, failing at *every* slug ratio and under
+the speed-rescaled floor too.
 
 ### Why 4 solar radii keeps winning, now in three independent ways
 

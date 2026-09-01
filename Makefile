@@ -64,7 +64,7 @@ resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered
 jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S works, 2S does not (ADR 0019)
 	python -m src.jovian_solar_dive_cycle
 
-dive-depth:  ## Price a shallower solar dive against the 4 Rsun cycle (ADR 0020; add --optimum for the constrained search)
+dive-depth:  ## Price a shallower solar dive against the 4 Rsun cycle, launch ledger charged from the pad (ADR 0020/0021; --optimum and --pad-frontier add the searches)
 	python -m src.solar_dive_depth_trade
 
 export-env:  ## Export the current conda environment to environment.yml

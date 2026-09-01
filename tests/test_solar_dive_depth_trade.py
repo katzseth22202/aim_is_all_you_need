@@ -6,7 +6,14 @@ around digits: the dive node priced from the impulse law agrees with ADR 0019's
 different device), backing the dive out is monotone in every ledger, and the
 cap that binds the departure slug ratio is the launch ledger rather than the
 plume ignition window.  Pinned numbers are the ones ADR 0020 quotes.
+
+The last section tests ADR 0021, which re-scores the **launch ledger** on the
+**split push**.  Where the two disagree the pad-charged figure is the current
+one; the free-parking numbers earlier in this file are pinned as the superseded
+reading, marked as such, so the size of the correction stays checkable.
 """
+
+from typing import List
 
 import numpy as np
 import pytest
@@ -19,6 +26,7 @@ from src.jovian_solar_dive_cycle import (
     DEFAULT_PERIAPSIS_SURVIVAL,
     DEFAULT_RETURN_EXCESS,
     DEFAULT_SLUG_RATIO,
+    SynodicCycleClosure,
     solve_synodic_closure,
 )
 from src.plume_thermal import chemistry_efficiency, slug_ratio_window
@@ -248,6 +256,12 @@ def test_the_plasma_cap_is_nowhere_near_binding(
 def test_the_launch_ledger_is_the_binding_cap_when_shallow(
     shallow: trade.DepthTradeRow,
 ) -> None:
+    # SUPERSEDED READING, pinned so the correction stays visible. These are the
+    # free-parking-orbit numbers: slug_ratio_ceilings() reads both caps off
+    # cycle_growth_ledger, which starts the departure at Earth escape and never
+    # charges the lob. Charged from the pad the shallow cycle clears the floor
+    # at *no* slug ratio, so the 5.25 ceiling below is not the cap it looked
+    # like -- see test_the_shallow_cycle_fails_the_pad_floor_at_every_slug_ratio.
     ceilings = shallow.ceilings
     assert ceilings.binding == "launch"
     assert ceilings.launch_ceiling is not None
@@ -264,7 +278,8 @@ def test_the_deep_cycle_has_launch_margin_the_shallow_one_spent(
     deep: trade.DepthTradeRow, shallow: trade.DepthTradeRow
 ) -> None:
     # The deep cycle is capped by the expansion floor, never by the pad; the
-    # shallow one runs out of launch margin first.
+    # shallow one runs out of launch margin first. Free-parking reading again --
+    # the ordering survives the correction, the margins do not.
     assert deep.ceilings.binding == "expansion"
     assert deep.ceilings.launch_ceiling is None
     assert deep.ceilings.launch_peak_margin > 2.0
@@ -286,7 +301,9 @@ def test_growth_rises_with_slug_ratio_while_pad_return_falls(
     shallow: trade.DepthTradeRow,
 ) -> None:
     # The opposition that makes the launch ledger a real cap: impactors are the
-    # scarce input in one ledger and launched slug is scarce in the other.
+    # scarce input in one ledger and launched slug is scarce in the other. It
+    # survives the pad correction unchanged -- see
+    # test_growth_and_pad_return_still_pull_opposite_ways_after_the_correction.
     entries = trade.slug_ratio_table(shallow, params=_PARAMS)
     growth = [g.return_per_impactor_kg for _, g, _ in entries]
     pad = [v.returned_per_pad_kg for _, _, v in entries]
@@ -708,3 +725,412 @@ def test_the_split_saturates_long_before_the_phasing_gets_awkward() -> None:
     short = trade.split_push_ledger(parking_period_days=0.125, node_survival=1.0 / 3.0)
     assert short is not None
     assert short.split_growth < short.single_growth
+
+
+# --------------------------------------------------------------------------
+# The launch ledger re-scored: what the cycle returns per kilogram off the pad
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def deep_closure() -> SynodicCycleClosure:
+    """The 4 solar-radii closure, solved once for the pad-ledger tests."""
+    closure = solve_synodic_closure(3, _PARAMS, 4.0, 150.0, 1.0)
+    assert closure is not None
+    return closure
+
+
+@pytest.fixture(scope="module")
+def shallow_closure() -> SynodicCycleClosure:
+    """The 32 solar-radii closure, solved once for the pad-ledger tests."""
+    closure = solve_synodic_closure(3, _PARAMS, 32.0, 75.0, 1.0)
+    assert closure is not None
+    return closure
+
+
+def _pad(depth: float, excess: float, k: float, survival: float) -> float:
+    """Kilograms returned per pad kilogram on the split push at one point."""
+    row = trade.split_push_ledger(depth, excess, k, node_survival=survival)
+    assert row is not None
+    return trade.split_push_launch_ledger(row, _PARAMS).returned_per_pad_kg
+
+
+def test_the_two_ledgers_now_start_the_payload_in_the_same_place() -> None:
+    # The whole content of the correction. PAYLOAD_FRACTION_AT_INTERCEPT is what
+    # a 4.09 km/s lob delivers to the intercept point; lob_arrival_speed() is the
+    # speed it delivers it at. The free-parking ledger charged the first and
+    # ignored the second, which is how 7.4 km/s went unpaid.
+    assert trade.PAYLOAD_FRACTION_AT_INTERCEPT == pytest.approx(0.25)
+    assert trade.LOB_DELTA_V == pytest.approx(4.09, abs=1e-9)
+    from src.two_leg_nozzle_sweep import LAUNCH_PROPELLANT_FRACTION
+
+    # 2/3 of liftoff as propellant at 380 s *is* the 4.09 km/s lob, so the two
+    # constants are one assumption and cannot drift apart.
+    implied = -_PARAMS.exhaust_speed * np.log(1.0 - LAUNCH_PROPELLANT_FRACTION)
+    assert implied == pytest.approx(trade.LOB_DELTA_V, abs=0.01)
+
+
+def test_charging_the_lob_costs_about_a_third_of_the_pad_return() -> None:
+    # The paper's own estimate of the size of this correction, checked: "charging
+    # it changes the mass that survives to departure by about a third".
+    for depth, excess, k, survival in (
+        (4.0, 150.0, 30.0, 0.5),
+        (32.0, 75.0, 8.5, 1.0 / 3.0),
+    ):
+        row = trade.split_push_ledger(depth, excess, k, node_survival=survival)
+        assert row is not None
+        launch = trade.split_push_launch_ledger(row, _PARAMS)
+        assert launch.correction_factor == pytest.approx(0.68, abs=0.02)
+        # The chain the free-parking reading set to 1 is three real charges.
+        assert launch.chain_to_departure == pytest.approx(
+            row.overtaking_fraction * row.reaim_fraction * row.departure_fraction
+        )
+        assert launch.free_parking_returned_per_pad_kg > launch.returned_per_pad_kg
+
+
+def test_the_corrected_pad_return_at_both_reference_cycles() -> None:
+    # The figures the paper says are owed. The deep cycle survives the
+    # correction by 4 percent; the shallow one does not survive it at all.
+    deep = _pad(4.0, 150.0, 30.0, 0.5)
+    assert deep == pytest.approx(0.0695, abs=2e-4)
+    assert deep / RETURN_FLOOR == pytest.approx(1.043, abs=5e-3)
+
+    shallow = _pad(32.0, 75.0, 8.5, 1.0 / 3.0)
+    assert shallow == pytest.approx(0.0412, abs=2e-4)
+    assert shallow / RETURN_FLOOR == pytest.approx(0.618, abs=5e-3)
+
+
+def test_the_shallow_cycle_loses_the_rescale_that_used_to_rescue_it() -> None:
+    # ADR 0019's argument was that the 1/15 floor was calibrated on a ~60 km/s
+    # return, so a faster one deserves a lower bar. It still holds and it is
+    # still not enough here: the rescale is worth 1.46x at 85 km/s against 2.80x
+    # at 158, and the correction is worth more than the rescale.
+    shallow = trade.split_push_ledger(32.0, 75.0, 8.5, node_survival=1.0 / 3.0)
+    deep = trade.split_push_ledger(4.0, 150.0, 30.0, node_survival=0.5)
+    assert shallow is not None and deep is not None
+    shallow_launch = trade.split_push_launch_ledger(shallow, _PARAMS)
+    deep_launch = trade.split_push_launch_ledger(deep, _PARAMS)
+
+    assert shallow_launch.return_value_ratio == pytest.approx(1.46, abs=0.02)
+    assert deep_launch.return_value_ratio == pytest.approx(2.80, abs=0.02)
+    # Before the correction the rescale carried the shallow cycle over; now it
+    # does not, which is the verdict that actually changed.
+    assert (
+        shallow_launch.free_parking_returned_per_pad_kg > shallow_launch.rescaled_floor
+    )
+    assert not shallow_launch.clears_rescaled_floor
+    assert not shallow_launch.clears_committed_floor
+    assert deep_launch.clears_committed_floor and deep_launch.clears_rescaled_floor
+
+
+def test_the_shallow_cycle_fails_the_pad_floor_at_every_slug_ratio(
+    shallow_closure: SynodicCycleClosure,
+) -> None:
+    # Not "fails at k = 8.5" -- fails everywhere, which is a different statement
+    # and the one that rules the operating point out rather than moving it.
+    ceilings = trade.split_push_pad_ceilings(
+        shallow_closure, 1.0 / 3.0, label="32 R_sun", params=_PARAMS
+    )
+    assert ceilings is not None
+    assert ceilings.launch_window is None
+    assert not ceilings.committed_floor_reachable
+    assert ceilings.peak_slug_ratio == pytest.approx(1.93, abs=0.02)
+    assert ceilings.peak_margin == pytest.approx(0.761, abs=5e-3)
+
+
+def test_the_split_push_added_a_colder_leg_than_any_the_old_ledger_saw(
+    shallow_closure: SynodicCycleClosure, shallow: trade.DepthTradeRow
+) -> None:
+    # The second thing the correction changed. At theta = 0 the vehicle's own
+    # speed subtracts from the closing speed directly, so the overtaking leg
+    # ends colder than the canted leg ever gets -- and the expansion floor was
+    # never asked of it, because in the single-push ledger it did not exist.
+    ceilings = trade.split_push_pad_ceilings(
+        shallow_closure, 1.0 / 3.0, label="32 R_sun", params=_PARAMS
+    )
+    assert ceilings is not None
+    assert ceilings.overtaking_coldest_closing == pytest.approx(74.21, abs=0.05)
+    assert ceilings.departure_coldest_closing == pytest.approx(91.71, abs=0.05)
+    assert ceilings.overtaking_coldest_closing < ceilings.departure_coldest_closing
+    # The single-push ledger's coldest instant is the canted leg's, so it reads
+    # the expansion floor off the warmer of the two.
+    assert shallow.ceilings.coldest_closing_speed > ceilings.overtaking_coldest_closing
+    # And at that colder speed no slug ratio leaves the plume conducting.
+    assert ceilings.overtaking_expansion_window is None
+    assert ceilings.departure_expansion_window is not None
+    assert ceilings.expansion_window is None
+    assert ceilings.admissible_window is None
+    assert ceilings.binding == "launch and expansion (neither admits any k)"
+
+
+def test_the_deep_cycle_is_admissible_and_its_k_sits_just_under_the_ceiling(
+    deep_closure: SynodicCycleClosure,
+) -> None:
+    ceilings = trade.split_push_pad_ceilings(
+        deep_closure, 0.5, label="4 R_sun", params=_PARAMS
+    )
+    assert ceilings is not None
+    window = ceilings.admissible_window
+    assert window is not None
+    # ADR 0019's k = 30 is inside, with about 1 percent of headroom -- so it is
+    # a defensible operating point and not a comfortable one.
+    assert window[0] < DEFAULT_SLUG_RATIO < window[1]
+    assert DEFAULT_SLUG_RATIO / window[1] > 0.98
+    # The expansion floor binds before the pad floor does, but only just: the
+    # committed floor would have allowed k up to about 35.
+    assert ceilings.binding == "expansion"
+    assert ceilings.launch_window is not None
+    assert ceilings.launch_window[1] == pytest.approx(34.97, abs=0.05)
+
+
+def test_growth_and_pad_return_still_pull_opposite_ways_after_the_correction(
+    shallow_closure: SynodicCycleClosure,
+) -> None:
+    # The opposition that makes the launch ledger a real cap survives being
+    # charged honestly: slug is free per impactor kilogram and not per pad one.
+    rows = trade.split_push_slug_ratio_table(shallow_closure, 1.0 / 3.0, params=_PARAMS)
+    assert len(rows) > 4
+    growth = [row.split_growth for _, row, _ in rows]
+    pad = [launch.returned_per_pad_kg for _, _, launch in rows]
+    assert growth == sorted(growth)
+    assert pad == sorted(pad, reverse=True)
+
+
+def test_the_pad_floor_is_lost_partway_down_the_depth_dial() -> None:
+    rows = trade.split_push_depth_table(params=_PARAMS)
+    margins = [launch.stated_margin for _, _, launch in rows]
+    assert margins == sorted(margins, reverse=True)  # monotone in depth
+    assert margins[0] > 1.0 and margins[-1] < 1.0
+    crossing = trade.pad_floor_depth(params=_PARAMS)
+    assert crossing is not None
+    assert crossing == pytest.approx(21.09, abs=0.05)
+    # The reference shallow cycle sits well past it, and the deep one well short.
+    assert 4.0 < crossing < 32.0
+
+
+@pytest.mark.slow
+def test_no_climb_out_rescues_the_shallow_cycle() -> None:
+    # The squeeze, and the reason the verdict is "ruled out" rather than
+    # "mis-tuned": the pad ledger wants a cheap node boost and the expansion
+    # floor wants the hot closing speed a big one buys. At 32 solar radii the
+    # two never overlap on a point that pays.
+    rows = trade.pad_return_frontier(32.0, params=_PARAMS)
+    assert rows, "no closure anywhere on the frontier grid"
+    assert not any(row.clears_committed_floor for row in rows)
+    admissible = [row for row in rows if row.expansion_window is not None]
+    assert admissible, "the expansion floor should admit something somewhere"
+    best = max(row.best_margin or 0.0 for row in admissible)
+    assert best == pytest.approx(0.625, abs=5e-3)
+    # Everything below an 85 km/s climb-out is barred by the overtaking leg, and
+    # those are exactly the rows whose pad return would have been good enough.
+    barred = [row for row in rows if row.expansion_window is None]
+    assert barred and max(row.return_excess for row in barred) < 85.0
+
+
+@pytest.mark.slow
+def test_every_admissible_point_at_four_solar_radii_pays_for_its_launch() -> None:
+    rows = [
+        row
+        for row in trade.pad_return_frontier(4.0, params=_PARAMS)
+        if row.expansion_window is not None
+    ]
+    assert rows
+    assert all(row.clears_committed_floor for row in rows)
+    assert min(row.best_margin or 0.0 for row in rows) > 1.2
+
+
+def test_the_paper_dive_carries_the_same_defect_and_the_ranking_survives_it(
+    deep_closure: SynodicCycleClosure,
+) -> None:
+    # The comparison row was scored the same way and had to be re-derived before
+    # either figure could be quoted. Charged from the pad it doubles in 0.377 yr
+    # rather than 0.305 -- it has 35.5 km/s to fly from the lob, far more than
+    # either Jovian cycle -- and it still fails the committed floor, as it did
+    # before. So the correction moves both figures and reverses nothing.
+    paper = trade.paper_resonant_dive_split_push(
+        deep_closure.return_excess,
+        deep_closure.push_axis_deg,
+        slug_ratio=DEFAULT_SLUG_RATIO,
+        params=_PARAMS,
+    )
+    assert paper is not None
+    assert paper.departure_speed - paper.lob_speed == pytest.approx(35.51, abs=0.05)
+    assert paper.split_doubling_years == pytest.approx(0.377, abs=2e-3)
+
+    launch = trade.split_push_launch_ledger(paper, _PARAMS)
+    assert launch.stated_margin == pytest.approx(0.486, abs=5e-3)
+    assert not launch.clears_committed_floor
+
+    jovian = trade.split_push_ledger(4.0, 150.0, DEFAULT_SLUG_RATIO, node_survival=0.6)
+    assert jovian is not None
+    # Unchanged for the sixth time: the paper's dive grows faster, the Jovian
+    # cycle is the one that pays for its launch.
+    assert paper.split_doubling_years < jovian.split_doubling_years
+    assert trade.split_push_launch_ledger(jovian, _PARAMS).clears_committed_floor
+
+
+def test_the_mirror_sign_is_chosen_not_assumed(
+    shallow_closure: SynodicCycleClosure,
+) -> None:
+    # split_push_from_state flies both departure-hyperbola mirror signs and keeps
+    # the better, exactly as departure_nozzle_ledger does. On both Jovian cycles
+    # the plus sign wins, so the published numbers are unchanged by the choice --
+    # but the paper's resonant dive aims somewhere else entirely and needs it.
+    row = trade.split_push_from_state(
+        "probe",
+        shallow_closure.departure_excess,
+        shallow_closure.departure_aim_deg,
+        shallow_closure.total_tof_years,
+        shallow_closure.return_excess,
+        shallow_closure.push_axis_deg,
+        1.0 / 3.0,
+        8.5,
+        params=_PARAMS,
+    )
+    assert row is not None
+    assert row.cant_deg == pytest.approx(124.84, abs=0.02)  # the plus-sign cant
+
+
+@pytest.mark.slow
+def test_the_fastest_admissible_deep_cycle_is_expansion_limited_not_pad_limited() -> (
+    None
+):
+    # The corrected replacement for ADR 0020's constrained-optimum row. Growth
+    # per impactor kilogram rises with k throughout, so the fastest cycle sits on
+    # whichever cap arrives first -- and at 4 solar radii that is still the
+    # expansion floor, with the pad floor a comfortable 1.24x behind it.
+    rows = [
+        row
+        for row in trade.pad_return_frontier(4.0, params=_PARAMS)
+        if row.growth_doubling_years is not None
+    ]
+    assert rows
+    fastest = min(rows, key=lambda row: row.growth_doubling_years or float("inf"))
+    assert fastest.return_excess == pytest.approx(150.0)
+    assert fastest.growth_slug_ratio == pytest.approx(30.40, abs=0.05)
+    assert fastest.growth_doubling_years == pytest.approx(0.684, abs=3e-3)
+    assert fastest.growth_margin == pytest.approx(1.24, abs=0.02)
+    # Above 150 km/s the pad floor takes over as the binding cap, which is what
+    # a margin pinned at exactly 1.0 means.
+    pad_limited = [row for row in rows if row.return_excess > 150.0]
+    assert pad_limited
+    assert all(
+        (row.growth_margin or 0.0) == pytest.approx(1.0, abs=1e-3)
+        for row in pad_limited
+    )
+
+
+@pytest.mark.slow
+def test_the_overtaking_leg_puts_a_floor_under_the_climb_out_at_every_depth() -> None:
+    # New with the split push and it applies to both depths: below a threshold
+    # closing speed the overtaking leg's plume stops conducting, so the
+    # cheap-boost end of the dial -- exactly where the pad ledger wanted to go --
+    # is unavailable whatever the depth.
+    #
+    # Asserted against the threshold rather than against a climb-out value,
+    # because which grid points fall either side of it is a property of
+    # PAD_FRONTIER_EXCESS_GRID and not of the physics.
+    threshold = trade.conduction_threshold_closing_speed(
+        0.60, trade.DEFAULT_EXPANSION_MARGIN
+    )
+    assert threshold is not None
+    for depth in (4.0, 32.0):
+        rows = trade.pad_return_frontier(depth, params=_PARAMS)
+        barred = [row for row in rows if row.expansion_window is None]
+        allowed = [row for row in rows if row.expansion_window is not None]
+        assert barred and allowed
+        # It is the overtaking leg that decides, and it decides on its coldest
+        # instant against the threshold -- nothing else.
+        assert all(row.overtaking_coldest_closing < threshold for row in barred)
+        assert all(row.overtaking_coldest_closing >= threshold for row in allowed)
+        # So the barred set is a prefix of the climb-out grid, not a scatter.
+        assert max(row.return_excess for row in barred) < min(
+            row.return_excess for row in allowed
+        )
+
+
+# --------------------------------------------------------------------------
+# Does the pad verdict survive every reading of the plume physics?
+# --------------------------------------------------------------------------
+
+
+def test_the_reserve_moves_the_climb_out_floor_not_the_pad_return() -> None:
+    # The coupling, isolated. The conduction reserve is a plume-thermodynamics
+    # quantity and the pad return is a mass quantity, so the reserve cannot
+    # change what a given k returns. What it changes is which k -- and therefore
+    # which climb-out -- is admissible at all.
+    row = trade.split_push_ledger(32.0, 75.0, 8.5, node_survival=1.0 / 3.0)
+    assert row is not None
+    before = trade.split_push_launch_ledger(row, _PARAMS).returned_per_pad_kg
+    # Nothing in split_push_ledger takes a reserve, which is the point: the two
+    # only meet through which slug ratios the expansion floor admits.
+    for reserve in (84.41, 65.85, 53.47):
+        window = trade.expansion_limited_slug_ratio_window(
+            row.overtaking_coldest_closing, 0.60, 1.5, reserve
+        )
+        assert window is None or window[0] < window[1]
+    assert trade.split_push_launch_ledger(row, _PARAMS).returned_per_pad_kg == before
+
+
+def test_a_looser_reserve_lets_the_plume_survive_a_colder_burn() -> None:
+    # Monotone, and it is the whole mechanism: reserving less leaves the plume
+    # conducting further down, so a slower closing speed becomes flyable.
+    thresholds = [
+        trade.conduction_threshold_closing_speed(0.60, 1.5, reserve)
+        for _, reserve in trade.CONDUCTION_RESERVE_BRACKET
+    ]
+    assert all(t is not None for t in thresholds)
+    assert thresholds == sorted(thresholds, reverse=True)
+    assert thresholds[0] == pytest.approx(79.56, abs=0.05)  # 15000 K, all reserved
+    assert thresholds[-1] == pytest.approx(63.33, abs=0.05)  # frozen chemistry only
+    # Dropping the margin to 1.0 moves it further than crossing the bracket does.
+    assert trade.conduction_threshold_closing_speed(
+        0.60, 1.0, trade.CONDUCTION_RESERVE_BRACKET[0][1]
+    ) == pytest.approx(64.96, abs=0.05)
+
+
+@pytest.fixture(scope="module")
+def shallow_bracket() -> List[trade.ConductionBracketRow]:
+    """The 32 solar-radii conduction sweep, run once for both claims about it.
+
+    Six frontier scans, so it is the most expensive fixture in the file; the two
+    halves of the verdict -- robust at 1.5x, not robust at unit margin -- read
+    off the same rows rather than paying for them twice.
+    """
+    return trade.conduction_bracket_frontier(32.0, params=_PARAMS)
+
+
+@pytest.mark.slow
+def test_the_shallow_failure_is_robust_at_the_operating_margin(
+    shallow_bracket: List[trade.ConductionBracketRow],
+) -> None:
+    # The claim that matters: at ADR 0020's 1.5x margin the shallow cycle fails
+    # at every reading of the conduction reserve, so the verdict does not rest
+    # on where in that bracket the truth sits.
+    rows = [row for row in shallow_bracket if row.expansion_margin == 1.5]
+    assert len(rows) == len(trade.CONDUCTION_RESERVE_BRACKET)
+    assert not any(row.clears_committed_floor for row in rows)
+    # The hard end gets close, which is worth pinning rather than rounding away.
+    assert max(row.best_margin or 0.0 for row in rows) == pytest.approx(0.979, abs=0.01)
+
+
+@pytest.mark.slow
+def test_but_it_does_not_survive_unit_margin_plus_a_cooler_outlet(
+    shallow_bracket: List[trade.ConductionBracketRow],
+) -> None:
+    # The honest limit of the verdict, and the reason the margin is load-bearing
+    # rather than decorative. At unit margin -- sitting exactly on the expansion
+    # boundary, which is what ADR 0020 introduced the margin to prevent -- a
+    # 6000 K outlet or looser does let the shallow cycle pay.
+    rows = {(row.reserve_label, row.expansion_margin): row for row in shallow_bracket}
+    assert not rows[("15000 K, all reserved", 1.0)].clears_committed_floor
+    for label in ("6000 K", "frozen chemistry only"):
+        winner = rows[(label, 1.0)]
+        assert winner.clears_committed_floor
+        # It pays by moving to a much cooler climb-out than the reference 75.
+        assert winner.best_return_excess is not None
+        assert winner.best_return_excess <= 55.0
+        # And what it buys is slower than the cycle the paper already has: the
+        # Jupiter-only chain doubles in 1.74 yr.
+        assert winner.best_doubling_years is not None
+        assert winner.best_doubling_years > 1.74

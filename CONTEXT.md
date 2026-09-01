@@ -417,7 +417,10 @@ dependence in the impulse and would therefore always pick the heaviest species.
 Kilograms returning from Jupiter per kilogram off the pad: 2/3 of liftoff is
 ground-rocket propellant (exactly a 4.09 km/s lob at 380 s), a quarter of the
 remainder is launcher dry mass, so 1/4 reaches the intercept point, and
-`0.25 * r * d1 / [(1+sigma1)(1+sigma2)]` must clear 1/15. Both legs' slug is
+`0.25 * r * d1 / [(1+sigma1)(1+sigma2)]` must clear 1/15. On the solar-dive
+cycles the same ledger reads `0.25 * chain_to_departure * node_survival`, and
+**that chain is what the free-parking reading set to 1** — see **pad-charged
+launch ledger**. Both legs' slug is
 lofted from Earth, so the two nozzles **compete for the same launched
 kilograms** — at poor `e2` the departure burn takes the whole budget and `k1`
 collapses onto the ignition window's lower root. This is the binding constraint
@@ -724,7 +727,9 @@ orbit, an **apoapsis reversal** to re-aim, then the short canted departure leg
 (`beta` = 1.67). Reference numbers, node survival 1/2 and 1/3: **4 R☉ 23.0x per cycle,
 doubling 0.724 yr, millionfold 14.4 yr; 32 R☉ 3.49x, 1.816 yr, 36.2 yr.**
 _Avoid_: quoting the free-parking-orbit figures (0.513 / 1.094 yr — both wrong for the
-same reason); assuming one canted push is equivalent (it costs 1.4x the growth at 32 R☉).
+same reason); assuming one canted push is equivalent (it costs 1.4x the growth at 32 R☉);
+scoring the **launch ledger** without it (see **pad-charged launch ledger** — that is
+what ADR 0021 fixes, and it retires the shallow cycle).
 
 **Parking-orbit period trade**:
 What the **split push** actually trades. The apoapsis re-aim costs `2 v_apo sin(cant/2)`,
@@ -735,6 +740,72 @@ offers while Earth advances only 4.93°. Below ~0.5 days the re-aim eats the who
 advantage and one push is better. `DEFAULT_PARKING_PERIOD_DAYS` = 5.
 _Avoid_: rejecting the split on phasing grounds by anchoring on the 20-day
 `PUFFSAT_CYCLE_ORBIT_PERIOD` default — the coast can be far shorter at little cost.
+
+**Pad-charged launch ledger**:
+The **launch ledger** run on the **split push** rather than on a free parking orbit
+(`split_push_launch_ledger()`, ADR 0021). The two ledgers now start the payload in the
+same place: `PAYLOAD_FRACTION_AT_INTERCEPT` = 1/4 is what a 4.09 km/s lob delivers and
+`lob_arrival_speed()` = 3.596 km/s is the speed it delivers it at. Charging the lob
+costs **32.0%** of the pad return at 4 R☉ and **31.3%** at 32 — the paper's own "about
+a third". Result: **4 R☉ `k` = 30 returns 0.0695 per pad kg, 1.043x the committed 1/15;
+32 R☉ `k` = 8.5 returns 0.0412, 0.618x, and fails at every `k`** (peak 0.761x at
+`k` = 1.93) **and under the speed-rescaled floor too** (0.904x), because the rescale is
+worth 1.46x at an 85 km/s return where it was worth 2.80x at 158. The committed floor is
+lost at **21.09 R☉** on the depth dial (`pad_floor_depth()`).
+Sensitivity: at the 1.5x margin and the conservative reserve, passing 32 R☉ at an
+*admissible* point needs the floor moved from 1/15 to **1/24**, and the cycle that then
+passes doubles in **3.993 yr** — losing to the Jupiter-only chain's 1.74. The verdict does
+not rest on the floor's exact value. The deep cycle's 4% at `k` = 30 does, but it has
+somewhere to go: the same cycle returns **1/11.3** at `k` = 8.5, for 0.835 yr instead of
+0.724. For the plume-physics sensitivity see **conduction bracket sweep**.
+_Avoid_: quoting `slug_ratio_ceilings()`'s launch numbers or ADR 0020's constrained
+optima (both free-parking, kept as the superseded reading and labelled as such in
+`make dive-depth`); reading "fails at `k` = 8.5" as "needs a different `k`"; treating the
+1/15 as the thing that rules 32 R☉ out — the **overtaking-leg conduction floor** rules it
+out independently, and relaxing either constraint alone leaves the other biting.
+
+**Overtaking-leg conduction floor**:
+The **split push**'s first leg runs at `theta` = 0, so the vehicle's own speed subtracts
+from the closing speed directly and the leg **ends colder than the canted leg ever gets**
+— 74.21 km/s against 91.71 at 32 R☉, 146.96 against 158.18 at 4. The single-push ledger
+had no such leg, so the **expansion floor** was never asked of it. At 74.21 km/s it
+admits **no slug ratio at all** at the 1.5x margin. This puts a floor under the *climb-out
+excess* at every depth — below about 85 km/s the overtaking plume stops conducting — and
+it is the second, independent reason the shallow cycle has no operating point. The
+threshold is **79.56 km/s** of coldest closing speed at `eta_jet^2` = 0.60 and a 1.5x
+margin (64.96 at unit margin), and it bars a 75 km/s climb-out at *both* depths.
+_Avoid_: reading the coldest instant off the departure leg (that is
+`slug_ratio_ceilings()`'s reading and it is the warmer of the two).
+
+**Conduction bracket sweep**:
+Whether the pad verdict survives every reading of the plume physics
+(`conduction_bracket_frontier()`, ADR 0021). **The coupling is indirect and that is why
+it was nearly missed**: the **conduction reserve** cannot change the pad return at any
+`k` — that is a mass quantity, this is plume thermodynamics — but it sets the coldest
+closing speed at which anything conducts, hence the lowest climb-out flyable, and the pad
+return is won at low climb-out. At 32 R☉, **at the 1.5x operating margin every reading
+fails** (0.625 / 0.794 / 0.979x for 15,000 K / 6,000 K / frozen). At **unit margin** the
+15,000 K reading still fails at 0.966x but 6,000 K clears at **1.159x** (55 km/s
+climb-out, `k` = 3.41) and frozen at **1.291x** (50 km/s, `k` = 2.86) — and both double in
+**1.92–1.98 yr**, losing to the Jupiter-only chain's 1.74. At 4 R☉ all six cells clear
+(2.42–2.59x, doubling 0.953–1.057), so the same uncertainty is decisive at 32 and
+irrelevant at 4.
+_Avoid_: arguing the reserve cannot matter because it does not enter the ledger (it
+enters through which climb-out is admissible — an earlier ADR 0021 draft made exactly
+this error); quoting the unit-margin rows as a rescue without their doubling times, or
+without saying that unit margin is the boundary the margin exists to keep off.
+
+**Pad frontier**:
+The scan that turns "fails at the reference point" into "ruled out"
+(`pad_return_frontier()`). The dive depth is fixed by the objection that motivated it but
+the climb-out excess is free, and the two caps pull opposite ways on it: a smaller node
+boost spends less propellant and raises the pad return, while the **expansion floor**
+needs the closing speed a big boost buys. **At 32 R☉ every admissible point fails the pad
+floor (best 0.63x at an 85 km/s climb-out) and every point that would have paid is
+inadmissible** — 40 km/s returns 1.13x the floor and doubles in 1.363 yr, but its
+overtaking leg closes at 47 km/s. At 4 R☉ every admissible point clears, 1.25x to 2.42x,
+and the fastest is `k` = 30.40 at 150 km/s, **doubling 0.684 yr**.
+_Avoid_: reading the gap as a tuning problem — it is the whole width of the grid.
 
 **Conduction reserve**:
 The merge energy the jet may not spend if the plume is to still conduct at nozzle exit
@@ -795,8 +866,13 @@ and an 8.2x gentler collision cost **2.51x the doubling time** -- 0.724 yr at
 the pad. Per-*cycle* growth falls 6.6x (23.0 to 3.49 kg per impactor kg), the number
 to avoid quoting alone: the clock is unchanged at 3.276 yr either way, so the
 logarithm absorbs most of it.
+The dial is **not free down its whole length**: past **21.09 R☉** the cycle stops
+returning the fifteenth of liftoff it committed to (**pad-charged launch ledger**), so
+below that depth what is being traded away is no longer growth rate but whether the
+architecture is worth flying at all.
 _Avoid_: quoting the per-cycle ratio as the cost; comparing rows at different slug
-ratios without saying which ceiling each sits under.
+ratios without saying which ceiling each sits under; presenting 32 R☉ as a slower
+option rather than a ruled-out one.
 
 ## Relationships
 
@@ -895,6 +971,9 @@ ratios without saying which ceiling each sits under.
   at 1/42, **both clear**, so the failure was an artefact. And the floor carries no
   clock: time-normalised it gives 0.0383 against 0.0540 kg per pad kg per year, the
   paper's dive ahead, agreeing with doubling time. The ranking is unchanged.
+  **Those digits are the free-parking ones** and ADR 0021 restates them (0.0695 at
+  1.043x, the paper's dive 0.0324 at 0.486x, 0.0212 against 0.0363 per year); every
+  conclusion in this entry survives the restatement.
 - **A monatomic slug may retire the dissociation toll, and the model cannot adjudicate.**
   Argon pays no atomisation, and one kilogram of it is 1.49e25 atoms against water's
   1.00e26, so every per-particle toll shrinks 6.7x -- dissociation, translation and
@@ -919,15 +998,25 @@ ratios without saying which ceiling each sits under.
   `recovery` (which scales `beta` whole, and is what `e1`/`e2` set) from the geometric
   factor inside the root, so the `e1` axis is not `eta_jet^2` and the mapping must be
   done first.
-- **ADR 0019's growth figures give the parking orbit away free, and so does its
-  comparison against the paper.** `cycle_growth_ledger` starts the departure burn at
-  Earth escape while the **launch ledger** in the same module assumes a 4.09 km/s lob;
-  nothing charges the ~7.4 km/s between. Charged, the 3S Jovian dive doubles in
-  **0.724 yr, not 0.513**, and returns 23.0x per cycle, not 83.35 — see **split push**.
-  The paper's own single-impulse resonant dive carries the identical defect (its 0.305 yr
-  is scored the same way), so the *ranking* is probably unaffected, but neither figure
-  should be quoted until both are re-derived on `split_push_ledger()`. Unresolved for the
-  paper's row.
+- ~~**ADR 0019's growth figures give the parking orbit away free, and so does its
+  comparison against the paper.**~~ **Resolved** by ADR 0020's addendum and ADR 0021.
+  `cycle_growth_ledger` started the departure burn at Earth escape while the **launch
+  ledger** in the same module assumed a 4.09 km/s lob, and nothing charged the ~7.4 km/s
+  between. Charged, the 3S Jovian dive doubles in **0.724 yr, not 0.513**, and returns
+  23.0x per cycle, not 83.35 (**split push**). The paper's own single-impulse resonant
+  dive carried the identical defect and is now re-derived too
+  (`paper_resonant_dive_split_push()`): **0.377 yr, not 0.305**, since it flies 35.51 km/s
+  from the lob against the Jovian cycles' 11.6 and 13.1. **Nothing reverses** — the
+  paper's dive still grows faster and still fails the committed pad floor (0.486x) while
+  the Jovian cycle clears it (1.043x). Both figures are now safe to quote.
+- **The 1/15 return floor now decides something, and its calibration was never
+  strong.** While every cycle cleared it, arguing about where it came from was
+  academic; after ADR 0021 it is the reason 32 R☉ is ruled out. It is one round
+  number set against "roughly 150 t to LEO from a ~5000 t liftoff", with the
+  speed rescale applied as a check rather than as the number. The shallow cycle
+  fails both readings (0.618x committed, 0.904x rescaled) so it does not turn on
+  which one is used — but a floor of 1/25 would pass it, and nothing here says
+  1/15 is right to within that. Unresolved, and it belongs to the paper repo.
 - **The magnetic nozzle's mass is uncharged everywhere it is flown.** ADR 0020 shows
   the shallow node handles 8.2x less specific energy (724 against 5934 MJ/kg) and the
   motivating objection was that the energy per impactor kilogram implies a heavy

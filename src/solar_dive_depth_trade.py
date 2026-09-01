@@ -55,9 +55,18 @@ The headline, against ADR 0019's reference cycle:
   which is the only one the repository had: a search given only that constraint
   picks ``k`` = 23.75, where the jet would have to carry 0.60 of a merge energy
   that can spare 0.369.
+* **Charged from the pad, 4 solar radii pays for its launch and 32 does not.**
+  The **launch ledger** was run before the departure was, so it charged 1/4 of
+  liftoff to reach the intercept point and then let the payload appear at Earth
+  escape for free.  Charging the chain between costs about a third of the pad
+  return at both depths: the deep cycle clears the committed 1/15 floor at
+  1.043x and the shallow one fails at 0.618x -- at *every* slug ratio, and under
+  the speed-rescaled floor too (:func:`split_push_launch_ledger`).
 
-ADR ``0020-the-nozzle-cap-is-the-expansion-not-the-ignition``.
-Run with ``make dive-depth``.
+ADR ``0020-the-nozzle-cap-is-the-expansion-not-the-ignition`` and
+ADR ``0021-the-shallow-dive-does-not-pay-for-its-launch``.
+Run with ``make dive-depth``; ``--pad-frontier`` adds the scan that rules the
+shallow node out rather than merely scoring it badly.
 """
 
 import argparse
@@ -72,11 +81,17 @@ from tabulate import tabulate
 
 from src.astro_constants import SOLAR_DIVE_PERIAPSIS_SOLAR_RADII
 from src.circular_resonance_impulse import impulse_per_impactor_kg
-from src.conic_kernel import half_turn_angle, hyperbolic_eccentricity
+from src.conic_kernel import (
+    half_turn_angle,
+    hyperbolic_eccentricity,
+    speed_with_escape_energy,
+)
+from src.heliocentric_reintercept import single_impulse_resonant_dive
 from src.jovian_solar_dive_cycle import (
     _BURN_RADIUS,
     _MU_EARTH,
     DEFAULT_JET_ENERGY_EFFICIENCY,
+    DEFAULT_PERIAPSIS_SURVIVAL,
     DEFAULT_RETURN_EXCESS,
     DEFAULT_SLUG_RATIO,
     CycleGrowthLedger,
@@ -88,6 +103,7 @@ from src.jovian_solar_dive_cycle import (
     departure_nozzle_ledger,
     dive_placement_excess_floor,
     launch_ledger_verdict,
+    return_value_ratio,
     solve_synodic_closure,
 )
 from src.plume_thermal import (
@@ -97,7 +113,7 @@ from src.plume_thermal import (
     specific_thermal_energy,
 )
 from src.retrograde_return_legs import _FlybyParams, _powered_flyby_params
-from src.two_leg_nozzle_sweep import RETURN_FLOOR
+from src.two_leg_nozzle_sweep import PAYLOAD_FRACTION_AT_INTERCEPT, RETURN_FLOOR
 
 # Sun's luminosity and the Stefan-Boltzmann constant, for the node's radiation
 # environment.  Imported lazily through astropy.constants so the module keeps
@@ -1664,6 +1680,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_EXPANSION_MARGIN,
         help="Thermal headroom demanded above the expansion floor by --optimum.",
     )
+    parser.add_argument(
+        "--pad-frontier",
+        action="store_true",
+        help=(
+            "Also scan the climb-out excess at each depth for a slug ratio that "
+            "both pays for its launch and leaves the plume conducting on both "
+            "legs of the split push. Off by default because it re-solves the "
+            "closure at every point on PAD_FRONTIER_EXCESS_GRID."
+        ),
+    )
     return parser
 
 
@@ -1763,7 +1789,10 @@ def main() -> None:
         print()
 
     for row in (shallow, deep):
-        print(f"Departure slug ratio on the {row.node.dive_solar_radii:g} R_sun cycle")
+        print(
+            f"Departure slug ratio on the {row.node.dive_solar_radii:g} R_sun cycle"
+            " -- FREE PARKING ORBIT, superseded by the table below it"
+        )
         print(
             slug_ratio_table_text(
                 slug_ratio_table(
@@ -1773,9 +1802,133 @@ def main() -> None:
         )
         print()
 
+    print("=" * 78)
+    print("THE LAUNCH LEDGER RE-SCORED, DEPARTURE CHARGED FROM THE PAD")
+    print("=" * 78)
+    print()
+    for row, survival in (
+        (deep, PROPOSED_NODE_SURVIVAL[SOLAR_DIVE_PERIAPSIS_SOLAR_RADII]),
+        (
+            shallow,
+            PROPOSED_NODE_SURVIVAL.get(args.dive_solar_radii, shallow.node.survival),
+        ),
+    ):
+        ledger = split_push_from_state(
+            row.label,
+            row.closure.departure_excess,
+            row.closure.departure_aim_deg,
+            row.closure.total_tof_years,
+            row.closure.return_excess,
+            row.closure.push_axis_deg,
+            survival,
+            row.growth.nozzle.slug_ratio,
+            jet_energy_efficiency=args.jet_efficiency,
+            params=params,
+        )
+        if ledger is None:
+            print(f"  {row.label}: no split push flies this cycle")
+            continue
+        print(
+            describe_split_push(
+                ledger,
+                split_push_launch_ledger(ledger, params),
+                split_push_pad_ceilings(
+                    row.closure,
+                    survival,
+                    jet_energy_efficiency=args.jet_efficiency,
+                    expansion_margin=args.expansion_margin,
+                    label=row.label,
+                    params=params,
+                ),
+            )
+        )
+        print()
+        print(
+            f"Departure slug ratio on the {row.node.dive_solar_radii:g} R_sun cycle,"
+            " charged from the pad"
+        )
+        print(
+            split_push_slug_ratio_text(
+                split_push_slug_ratio_table(
+                    row.closure,
+                    survival,
+                    jet_energy_efficiency=args.jet_efficiency,
+                    params=params,
+                )
+            )
+        )
+        print()
 
-if __name__ == "__main__":
-    main()
+    paper = paper_resonant_dive_split_push(
+        deep.closure.return_excess,
+        deep.closure.push_axis_deg,
+        slug_ratio=DEFAULT_SLUG_RATIO,
+        jet_energy_efficiency=args.jet_efficiency,
+        params=params,
+    )
+    if paper is not None:
+        print(describe_split_push(paper, split_push_launch_ledger(paper, params)))
+        print()
+
+    print(
+        f"Dive depth charged from the pad, {args.return_excess:g} km/s climb-out,"
+        f" k = {args.slug_ratio:g}, node survival derived at every depth"
+    )
+    rows = split_push_depth_table(
+        return_excess=args.return_excess,
+        slug_ratio=args.slug_ratio,
+        jet_energy_efficiency=args.jet_efficiency,
+        params=params,
+    )
+    print(split_push_depth_text(rows))
+    crossing = pad_floor_depth(
+        return_excess=args.return_excess,
+        slug_ratio=args.slug_ratio,
+        jet_energy_efficiency=args.jet_efficiency,
+        params=params,
+    )
+    if crossing is not None:
+        print()
+        print(
+            f"The committed 1/15 floor is lost at {crossing:.2f} R_sun on this"
+            " dial: a shallower dive than that does not return the fifteenth of"
+            " liftoff it committed to."
+        )
+    print()
+
+    if args.pad_frontier:
+        for depth in (SOLAR_DIVE_PERIAPSIS_SOLAR_RADII, args.dive_solar_radii):
+            print(
+                f"Can {depth:g} R_sun be flown at all? Best pad return at each"
+                f" climb-out, expansion margin {args.expansion_margin:g}x on both legs"
+            )
+            print(
+                pad_frontier_text(
+                    pad_return_frontier(
+                        depth,
+                        jet_energy_efficiency=args.jet_efficiency,
+                        expansion_margin=args.expansion_margin,
+                        params=params,
+                    )
+                )
+            )
+            print()
+            print(
+                f"Does that verdict survive the conduction reserve bracket at"
+                f" {depth:g} R_sun? The reserve does not touch the pad return at"
+                " any k; it moves the lowest climb-out the overtaking plume"
+                " survives, and the pad return is won at low climb-outs."
+            )
+            print(
+                conduction_bracket_text(
+                    conduction_bracket_frontier(
+                        depth,
+                        jet_energy_efficiency=args.jet_efficiency,
+                        params=params,
+                    )
+                )
+            )
+            print()
 
 
 # --------------------------------------------------------------------------
@@ -1877,6 +2030,36 @@ def _burn_leg(
     return float(np.exp(log_fraction))
 
 
+def _leg_coldest_closing(
+    stream_axis_offset_deg: float,
+    stream_speed: float,
+    start_speed: float,
+    end_speed: float,
+) -> float:
+    """Coldest closing speed reached anywhere on one burn leg (km/s).
+
+    The closing speed is monotone in the vehicle's speed at fixed geometry --
+    ``|v_stream - v_vehicle|`` resolved along and across the thrust axis -- so
+    the extremes are the endpoints and no scan is needed.  Which endpoint is
+    colder flips at 90 degrees: below it the vehicle chases the stream and the
+    closing speed *falls*, above it the vehicle runs into the stream and it
+    rises.
+
+    Args:
+        stream_axis_offset_deg: Angle from the thrust axis to the stream.
+        stream_speed: Impactor speed at the burn radius (km/s).
+        start_speed: Vehicle speed when the burn lights (km/s).
+        end_speed: Speed when it finishes (km/s).
+
+    Returns:
+        The coldest closing speed on the leg (km/s).
+    """
+    return min(
+        _vehicle_frame_impact(stream_axis_offset_deg, 0.0, stream_speed, speed)[1]
+        for speed in (start_speed, end_speed)
+    )
+
+
 def parking_orbit_periapsis_speed(period_days: float, altitude: float = 200.0) -> float:
     """Periapsis speed of a bound ellipse of this period (km/s).
 
@@ -1963,6 +2146,16 @@ class SplitPushLedger:
             there is no stream at apoapsis.
         overtaking_fraction: Mass fraction surviving the first push.
         departure_fraction: Mass fraction surviving the second.
+        overtaking_coldest_closing: Coldest closing speed on the overtaking leg
+            (km/s).  It falls through that burn -- at ``theta`` = 0 the vehicle's
+            own speed subtracts directly -- so the coldest instant is the leg's
+            *end*, at the parking orbit's periapsis.  **This is the coldest
+            instant of the whole departure**, and it is a leg the single-push
+            ledger never had, so no **expansion floor** was ever asked of it.
+        departure_coldest_closing: Coldest closing speed on the canted leg
+            (km/s).  Past 90 degrees the vehicle's acceleration *raises* the
+            closing speed, so this is the leg's start -- the same parking-orbit
+            periapsis, seen at the worse angle.
         single_push_fraction: Mass fraction if one canted push does it all.
         node_survival: Mass fraction surviving the solar-periapsis collision.
         split_growth: Kilograms returned per impactor kilogram, split.
@@ -1983,6 +2176,8 @@ class SplitPushLedger:
     reaim_fraction: float
     overtaking_fraction: float
     departure_fraction: float
+    overtaking_coldest_closing: float
+    departure_coldest_closing: float
     single_push_fraction: float
     node_survival: float
     split_growth: float
@@ -2017,6 +2212,119 @@ class SplitPushLedger:
     def split_advantage(self) -> float:
         """How much the split beats a single canted push."""
         return self.split_growth / self.single_growth
+
+    @property
+    def chain_to_departure(self) -> float:
+        """Fraction of the lob's payload that reaches the Jupiter transfer.
+
+        The three charges between the top of the ballistic lob and the departure
+        hyperbola, multiplied: the overtaking push, the methalox apoapsis
+        re-aim, and the canted departure leg.  This is the quantity the
+        **launch ledger** needs and the one ``cycle_growth_ledger`` set to 1.
+        """
+        return self.overtaking_fraction * self.reaim_fraction * self.departure_fraction
+
+    @property
+    def coldest_closing_speed(self) -> float:
+        """Coldest closing speed anywhere in the departure (km/s)."""
+        return min(self.overtaking_coldest_closing, self.departure_coldest_closing)
+
+
+def split_push_from_state(
+    label: str,
+    departure_excess: float,
+    departure_aim_deg: float,
+    cycle_years: float,
+    stream_excess: float,
+    stream_axis_deg: float,
+    node_survival: float,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[SplitPushLedger]:
+    """Fly a **split push** from any departure state, not just a solved closure.
+
+    The same arguments :func:`jovian_solar_dive_cycle.cycle_growth_ledger` takes,
+    so the paper's own single-impulse resonant dive can be scored on this device
+    rather than only the Jovian closures -- which is what
+    :func:`paper_resonant_dive_split_push` does.
+
+    Args:
+        label: Name for the row.
+        departure_excess: Earth-relative departure excess (km/s).
+        departure_aim_deg: Direction it must point, from Earth's prograde.
+        cycle_years: Departure-to-return time (yr).
+        stream_excess: Earth-relative excess of the arriving stream (km/s).
+        stream_axis_deg: Direction the stream travels, from Earth's prograde.
+        node_survival: Mass fraction surviving the solar-periapsis collision.
+        slug_ratio: Departure slug ratio, used on both pushes.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`SplitPushLedger`, or None when a leg delivers nothing.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    stream = speed_with_escape_energy(stream_excess, p.v_esc_surface)
+    lob = lob_arrival_speed()
+    v_end = speed_with_escape_energy(departure_excess, p.v_esc_leo)
+    v_park = parking_orbit_periapsis_speed(parking_period_days)
+    if not lob < v_park < v_end:
+        return None
+    # The departure-hyperbola mirror puts the thrust axis off the outgoing aim;
+    # the cant is measured from that axis to the stream (CONTEXT.md, and the
+    # correction in ADR 0019's addendum -- the SOI aim separation is the wrong
+    # angle to feed the impulse law).  The sign is free, exactly as in
+    # departure_nozzle_ledger, so both are flown and the better one kept.
+    mirror = float(
+        np.degrees(
+            half_turn_angle(
+                hyperbolic_eccentricity(_MU_EARTH, _BURN_RADIUS, departure_excess)
+            )
+        )
+    )
+    best: Optional[SplitPushLedger] = None
+    for sign in (1.0, -1.0):
+        cant = abs(stream_axis_deg - (departure_aim_deg + sign * mirror))
+        reaim = apoapsis_reaim_cost(parking_period_days, cant)
+        reaim_fraction = float(np.exp(-reaim / p.exhaust_speed))
+        f1 = _burn_leg(lob, v_park, 0.0, stream, slug_ratio, jet_energy_efficiency)
+        f2 = _burn_leg(v_park, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
+        f_one = _burn_leg(lob, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
+        if min(f1, f2, f_one) <= 0.0 or max(f1, f2, f_one) >= 1.0:
+            continue
+        # Impactors consumed per kilogram placed on the Jupiter trajectory: the
+        # departure leg's own, plus the overtaking leg's, scaled up because that
+        # mass still has to survive the re-aim and the departure.
+        impactors = (1.0 / f2 - 1.0) / slug_ratio + (1.0 / (f2 * reaim_fraction)) * (
+            1.0 / f1 - 1.0
+        ) / slug_ratio
+        candidate = SplitPushLedger(
+            label=label,
+            cant_deg=cant,
+            stream_speed=stream,
+            lob_speed=lob,
+            departure_speed=v_end,
+            parking_period_days=parking_period_days,
+            parking_periapsis_speed=v_park,
+            reaim_delta_v=reaim,
+            reaim_fraction=reaim_fraction,
+            overtaking_fraction=f1,
+            departure_fraction=f2,
+            overtaking_coldest_closing=_leg_coldest_closing(0.0, stream, lob, v_park),
+            departure_coldest_closing=_leg_coldest_closing(cant, stream, v_park, v_end),
+            single_push_fraction=f_one,
+            node_survival=node_survival,
+            split_growth=node_survival / impactors,
+            single_growth=node_survival * f_one * slug_ratio / (1.0 - f_one),
+            free_parking_growth=node_survival * f2 * slug_ratio / (1.0 - f2),
+            cycle_years=cycle_years,
+        )
+        if best is None or candidate.split_growth > best.split_growth:
+            best = candidate
+    return best
 
 
 def split_push_ledger(
@@ -2063,58 +2371,70 @@ def split_push_ledger(
         if node_survival is not None
         else PROPOSED_NODE_SURVIVAL.get(dive_solar_radii, node.survival)
     )
-    # The departure-hyperbola mirror puts the thrust axis off the outgoing aim;
-    # the cant is measured from that axis to the stream (CONTEXT.md, and the
-    # correction in ADR 0019's addendum -- the SOI aim separation is the wrong
-    # angle to feed the impulse law).
-    mirror = float(
-        np.degrees(
-            half_turn_angle(
-                hyperbolic_eccentricity(
-                    _MU_EARTH, _BURN_RADIUS, closure.departure_excess
-                )
-            )
-        )
-    )
-    cant = abs(closure.push_axis_deg - (closure.departure_aim_deg + mirror))
-    stream = closure.earth_closing_speed
-    lob = lob_arrival_speed()
-    v_end = closure.departure_speed_200km
-    v_park = parking_orbit_periapsis_speed(parking_period_days)
-    if not lob < v_park < v_end:
-        return None
-    reaim = apoapsis_reaim_cost(parking_period_days, cant)
-    reaim_fraction = float(np.exp(-reaim / p.exhaust_speed))
-    f1 = _burn_leg(lob, v_park, 0.0, stream, slug_ratio, jet_energy_efficiency)
-    f2 = _burn_leg(v_park, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
-    f_one = _burn_leg(lob, v_end, cant, stream, slug_ratio, jet_energy_efficiency)
-    if min(f1, f2, f_one) <= 0.0 or max(f1, f2, f_one) >= 1.0:
-        return None
-    # Impactors consumed per kilogram placed on the Jupiter trajectory: the
-    # departure leg's own, plus the overtaking leg's, scaled up because that
-    # mass still has to survive the re-aim and the departure.
-    impactors = (1.0 / f2 - 1.0) / slug_ratio + (1.0 / (f2 * reaim_fraction)) * (
-        1.0 / f1 - 1.0
-    ) / slug_ratio
-    return SplitPushLedger(
-        label=label
+    return split_push_from_state(
+        label
         or f"{dive_solar_radii:g} R_sun / k {slug_ratio:g} / {parking_period_days:g} d",
-        cant_deg=cant,
-        stream_speed=stream,
-        lob_speed=lob,
-        departure_speed=v_end,
-        parking_period_days=parking_period_days,
-        parking_periapsis_speed=v_park,
-        reaim_delta_v=reaim,
-        reaim_fraction=reaim_fraction,
-        overtaking_fraction=f1,
-        departure_fraction=f2,
-        single_push_fraction=f_one,
-        node_survival=survival,
-        split_growth=survival / impactors,
-        single_growth=survival * f_one * slug_ratio / (1.0 - f_one),
-        free_parking_growth=survival * f2 * slug_ratio / (1.0 - f2),
-        cycle_years=closure.total_tof_years,
+        closure.departure_excess,
+        closure.departure_aim_deg,
+        closure.total_tof_years,
+        closure.return_excess,
+        closure.push_axis_deg,
+        survival,
+        slug_ratio,
+        parking_period_days,
+        jet_energy_efficiency,
+        p,
+    )
+
+
+def paper_resonant_dive_split_push(
+    stream_excess: float,
+    stream_axis_deg: float,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    periapsis_survival: float = DEFAULT_PERIAPSIS_SURVIVAL,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[SplitPushLedger]:
+    """Charge the paper's own single-impulse resonant dive from the pad too.
+
+    The comparison row, and it carried the identical defect: ADR 0019 and ADR
+    0020 both scored it with ``cycle_growth_ledger``, which starts its departure
+    at Earth escape.  The paper's dive asks for a **37.53 km/s** Earth-relative
+    excess -- it has to cancel most of Earth's orbital motion in one impulse --
+    so it has far more of that burn to pay for than either Jovian cycle, and the
+    correction is correspondingly larger.  Scoring it here rather than quoting
+    it is what makes the ranking safe to state.
+
+    Args:
+        stream_excess: Earth-relative excess of the arriving stream (km/s).
+        stream_axis_deg: Direction the stream travels, from Earth's prograde.
+        slug_ratio: Departure slug ratio, used on both pushes.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        periapsis_survival: Mass fraction surviving its solar-periapsis
+            collision.  Stated rather than derived, matching
+            :func:`jovian_solar_dive_cycle.paper_resonant_dive_ledger`.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`SplitPushLedger`, or None when a leg delivers nothing.
+    """
+    dive = single_impulse_resonant_dive()
+    retrograde = float(dive.retrograde_component.to_value(u.km / u.s))
+    radial = float(dive.radial_component.to_value(u.km / u.s))
+    return split_push_from_state(
+        "paper single-impulse resonant dive",
+        float(dive.earth_boost.to_value(u.km / u.s)),
+        float(np.degrees(np.arctan2(radial, -retrograde))),
+        float(dive.reintercept_time.to_value(u.year)),
+        stream_excess,
+        stream_axis_deg,
+        periapsis_survival,
+        slug_ratio,
+        parking_period_days,
+        jet_energy_efficiency,
+        params,
     )
 
 
@@ -2154,3 +2474,1214 @@ def split_push_period_sweep(
         for period in periods
     ]
     return [row for row in out if row is not None]
+
+
+# --------------------------------------------------------------------------
+# The launch ledger, re-scored from the pad
+# --------------------------------------------------------------------------
+#
+# The paper's second open problem on this cycle.  Every cycle in the paper is
+# charged for its own ground launch and must return a fifteenth of the mass
+# lifted off the pad (`sec:two_leg_nozzle`), and that check was run on this
+# cycle *before* the departure was charged from the lob.  The two ledgers now
+# agree on where the payload starts -- PAYLOAD_FRACTION_AT_INTERCEPT is what a
+# 4.09 km/s lob delivers, and `lob_arrival_speed()` is the speed it delivers it
+# at -- so the correction is a substitution rather than a re-derivation: the
+# free parking orbit's implicit factor of 1 becomes `chain_to_departure`.
+
+#: Slug ratios the pad-return peak is searched over.  Deliberately wider than
+#: the **expansion floor**'s window at every closing speed either reference
+#: cycle reaches, so the peak is interior and not a bracket artefact.
+_PAD_PEAK_BRACKET = (0.25, 20.0)
+#: Bracket the committed floor's crossings are bisected in.  The upper end is
+#: past the **plume ignition window**'s own ceiling at both cycles' closing
+#: speeds, so a "no ceiling" verdict means cleared throughout, not truncated.
+_PAD_CEILING_BRACKET = (0.25, 120.0)
+#: Climb-out excesses scanned by :func:`pad_return_frontier` (km/s).  The floor
+#: is below where the **expansion floor** vanishes on the overtaking leg at
+#: either depth; the ceiling is past where the pad return has clearly collapsed.
+PAD_FRONTIER_EXCESS_GRID: Tuple[float, ...] = (
+    40.0,
+    45.0,
+    50.0,
+    55.0,
+    60.0,
+    65.0,
+    70.0,
+    75.0,
+    80.0,
+    85.0,
+    100.0,
+    120.0,
+    150.0,
+    187.5,
+    200.0,
+)
+#: The **conduction reserve** bracket, as (label, MJ/kg) pairs, swept by
+#: :func:`conduction_bracket_frontier`.  The conservative end reserves the whole
+#: **ignition bill**; the hard end reserves only the frozen chemistry; 6,000 K is
+#: the temperature a potassium-seeded plume is usually taken to stay workable at.
+#: The three are ``conduction_reserve()`` at its two flags and at 6,000 K, stated
+#: as literals so the sweep's axis is readable in one place.
+CONDUCTION_RESERVE_BRACKET: Tuple[Tuple[str, float], ...] = (
+    ("15000 K, all reserved", 84.41),
+    ("6000 K", 65.85),
+    ("frozen chemistry only", 53.47),
+)
+#: Expansion margins swept alongside it.  1.5 is ADR 0020's operating margin;
+#: 1.0 puts the winner exactly on the floor, which is a boundary rather than a
+#: design point, and is swept to show what the margin is carrying.
+CONDUCTION_MARGIN_GRID: Tuple[float, ...] = (1.5, 1.0)
+#: Depths :func:`pad_floor_depth` brackets the committed floor's crossing in.
+PAD_FLOOR_DEPTH_BRACKET = (4.0, 48.0)
+#: Closing speeds :func:`conduction_threshold_closing_speed` bisects between.
+#: Wide enough to contain the threshold at every reading of the **conduction
+#: reserve** bracket, which spans 51.7 to 79.6 km/s.
+_CONDUCTION_THRESHOLD_BRACKET = (5.0, 200.0)
+
+
+@dataclass(frozen=True)
+class SplitPushLaunchLedger:
+    """What a **split push** returns per kilogram off the pad.
+
+    The same three readings as
+    :class:`jovian_solar_dive_cycle.LaunchLedgerVerdict`, with the one
+    substitution that ADR 0020's addendum forced.  There, ``returned_per_pad_kg``
+    was ``PAYLOAD_FRACTION_AT_INTERCEPT * delivered * survival``: the payload
+    appeared at Earth escape for free and only the departure burn was charged
+    against it.  Here the lob's payload has to fly the overtaking push, the
+    methalox apoapsis re-aim and the canted departure leg before the departure
+    burn's mass fraction means anything, so the chain carries three factors
+    where it carried one.
+
+    Attributes:
+        label: Which cycle this is.
+        returned_per_pad_kg: Kilograms returning per kilogram off the pad.
+        chain_to_departure: What survives the lob-to-departure chain.
+        node_survival: Mass fraction surviving the solar-periapsis collision.
+        stated_floor: The committed 1/15 **return floor**.
+        stated_margin: ``returned_per_pad_kg`` over that floor.
+        free_parking_returned_per_pad_kg: The same quantity read the way ADR
+            0019 and ADR 0020 read it, with the parking orbit given away.
+            Reported so the size of the correction is visible rather than
+            inferred, **not** as an alternative answer.
+        free_parking_margin: That reading over the committed floor.
+        return_value_ratio: How much more a kilogram returning at this cycle's
+            closing speed is worth than one at 60 km/s, measured as the payload
+            each pushes to a common target.
+        rescaled_floor: The committed floor restated at that value.
+        rescaled_margin: ``returned_per_pad_kg`` over the rescaled floor.
+        returned_per_pad_kg_per_year: The same currency, time-normalised.
+        cycle_years: Departure-to-return time (yr).
+    """
+
+    label: str
+    returned_per_pad_kg: float
+    chain_to_departure: float
+    node_survival: float
+    stated_floor: float
+    stated_margin: float
+    free_parking_returned_per_pad_kg: float
+    free_parking_margin: float
+    return_value_ratio: float
+    rescaled_floor: float
+    rescaled_margin: float
+    returned_per_pad_kg_per_year: float
+    cycle_years: float
+
+    @property
+    def clears_committed_floor(self) -> bool:
+        """Whether the cycle returns the fifteenth of liftoff it committed to."""
+        return self.returned_per_pad_kg >= self.stated_floor
+
+    @property
+    def clears_rescaled_floor(self) -> bool:
+        """Whether it clears the floor restated for a faster returned kilogram."""
+        return self.returned_per_pad_kg >= self.rescaled_floor
+
+    @property
+    def correction_factor(self) -> float:
+        """How much charging the lob-to-departure chain cost the pad return."""
+        return self.returned_per_pad_kg / self.free_parking_returned_per_pad_kg
+
+
+def split_push_launch_ledger(
+    ledger: SplitPushLedger, params: Optional[_FlybyParams] = None
+) -> SplitPushLaunchLedger:
+    """Charge a **split push** for the mass it lifted off the pad.
+
+    Args:
+        ledger: The split push to charge.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`SplitPushLaunchLedger`.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    returned = (
+        PAYLOAD_FRACTION_AT_INTERCEPT * ledger.chain_to_departure * ledger.node_survival
+    )
+    free = (
+        PAYLOAD_FRACTION_AT_INTERCEPT * ledger.departure_fraction * ledger.node_survival
+    )
+    value = return_value_ratio(ledger.stream_speed, p)
+    rescaled = RETURN_FLOOR / value
+    return SplitPushLaunchLedger(
+        label=ledger.label,
+        returned_per_pad_kg=returned,
+        chain_to_departure=ledger.chain_to_departure,
+        node_survival=ledger.node_survival,
+        stated_floor=RETURN_FLOOR,
+        stated_margin=returned / RETURN_FLOOR,
+        free_parking_returned_per_pad_kg=free,
+        free_parking_margin=free / RETURN_FLOOR,
+        return_value_ratio=value,
+        rescaled_floor=rescaled,
+        rescaled_margin=returned / rescaled,
+        returned_per_pad_kg_per_year=returned / ledger.cycle_years,
+        cycle_years=ledger.cycle_years,
+    )
+
+
+@dataclass(frozen=True)
+class SplitPushPadCeilings:
+    """What the corrected pad ledger and the **expansion floor** jointly allow.
+
+    Two caps on the departure slug ratio, and the **split push** changed both.
+
+    The pad cap moved because the chain it charges got longer.  The expansion
+    cap moved because the split *added a leg*: the overtaking push runs at
+    ``theta`` = 0, where the vehicle's own speed subtracts from the closing
+    speed directly, so it is colder than the canted departure leg throughout and
+    colder at its end than anywhere else in the departure.  ``slug_ratio_ceilings``
+    never saw that leg, because in the single-push ledger it did not exist.
+
+    Attributes:
+        label: Which cycle this is.
+        overtaking_coldest_closing: Coldest closing speed on the first leg (km/s).
+        departure_coldest_closing: Coldest closing speed on the second (km/s).
+        overtaking_expansion_window: **Expansion floor** window on ``k`` at the
+            first leg's coldest instant, at the margin asked for; None when no
+            slug ratio clears the floor there.
+        departure_expansion_window: The same for the second leg.
+        expansion_margin: Headroom above the **ignition bill** that was demanded.
+        peak_slug_ratio: Slug ratio maximising kilograms returned per pad kilogram.
+        peak_returned_per_pad_kg: That maximum.
+        launch_window: Slug ratios clearing the committed 1/15 **return floor**,
+            or None when none do.  A closed interval, not a ceiling: the pad
+            return peaks in ``k`` and falls away on both sides.
+        rescaled_window: The same against the speed-rescaled floor.
+        return_value_ratio: What sets that rescale.
+        binding: Which constraint decides -- "expansion", "launch",
+            "launch (fails at every k)", "expansion (no k works)", or
+            "disjoint" when both are satisfiable and never together.
+    """
+
+    label: str
+    overtaking_coldest_closing: float
+    departure_coldest_closing: float
+    overtaking_expansion_window: Optional[Tuple[float, float]]
+    departure_expansion_window: Optional[Tuple[float, float]]
+    expansion_margin: float
+    peak_slug_ratio: float
+    peak_returned_per_pad_kg: float
+    launch_window: Optional[Tuple[float, float]]
+    rescaled_window: Optional[Tuple[float, float]]
+    return_value_ratio: float
+    binding: str
+
+    @property
+    def peak_margin(self) -> float:
+        """Best returned-per-pad kilogram over the committed floor."""
+        return self.peak_returned_per_pad_kg / RETURN_FLOOR
+
+    @property
+    def committed_floor_reachable(self) -> bool:
+        """Whether any slug ratio at all clears the committed floor."""
+        return self.launch_window is not None
+
+    @property
+    def expansion_window(self) -> Optional[Tuple[float, float]]:
+        """Slug ratios both legs' plumes still conduct at, or None."""
+        return _intersect(
+            self.overtaking_expansion_window, self.departure_expansion_window
+        )
+
+    @property
+    def admissible_window(self) -> Optional[Tuple[float, float]]:
+        """Slug ratios that clear the pad floor *and* keep both plumes conducting.
+
+        The quantity the cycle actually has to have.  None is the interesting
+        verdict, and it does not mean "no slug ratio works": it means the two
+        constraints are individually satisfiable and never at the same ``k``.
+        """
+        return _intersect(self.expansion_window, self.launch_window)
+
+
+def _intersect(
+    first: Optional[Tuple[float, float]], second: Optional[Tuple[float, float]]
+) -> Optional[Tuple[float, float]]:
+    """Intersect two optional closed intervals, returning None when empty.
+
+    Args:
+        first: The first interval, or None.
+        second: The second, or None.
+
+    Returns:
+        The intersection, or None when either is missing or they do not overlap.
+    """
+    if first is None or second is None:
+        return None
+    low, high = max(first[0], second[0]), min(first[1], second[1])
+    return (low, high) if low < high else None
+
+
+def split_push_pad_ceilings(
+    closure: SynodicCycleClosure,
+    node_survival: float,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    label: Optional[str] = None,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[SplitPushPadCeilings]:
+    """Find the slug ratios a **split push** may actually be flown at.
+
+    The corrected counterpart to :func:`slug_ratio_ceilings`, which reads both
+    caps off the single-push ledger and therefore reads them off a departure
+    that was never charged and a leg that did not exist.
+
+    Args:
+        closure: The solved cycle.
+        node_survival: Mass fraction surviving the solar-periapsis collision.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        expansion_margin: Thermal headroom demanded above the **expansion floor**.
+        label: Name for the row; taken from the closure when omitted.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`SplitPushPadCeilings`, or None when no slug ratio in
+        ``_PAD_PEAK_BRACKET`` flies the cycle at all.
+    """
+    p = params if params is not None else _powered_flyby_params()
+
+    def ledger_at(slug_ratio: float) -> Optional[SplitPushLedger]:
+        """The split push at one departure slug ratio."""
+        return split_push_from_state(
+            label or "split push",
+            closure.departure_excess,
+            closure.departure_aim_deg,
+            closure.total_tof_years,
+            closure.return_excess,
+            closure.push_axis_deg,
+            node_survival,
+            slug_ratio,
+            parking_period_days,
+            jet_energy_efficiency,
+            p,
+        )
+
+    def pad_at(slug_ratio: float) -> float:
+        """Kilograms returned per pad kilogram, zero where the cycle does not fly."""
+        row = ledger_at(float(slug_ratio))
+        return (
+            0.0
+            if row is None
+            else PAYLOAD_FRACTION_AT_INTERCEPT
+            * row.chain_to_departure
+            * row.node_survival
+        )
+
+    peak = minimize_scalar(
+        lambda k: -pad_at(float(k)),
+        bounds=_PAD_PEAK_BRACKET,
+        method="bounded",
+        options={"xatol": 1e-8},
+    )
+    peak_ratio = float(peak.x)
+    peak_value = pad_at(peak_ratio)
+    probe = ledger_at(peak_ratio)
+    if probe is None or peak_value <= 0.0:
+        return None
+
+    def window_above(floor: float) -> Optional[Tuple[float, float]]:
+        """Slug ratios clearing ``floor``, bisected either side of the peak."""
+        if peak_value < floor:
+            return None
+        low, high = _PAD_CEILING_BRACKET
+        crossings = []
+        for bound in (low, high):
+            if pad_at(bound) >= floor:
+                crossings.append(bound)
+                continue
+            lower, upper = sorted((bound, peak_ratio))
+            crossings.append(
+                float(
+                    brentq(lambda k: pad_at(float(k)) - floor, lower, upper, xtol=1e-8)
+                )
+            )
+        return (crossings[0], crossings[1])
+
+    value = return_value_ratio(probe.stream_speed, p)
+    launch_window = window_above(RETURN_FLOOR)
+    rescaled_window = window_above(RETURN_FLOOR / value)
+    overtaking = expansion_limited_slug_ratio_window(
+        probe.overtaking_coldest_closing, jet_energy_efficiency, expansion_margin
+    )
+    departure = expansion_limited_slug_ratio_window(
+        probe.departure_coldest_closing, jet_energy_efficiency, expansion_margin
+    )
+    expansion = _intersect(overtaking, departure)
+    # Both can fail independently and the caller has to be told when both did,
+    # because "the plume will not conduct" and "the cycle does not pay for its
+    # launch" are separate verdicts with separate fixes.
+    if expansion is None and launch_window is None:
+        binding = "launch and expansion (neither admits any k)"
+    elif launch_window is None:
+        binding = "launch (fails at every k)"
+    elif expansion is None:
+        binding = "expansion (no k works)"
+    elif _intersect(expansion, launch_window) is None:
+        binding = "disjoint"
+    else:
+        binding = "expansion" if expansion[1] < launch_window[1] else "launch"
+    return SplitPushPadCeilings(
+        label=label or "split push",
+        overtaking_coldest_closing=probe.overtaking_coldest_closing,
+        departure_coldest_closing=probe.departure_coldest_closing,
+        overtaking_expansion_window=overtaking,
+        departure_expansion_window=departure,
+        expansion_margin=expansion_margin,
+        peak_slug_ratio=peak_ratio,
+        peak_returned_per_pad_kg=peak_value,
+        launch_window=launch_window,
+        rescaled_window=rescaled_window,
+        return_value_ratio=value,
+        binding=binding,
+    )
+
+
+def split_push_slug_ratio_table(
+    closure: SynodicCycleClosure,
+    node_survival: float,
+    slug_ratios: Sequence[float] = SLUG_RATIO_GRID,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> List[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]]:
+    """Score one closed cycle across departure slug ratios, charged from the pad.
+
+    The corrected counterpart to :func:`slug_ratio_table`.  The two columns move
+    in opposite directions and that opposition is the whole content of the
+    **launch ledger**: growth per *impactor* kilogram rises with ``k`` without
+    limit, because slug is free in that currency, while return per *pad*
+    kilogram peaks low and falls, because it is not.
+
+    Args:
+        closure: The solved cycle, held fixed across the sweep.
+        node_survival: Mass fraction surviving the solar-periapsis collision.
+        slug_ratios: Departure slug ratios to score.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        ``(slug_ratio, ledger, launch)`` for each ratio the cycle flies at.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    out: List[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]] = []
+    for ratio in slug_ratios:
+        row = split_push_from_state(
+            f"k = {ratio:g}",
+            closure.departure_excess,
+            closure.departure_aim_deg,
+            closure.total_tof_years,
+            closure.return_excess,
+            closure.push_axis_deg,
+            node_survival,
+            float(ratio),
+            parking_period_days,
+            jet_energy_efficiency,
+            p,
+        )
+        if row is None:
+            continue
+        out.append((float(ratio), row, split_push_launch_ledger(row, p)))
+    return out
+
+
+def split_push_depth_table(
+    depths: Sequence[float] = DEPTH_GRID,
+    return_excess: float = CONSERVATIVE_RETURN_EXCESS,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> List[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]]:
+    """Sweep the dive depth with the departure charged from the pad.
+
+    Node survival is **derived** at every depth rather than taken from
+    ``PROPOSED_NODE_SURVIVAL``, whose rounded 1/2 and 1/3 are calibrated at the
+    two reference depths only; mixing rounded and derived rows would put a step
+    in an otherwise smooth sweep and make the crossing depth an artefact of the
+    rounding.
+
+    Args:
+        depths: Perihelion distances to sweep (solar radii).
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        slug_ratio: Departure slug ratio.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        ``(dive_solar_radii, ledger, launch)`` for each depth that closes.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    out: List[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]] = []
+    for depth in depths:
+        closure = solve_synodic_closure(3, p, float(depth), return_excess, 1.0)
+        if closure is None:
+            continue
+        node = dive_node(
+            float(depth),
+            closure.periapsis_boost,
+            DEFAULT_PERIAPSIS_SLUG_RATIO,
+            jet_energy_efficiency,
+            p,
+        )
+        row = split_push_from_state(
+            f"{depth:g} R_sun",
+            closure.departure_excess,
+            closure.departure_aim_deg,
+            closure.total_tof_years,
+            closure.return_excess,
+            closure.push_axis_deg,
+            node.survival,
+            slug_ratio,
+            parking_period_days,
+            jet_energy_efficiency,
+            p,
+        )
+        if row is None:
+            continue
+        out.append((float(depth), row, split_push_launch_ledger(row, p)))
+    return out
+
+
+def pad_floor_depth(
+    return_excess: float = CONSERVATIVE_RETURN_EXCESS,
+    slug_ratio: float = CONSERVATIVE_SLUG_RATIO,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    bracket: Tuple[float, float] = PAD_FLOOR_DEPTH_BRACKET,
+    params: Optional[_FlybyParams] = None,
+) -> Optional[float]:
+    """How deep the dive has to stay for the cycle to pay for its own launch.
+
+    The single number the depth dial owes the **launch ledger**: shallower than
+    this the cycle does not return the fifteenth of liftoff it committed to, at
+    this climb-out and this slug ratio.
+
+    Args:
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        slug_ratio: Departure slug ratio.
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        bracket: Depths to bisect between (solar radii).
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The crossing depth in solar radii, or None when the floor is cleared or
+        failed across the whole bracket and there is no crossing to report.
+    """
+    p = params if params is not None else _powered_flyby_params()
+
+    def margin(depth: float) -> float:
+        """Pad return at one depth, less the committed floor."""
+        rows = split_push_depth_table(
+            (float(depth),),
+            return_excess,
+            slug_ratio,
+            parking_period_days,
+            jet_energy_efficiency,
+            p,
+        )
+        return (
+            -RETURN_FLOOR if not rows else rows[0][2].returned_per_pad_kg - RETURN_FLOOR
+        )
+
+    low, high = bracket
+    if margin(low) * margin(high) >= 0.0:
+        return None
+    return float(brentq(margin, low, high, xtol=1e-4))
+
+
+@dataclass(frozen=True)
+class PadFrontierRow:
+    """The best a cycle can do on the pad ledger at one climb-out excess.
+
+    Built to answer one question: is the shallow cycle *rescuable* by moving the
+    knob the trade leaves free?  The two constraints pull opposite ways on it.
+    Boosting less at the node spends less of the node's propellant, so the pad
+    return rises -- but it also lowers the Earth closing speed, and the
+    **expansion floor** needs that speed to leave the plume conducting once the
+    jet is drawn.  This row reports both ends of that squeeze at one excess.
+
+    Attributes:
+        return_excess: Solar hyperbolic-excess speed of the climb-out (km/s).
+        earth_closing_speed: Where the stream arrives at Earth (km/s).
+        overtaking_coldest_closing: Coldest closing speed on the first leg (km/s).
+        departure_coldest_closing: Coldest closing speed on the second (km/s).
+        node_survival: Derived mass fraction surviving the node.
+        expansion_window: Slug ratios both legs' plumes still conduct at, or
+            None when the overtaking leg admits none.
+        best_slug_ratio: The pad-optimal slug ratio inside that window.
+        best_returned_per_pad_kg: What it returns per pad kilogram.
+        best_margin: That over the committed 1/15 **return floor**.
+        doubling_years: Payload doubling time at that operating point (yr).
+        growth_slug_ratio: The *largest* admissible slug ratio -- the fastest
+            growth this excess allows while still paying for its launch, since
+            growth per impactor kilogram rises with ``k`` throughout.  None when
+            nothing here is admissible.
+        growth_doubling_years: Doubling time there (yr).
+        growth_margin: Its pad return over the committed floor.  Sits on 1.0
+            when the pad floor is what stopped ``k``, and above it when the
+            **expansion floor** stopped ``k`` first.
+    """
+
+    return_excess: float
+    earth_closing_speed: float
+    overtaking_coldest_closing: float
+    departure_coldest_closing: float
+    node_survival: float
+    expansion_window: Optional[Tuple[float, float]]
+    best_slug_ratio: Optional[float]
+    best_returned_per_pad_kg: Optional[float]
+    best_margin: Optional[float]
+    doubling_years: Optional[float]
+    growth_slug_ratio: Optional[float]
+    growth_doubling_years: Optional[float]
+    growth_margin: Optional[float]
+
+    @property
+    def clears_committed_floor(self) -> bool:
+        """Whether any admissible slug ratio pays for the launch here."""
+        return self.best_margin is not None and self.best_margin >= 1.0
+
+
+def pad_return_frontier(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    excesses: Sequence[float] = PAD_FRONTIER_EXCESS_GRID,
+    parking_period_days: float = DEFAULT_PARKING_PERIOD_DAYS,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    reserve: Optional[float] = None,
+    params: Optional[_FlybyParams] = None,
+) -> List[PadFrontierRow]:
+    """Scan the climb-out excess for a point that pays for its launch and conducts.
+
+    Maximises the pad return over the slug ratio at each excess, subject to the
+    **expansion floor** on *both* legs of the **split push**, and reports what
+    the best admissible point returns.  A depth whose every row fails is a depth
+    the corrected **launch ledger** rules out, not one that merely scores badly
+    at the reference operating point.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        excesses: Climb-out excesses to scan (km/s).
+        parking_period_days: Period of the ellipse between the two pushes.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        expansion_margin: Thermal headroom demanded above the **expansion floor**.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of the **conduction reserve** bracket.  It does not
+            enter the pad return at any slug ratio -- that is a mass quantity and
+            this is a plume-thermodynamics one -- but it moves the *climb-out* at
+            which the overtaking plume stops conducting, and the pad return is
+            won at low climb-outs.  So the two are coupled through this scan and
+            nowhere else.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        One :class:`PadFrontierRow` per excess that closes.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    out: List[PadFrontierRow] = []
+    for excess in excesses:
+        closure = solve_synodic_closure(3, p, dive_solar_radii, float(excess), 1.0)
+        if closure is None:
+            continue
+        node = dive_node(
+            dive_solar_radii,
+            closure.periapsis_boost,
+            DEFAULT_PERIAPSIS_SLUG_RATIO,
+            jet_energy_efficiency,
+            p,
+        )
+
+        def ledger_at(slug_ratio: float) -> Optional[SplitPushLedger]:
+            """The split push at one departure slug ratio, this excess held."""
+            return split_push_from_state(
+                f"{dive_solar_radii:g} R_sun / v_inf {excess:g}",
+                closure.departure_excess,
+                closure.departure_aim_deg,
+                closure.total_tof_years,
+                closure.return_excess,
+                closure.push_axis_deg,
+                node.survival,
+                slug_ratio,
+                parking_period_days,
+                jet_energy_efficiency,
+                p,
+            )
+
+        probe = ledger_at(CONSERVATIVE_SLUG_RATIO)
+        if probe is None:
+            continue
+        window = _intersect(
+            expansion_limited_slug_ratio_window(
+                probe.overtaking_coldest_closing,
+                jet_energy_efficiency,
+                expansion_margin,
+                reserve,
+            ),
+            expansion_limited_slug_ratio_window(
+                probe.departure_coldest_closing,
+                jet_energy_efficiency,
+                expansion_margin,
+                reserve,
+            ),
+        )
+
+        def pad_chain(slug_ratio: float) -> float:
+            """Round-trip fraction of the lob's payload, negated for minimising."""
+            row = ledger_at(float(slug_ratio))
+            return 0.0 if row is None else -row.chain_to_departure * row.node_survival
+
+        def pad_at(slug_ratio: float) -> float:
+            """Kilograms returned per pad kilogram at one slug ratio."""
+            row = ledger_at(float(slug_ratio))
+            return (
+                0.0
+                if row is None
+                else PAYLOAD_FRACTION_AT_INTERCEPT
+                * row.chain_to_departure
+                * row.node_survival
+            )
+
+        best_ratio: Optional[float] = None
+        best_value: Optional[float] = None
+        doubling: Optional[float] = None
+        growth_ratio: Optional[float] = None
+        growth_doubling: Optional[float] = None
+        growth_margin: Optional[float] = None
+        if window is not None:
+            found = minimize_scalar(
+                pad_chain,
+                bounds=window,
+                method="bounded",
+                options={"xatol": 1e-6},
+            )
+            best_ratio = float(found.x)
+            winner = ledger_at(best_ratio)
+            if winner is not None:
+                best_value = split_push_launch_ledger(winner, p).returned_per_pad_kg
+                doubling = winner.split_doubling_years
+            # Growth per impactor kilogram rises with k throughout, so the
+            # fastest admissible cycle sits on whichever cap comes first: the
+            # expansion window's ceiling, or the slug ratio where the pad return
+            # falls through the floor.
+            if best_value is not None and best_value >= RETURN_FLOOR:
+                growth_ratio = (
+                    window[1]
+                    if pad_at(window[1]) >= RETURN_FLOOR
+                    else float(
+                        brentq(
+                            lambda k: pad_at(float(k)) - RETURN_FLOOR,
+                            best_ratio,
+                            window[1],
+                            xtol=1e-6,
+                        )
+                    )
+                )
+                fastest = ledger_at(growth_ratio)
+                if fastest is not None:
+                    growth_doubling = fastest.split_doubling_years
+                    growth_margin = (
+                        split_push_launch_ledger(fastest, p).returned_per_pad_kg
+                        / RETURN_FLOOR
+                    )
+        out.append(
+            PadFrontierRow(
+                return_excess=float(excess),
+                earth_closing_speed=probe.stream_speed,
+                overtaking_coldest_closing=probe.overtaking_coldest_closing,
+                departure_coldest_closing=probe.departure_coldest_closing,
+                node_survival=node.survival,
+                expansion_window=window,
+                best_slug_ratio=best_ratio,
+                best_returned_per_pad_kg=best_value,
+                best_margin=None if best_value is None else best_value / RETURN_FLOOR,
+                doubling_years=doubling,
+                growth_slug_ratio=growth_ratio,
+                growth_doubling_years=growth_doubling,
+                growth_margin=growth_margin,
+            )
+        )
+    return out
+
+
+@dataclass(frozen=True)
+class ConductionBracketRow:
+    """The best pad return a depth can reach at one reading of the plume physics.
+
+    The **conduction reserve** does not enter the pad return at any slug ratio --
+    it is a plume-thermodynamics quantity and the ledger is a mass quantity.
+    What it moves is the *climb-out* at which the overtaking plume stops
+    conducting, and since the pad return rises as the node boost falls, that
+    threshold is exactly what decides whether the paying end of the dial is
+    reachable.  So the two are coupled through the frontier and not through any
+    single cycle, which is why this has to be swept rather than argued.
+
+    Attributes:
+        reserve_label: Which end of the bracket this is.
+        reserve: Merge energy the jet may not spend (MJ/kg).
+        expansion_margin: Headroom demanded above the **expansion floor**.
+        threshold_closing_speed: Coldest closing speed below which no slug ratio
+            conducts at this reading (km/s), or None if the search found none.
+        best_return_excess: Climb-out excess of the best admissible point (km/s).
+        best_slug_ratio: Its slug ratio.
+        best_returned_per_pad_kg: What it returns per pad kilogram.
+        best_margin: That over the committed 1/15 **return floor**.
+        best_doubling_years: Its payload doubling time (yr).
+    """
+
+    reserve_label: str
+    reserve: float
+    expansion_margin: float
+    threshold_closing_speed: Optional[float]
+    best_return_excess: Optional[float]
+    best_slug_ratio: Optional[float]
+    best_returned_per_pad_kg: Optional[float]
+    best_margin: Optional[float]
+    best_doubling_years: Optional[float]
+
+    @property
+    def clears_committed_floor(self) -> bool:
+        """Whether any admissible point pays for its launch at this reading."""
+        return self.best_margin is not None and self.best_margin >= 1.0
+
+
+def conduction_threshold_closing_speed(
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    expansion_margin: float = DEFAULT_EXPANSION_MARGIN,
+    reserve: Optional[float] = None,
+    bracket: Tuple[float, float] = _CONDUCTION_THRESHOLD_BRACKET,
+) -> Optional[float]:
+    """Coldest closing speed below which no slug ratio keeps the plume conducting.
+
+    The one number that connects the plume physics to the **launch ledger**:
+    below it the **expansion floor** admits nothing at any ``k``, so the whole
+    cheap-boost end of the climb-out dial -- the end where the pad return is
+    good -- is unavailable.
+
+    Args:
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1).
+        expansion_margin: Headroom demanded above the **expansion floor**.
+        reserve: Merge energy the jet may not spend (MJ/kg); defaults to the
+            conservative end of the **conduction reserve**.
+        bracket: Closing speeds to bisect between (km/s).
+
+    Returns:
+        The threshold in km/s, or None when the bracket does not contain one.
+    """
+
+    def admits(closing_speed: float) -> float:
+        """+1 where some slug ratio conducts, -1 where none does."""
+        window = expansion_limited_slug_ratio_window(
+            float(closing_speed), jet_energy_efficiency, expansion_margin, reserve
+        )
+        return 1.0 if window is not None else -1.0
+
+    low, high = bracket
+    if admits(low) * admits(high) >= 0.0:
+        return None
+    return float(brentq(admits, low, high, xtol=1e-4))
+
+
+def conduction_bracket_frontier(
+    dive_solar_radii: float = CONSERVATIVE_DIVE_SOLAR_RADII,
+    reserves: Sequence[Tuple[str, float]] = CONDUCTION_RESERVE_BRACKET,
+    margins: Sequence[float] = CONDUCTION_MARGIN_GRID,
+    excesses: Sequence[float] = PAD_FRONTIER_EXCESS_GRID,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> List[ConductionBracketRow]:
+    """Ask whether the pad verdict survives every reading of the plume physics.
+
+    ADR 0020 left the **conduction reserve** as an explicit bracket because the
+    magnetic Reynolds number at nozzle exit has never been computed, and every
+    reading of it cleared the efficiency the cycles are scored at -- so nothing
+    depended on where in the bracket the truth sat.  Once the **launch ledger**
+    is charged from the pad that stops being true at the shallow node, because
+    the reserve sets the lowest climb-out the overtaking plume survives and the
+    pad return is won at low climb-outs.
+
+    Args:
+        dive_solar_radii: Perihelion distance in solar radii.
+        reserves: ``(label, MJ/kg)`` readings to sweep.
+        margins: Expansion margins to sweep.
+        excesses: Climb-out excesses to scan at each cell (km/s).
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        One :class:`ConductionBracketRow` per (reserve, margin) cell.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    out: List[ConductionBracketRow] = []
+    for label, reserve in reserves:
+        for margin in margins:
+            rows = [
+                row
+                for row in pad_return_frontier(
+                    dive_solar_radii,
+                    excesses,
+                    jet_energy_efficiency=jet_energy_efficiency,
+                    expansion_margin=float(margin),
+                    reserve=float(reserve),
+                    params=p,
+                )
+                if row.best_returned_per_pad_kg is not None
+            ]
+            best = (
+                max(rows, key=lambda row: row.best_returned_per_pad_kg or 0.0)
+                if rows
+                else None
+            )
+            out.append(
+                ConductionBracketRow(
+                    reserve_label=label,
+                    reserve=float(reserve),
+                    expansion_margin=float(margin),
+                    threshold_closing_speed=conduction_threshold_closing_speed(
+                        jet_energy_efficiency, float(margin), float(reserve)
+                    ),
+                    best_return_excess=None if best is None else best.return_excess,
+                    best_slug_ratio=None if best is None else best.best_slug_ratio,
+                    best_returned_per_pad_kg=(
+                        None if best is None else best.best_returned_per_pad_kg
+                    ),
+                    best_margin=None if best is None else best.best_margin,
+                    best_doubling_years=None if best is None else best.doubling_years,
+                )
+            )
+    return out
+
+
+# --------------------------------------------------------------------------
+# Reporting the corrected pad ledger
+# --------------------------------------------------------------------------
+
+
+def describe_split_push(
+    ledger: SplitPushLedger,
+    launch: SplitPushLaunchLedger,
+    ceilings: Optional[SplitPushPadCeilings] = None,
+) -> str:
+    """Render one **split push** and its pad ledger as a block report.
+
+    Args:
+        ledger: The split push.
+        launch: Its launch ledger.
+        ceilings: What the pad floor and the **expansion floor** jointly allow,
+            when it has been computed.
+
+    Returns:
+        A multi-line report.
+    """
+    lines = [
+        f"=== {ledger.label}: departure charged from the pad",
+        "",
+        f"  lob -> departure               {ledger.lob_speed:.3f}"
+        f" -> {ledger.departure_speed:.3f} km/s"
+        f"   ({ledger.departure_speed - ledger.lob_speed:.3f} km/s to fly)",
+        f"  cant at the departure burn     {ledger.cant_deg:.2f} deg",
+        f"  stream speed at Earth          {ledger.stream_speed:.2f} km/s",
+        f"  parking orbit                  {ledger.parking_period_days:g} d,"
+        f" periapsis {ledger.parking_periapsis_speed:.3f} km/s",
+        "",
+        f"  overtaking leg f1              {ledger.overtaking_fraction:.4f}"
+        f"   (coldest closing {ledger.overtaking_coldest_closing:.2f} km/s)",
+        f"  apoapsis re-aim                {ledger.reaim_delta_v:.3f} km/s"
+        f"   -> {ledger.reaim_fraction:.4f} on methalox",
+        f"  departure leg f2               {ledger.departure_fraction:.4f}"
+        f"   (coldest closing {ledger.departure_coldest_closing:.2f} km/s)",
+        f"  CHAIN TO THE TRANSFER          {ledger.chain_to_departure:.4f}"
+        "   (the free parking orbit called this 1)",
+        f"  node survival                  {ledger.node_survival:.4f}",
+        "",
+        f"  growth per cycle               {ledger.split_growth:.2f} kg per impactor kg",
+        f"  doubling / millionfold         {ledger.split_doubling_years:.4f} yr"
+        f" / {ledger.split_doubling_years * np.log(1.0e6) / np.log(2.0):.2f} yr",
+        "",
+        f"  LAUNCH LEDGER  returned per pad kg {launch.returned_per_pad_kg:.4f}",
+        f"    vs committed 1/15            {launch.stated_margin:.3f}x"
+        f"   {'CLEARS' if launch.clears_committed_floor else 'FAILS'}",
+        f"    vs rescaled 1/{1 / launch.rescaled_floor:<25.1f}"
+        f"{launch.rescaled_margin:.3f}x"
+        f"   {'CLEARS' if launch.clears_rescaled_floor else 'FAILS'}"
+        f"   (a {launch.return_value_ratio:.2f}x more valuable returned kg)",
+        f"    time-normalised              {launch.returned_per_pad_kg_per_year:.4f}"
+        " kg per pad kg per year",
+        f"    free-parking reading was     "
+        f"{launch.free_parking_returned_per_pad_kg:.4f}"
+        f" ({launch.free_parking_margin:.3f}x)"
+        f"   -- charging the lob costs {1.0 - launch.correction_factor:.1%}",
+    ]
+    if ceilings is not None:
+        lines += [
+            "",
+            f"  SLUG RATIOS ADMITTED (expansion margin {ceilings.expansion_margin:g}x)",
+            f"    expansion, overtaking leg    "
+            f"{_format_window(ceilings.overtaking_expansion_window)}"
+            f"   at {ceilings.overtaking_coldest_closing:.2f} km/s",
+            f"    expansion, departure leg     "
+            f"{_format_window(ceilings.departure_expansion_window)}"
+            f"   at {ceilings.departure_coldest_closing:.2f} km/s",
+            f"    pad return peaks at k        {ceilings.peak_slug_ratio:.3f}"
+            f"   ({ceilings.peak_margin:.3f}x the committed 1/15 floor)",
+            f"    committed floor cleared for  "
+            f"{_format_window(ceilings.launch_window)}",
+            f"    rescaled floor cleared for   "
+            f"{_format_window(ceilings.rescaled_window)}",
+            f"    ADMISSIBLE                   "
+            f"{_format_window(ceilings.admissible_window)}",
+            f"    BINDING                      {ceilings.binding}",
+        ]
+    return "\n".join(lines)
+
+
+def _format_window(window: Optional[Tuple[float, float]]) -> str:
+    """Render an optional slug-ratio window for a report line.
+
+    Args:
+        window: The interval, or None when it is empty.
+
+    Returns:
+        A short cell string.
+    """
+    return "none" if window is None else f"[{window[0]:.3f}, {window[1]:.3f}]"
+
+
+def split_push_depth_text(
+    rows: Sequence[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]],
+) -> str:
+    """Render a pad-charged depth sweep as a table.
+
+    Args:
+        rows: ``(depth, ledger, launch)`` triples.
+
+    Returns:
+        The formatted table.
+    """
+    return str(
+        tabulate(
+            [
+                [
+                    f"{depth:g}",
+                    f"{row.node_survival:.4f}",
+                    f"{row.cant_deg:.1f}",
+                    f"{row.overtaking_fraction:.4f}",
+                    f"{row.departure_fraction:.4f}",
+                    f"{row.chain_to_departure:.4f}",
+                    f"{row.split_growth:.2f}",
+                    f"{row.split_doubling_years:.3f}",
+                    f"{launch.returned_per_pad_kg:.4f}",
+                    f"{launch.stated_margin:.2f}",
+                    f"{launch.rescaled_margin:.2f}",
+                ]
+                for depth, row, launch in rows
+            ],
+            headers=[
+                "R_sun",
+                "survive",
+                "cant",
+                "f1",
+                "f2",
+                "chain",
+                "kg/imp",
+                "dbl yr",
+                "kg/pad kg",
+                "1/15 x",
+                "rescaled x",
+            ],
+            tablefmt="github",
+        )
+    )
+
+
+def split_push_slug_ratio_text(
+    entries: Sequence[Tuple[float, SplitPushLedger, SplitPushLaunchLedger]],
+) -> str:
+    """Render a pad-charged slug-ratio sweep as a table.
+
+    Args:
+        entries: ``(slug_ratio, ledger, launch)`` triples.
+
+    Returns:
+        The formatted table.
+    """
+    return str(
+        tabulate(
+            [
+                [
+                    f"{ratio:g}",
+                    f"{row.overtaking_fraction:.4f}",
+                    f"{row.departure_fraction:.4f}",
+                    f"{row.chain_to_departure:.4f}",
+                    f"{row.split_growth:.2f}",
+                    f"{row.split_doubling_years:.4f}",
+                    f"{launch.returned_per_pad_kg:.4f}",
+                    f"{launch.stated_margin:.2f}",
+                    f"{launch.rescaled_margin:.2f}",
+                ]
+                for ratio, row, launch in entries
+            ],
+            headers=[
+                "k",
+                "f1",
+                "f2",
+                "chain",
+                "kg/imp",
+                "dbl yr",
+                "kg/pad kg",
+                "1/15 x",
+                "rescaled x",
+            ],
+            tablefmt="github",
+        )
+    )
+
+
+def conduction_bracket_text(rows: Sequence[ConductionBracketRow]) -> str:
+    """Render a **conduction reserve** sweep of the pad verdict as a table.
+
+    Args:
+        rows: The bracket rows.
+
+    Returns:
+        The formatted table.
+    """
+    return str(
+        tabulate(
+            [
+                [
+                    r.reserve_label,
+                    f"{r.reserve:.2f}",
+                    f"{r.expansion_margin:g}",
+                    (
+                        "--"
+                        if r.threshold_closing_speed is None
+                        else f"{r.threshold_closing_speed:.2f}"
+                    ),
+                    (
+                        "--"
+                        if r.best_return_excess is None
+                        else f"{r.best_return_excess:g}"
+                    ),
+                    "--" if r.best_slug_ratio is None else f"{r.best_slug_ratio:.2f}",
+                    (
+                        "--"
+                        if r.best_returned_per_pad_kg is None
+                        else f"{r.best_returned_per_pad_kg:.4f}"
+                    ),
+                    "--" if r.best_margin is None else f"{r.best_margin:.3f}",
+                    (
+                        "--"
+                        if r.best_doubling_years is None
+                        else f"{r.best_doubling_years:.3f}"
+                    ),
+                    "CLEARS" if r.clears_committed_floor else "fails",
+                ]
+                for r in rows
+            ],
+            headers=[
+                "conduction reserve",
+                "MJ/kg",
+                "margin",
+                "dies below",
+                "best v_inf",
+                "k",
+                "kg/pad kg",
+                "1/15 x",
+                "dbl yr",
+                "",
+            ],
+            tablefmt="github",
+        )
+    )
+
+
+def pad_frontier_text(rows: Sequence[PadFrontierRow]) -> str:
+    """Render a climb-out scan of the pad ledger as a table.
+
+    Args:
+        rows: The frontier rows.
+
+    Returns:
+        The formatted table.
+    """
+    return str(
+        tabulate(
+            [
+                [
+                    f"{r.return_excess:g}",
+                    f"{r.earth_closing_speed:.2f}",
+                    f"{r.overtaking_coldest_closing:.2f}",
+                    f"{r.node_survival:.4f}",
+                    _format_window(r.expansion_window),
+                    "--" if r.best_slug_ratio is None else f"{r.best_slug_ratio:.2f}",
+                    (
+                        "--"
+                        if r.best_returned_per_pad_kg is None
+                        else f"{r.best_returned_per_pad_kg:.4f}"
+                    ),
+                    "--" if r.best_margin is None else f"{r.best_margin:.2f}",
+                    ("--" if r.doubling_years is None else f"{r.doubling_years:.3f}"),
+                    (
+                        "--"
+                        if r.growth_slug_ratio is None
+                        else f"{r.growth_slug_ratio:.2f}"
+                    ),
+                    (
+                        "--"
+                        if r.growth_doubling_years is None
+                        else f"{r.growth_doubling_years:.3f}"
+                    ),
+                    "--" if r.growth_margin is None else f"{r.growth_margin:.2f}",
+                ]
+                for r in rows
+            ],
+            headers=[
+                "v_inf",
+                "v_b",
+                "coldest",
+                "survive",
+                "expansion window",
+                "best k",
+                "kg/pad kg",
+                "1/15 x",
+                "dbl yr",
+                "fastest k",
+                "its dbl",
+                "its 1/15 x",
+            ],
+            tablefmt="github",
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()
