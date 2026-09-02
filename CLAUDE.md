@@ -48,6 +48,8 @@ pytest tests/test_orbit_utils.py -s
 make jovian-dive    # Earth→Jupiter→4 R☉→Earth synodic closure (ADR 0019)
 make dive-depth     # what a shallower (32 R☉) dive costs (ADR 0020)
 make split-dive     # splitting the dive injection across two nodes (ADR 0023)
+make opposing-stream # charging the dive node's second arrival (ADR 0024)
+make shallow-dive   # what a shallow dive costs the direct route (ADR 0025)
 
 # Conda environment
 conda env create -f environment.yml
@@ -101,6 +103,22 @@ bielliptic_dive_split.py     ← conic_kernel + jovian_solar_dive_cycle: splits 
                                 one onto the returning beam. Three closure
                                 conditions on three knobs, so the phased
                                 solutions are discrete (ADR 0023)
+      ↓
+opposing_stream_ledger.py    ← solar_dive_depth_trade + bielliptic_dive_split:
+                                prices the dive node's *second* arrival. Audits
+                                the opposing stream's Jupiter route (co-location
+                                costs 13-38 m/s), charges it in both the growth
+                                and pad ledgers (under 1.2% of doubling), and
+                                shows the bi-elliptic far node phases itself
+                                exactly. Reuses jovian_solar_dive_cycle's
+                                private `_outbound_leg`/`_dive_leg` (ADR 0024)
+
+shallow_dive_burn_trade.py   ← bielliptic_dive_split + solar_dive_depth_trade: what a
+                                shallow dive costs the *direct* architecture once the
+                                node is charged for its own perihelion burn. The
+                                crossing is about the tuning, not the architecture —
+                                and the stated 0.60 node survival flatters the shallow
+                                rows 2-3x (ADR 0025)
 
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius

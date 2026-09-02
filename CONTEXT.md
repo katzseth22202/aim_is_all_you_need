@@ -604,8 +604,15 @@ the floors spread further apart as the dive is backed out (9.98 / 16.14 at 32 so
 radii). The opposing stream is one-way and expendable, so it needs a separate
 tangential launch (11.83 km/s of Earth excess at 32 solar radii) rather than a
 separate energy *budget*. See the **solar-dive depth trade**.
+The floor is a **tangency**: exactly at it the post-flyby state is purely tangential,
+so Jupiter's orbit becomes the dive's aphelion and the dive sweeps 180 deg. That makes
+`retrograde_tangential_departure` -- solved to land *on* the floor -- the one value at
+which `_solve_dive_state()` sits on its bracket edge and returns `None` on
+floating-point luck (it fails at 23 R☉ and survives at 4, 8 and 32). Build flyable
+legs through `opposing_stream_ledger`, which nudges 1e-4 km/s past it.
 _Avoid_: reading a floor as a delta-v to be spent; reading the overlap as saying one
-departure energy serves both streams on a closed cycle (it does not).
+departure energy serves both streams on a closed cycle (it does not); building a
+flyable leg straight off the floor departure.
 
 **Synodic closure**:
 The two conditions a cycle must meet together -- the loop takes exactly `N` synodic
@@ -984,6 +991,50 @@ it is; assuming the **closing speed** rises through every departure (it does on
 the Jovian cycle's near head-on burn and falls on this one -- the sign is set by
 the aim, not by the word "departure").
 
+**Split pad crossing**:
+The depth at which the **split dive** stops earning its own launch, on ADR 0021's committed
+`0.25 * chain * survival` floor of 1/15 (`split_pad_crossing()`, ADR 0025 addendum):
+**5.58 R☉**, bisected. So the split pays over **(4, 5.58]** against the Jovian dive cycle's
+(4, ~23] on the same floor. ADR 0023's "buys the pad, not the clock" is **true at 4 R☉ and
+false by 6** -- 1.179 margin against the direct route's 0.657 there, but 0.306 against 0.237
+at 22.93 R☉. Its edge over the direct route shrinks 1.80x → 1.29x → 1.09x from 4 to 22.93 to
+32 R☉, so the architecture that buys the pad buys it only where the thermal case is worst.
+**At ADR 0022's recommended shallow end neither architecture earns its launch** -- the choice
+is between two failers, one 29% less bad.
+_Avoid_: quoting "the split buys the pad" without its depth; scoring the **partial split**
+this way (its far node's delivery is unpriced, so a pad ledger omitting it flatters);
+confusing this with `slug_per_delivered_kg` (0.875 vs 2.365), which is a different currency
+and is where ADR 0023's claim was originally made.
+
+**Conducting burn**:
+The cheapest **perihelion burn** that keeps the paper's **self-cooling departure** above the
+conduction floor at a given depth (`conducting_burn()`, ADR 0025). The trade is one-sided --
+a larger burn buys conduction depth already in hand while costing node survival exponentially
+-- so the minimum is always right, and every row scored at it is the direct architecture's
+best case. **38.10 km/s (1.059x the paper's tuning) reaches ADR 0022's 22.93 R☉ pad floor**,
+and the cycle still grows there: 2.505 per pass, doubling 0.657 yr. So **the direct route can
+fly shallow**; the crossing is a statement about the tuning, not the architecture. The extra
+6% of burn costs 7.4% of node survival and ~1% of clock -- and the clock moves the *helpful*
+way, since a hotter burn climbs out faster. Depth itself is the expensive part: at 19.80 R☉
+with no extra burn at all, doubling is already 1.93x the 4 R☉ value.
+_Avoid_: reading the crossing as "the split is required to fly shallow" (ADR 0023's stronger
+reading, retired by ADR 0025); quoting ~40 R☉ as a physical wall -- it is where the (18, 46)
+km/s search leaves the 4--48 R☉ conduction bracket.
+
+**Stated versus derived node survival**:
+`paper_resonant_dive_ledger()` holds `periapsis_survival` at **0.60 across the whole depth
+dial**; `dive_node()` derives it as `exp(-boost/exhaust)`. At 4 R☉ they agree (0.5895), which
+is why nobody caught it -- but the node's exhaust speed collapses with the arrival speed
+(68.09 km/s at 4 R☉ to 28.20 at 22.93 to 22.38 at 36), so derived survival falls to **0.2589
+at 22.93 R☉ and 0.1627 at 32**. The stated value is too generous by 2.32x and 3.68x there, and
+reports doubling as **1.92x and 3.07x better** than it is. Worst of all, on the fixed 0.60
+doubling is nearly *flat* across the dial (0.3048 / 0.3431 / 0.3091, non-monotone, inside
+13%) -- the illusion that makes backing the dive out look almost free.
+_Avoid_: reusing the stated 0.60 at any depth but 4 R☉, which a shallow-dive comparison
+invites; reading this as a correction to the published 4 R☉ headline (there the gap is
+1.009x). Same mechanism as ADR 0020's **derived periapsis survival**, never before applied
+to the paper's own dive.
+
 **Depth conduction crossing**:
 The depth at which the **self-cooling departure** of the paper's single-impulse
 dive drops through ADR 0022's **overtaking-leg conduction floor** --
@@ -1015,13 +1066,20 @@ The payload's injection gets **cheaper** as the dive is backed out (24.09 to 14.
 km/s from 4 to 32 R☉) because there is less to fall; the **opposing stream**'s
 retrograde placement gets **dearer** (35.48 to 44.94) because a shallower
 perihelion keeps more angular momentum and reversing its sign costs more. They
-cross, and past ~8 R☉ the opposing stream is the dominant Earth-side cost. A
+cross, and past ~8 R☉ the opposing stream is the dominant Earth-side cost.
+**Those placement figures are the Earth-direct route**, which is what the
+single-impulse dive and the **split dive** have; the Jovian dive cycle places the
+same stream for 11.06-11.83 km/s via Jupiter. See **Opposing-stream placement
+routes**. A
 near-radial plunge is the third option -- flat at Earth's own 29.78 km/s at every
 depth -- but it arrives *across* the payload's path, so the node closing speed
 falls by about root two and **derived periapsis survival** with it.
 _Avoid_: quoting "the boost falls with the beam" as an architecture-level claim
-(it is the payload leg alone); conflating this leg's problem with the
-**depth conduction crossing** -- the opposing stream aims retrograde against a
+(it is the payload leg alone); quoting 35.48-44.94 without naming the
+architecture, since it is 3-4x the Jovian cycle's own price for the same stream;
+reading the asymmetry as a growth-ledger correction (charged, it is worth under
+1.2% of doubling -- see **Opposing-stream charge**); conflating this leg's
+problem with the **depth conduction crossing** -- the opposing stream aims retrograde against a
 radial stream, never runs along what feeds it, and conducts at every depth. Its
 problem is cost, not conduction.
 
@@ -1038,6 +1096,78 @@ closing speed 0.70 km/s.
 _Avoid_: scoring the split on the payload leg alone and concluding it barely pays
 at depth.
 
+**Opposing-stream placement routes**:
+The two ways to put the dive node's *second* arrival where it has to be, and they
+differ by 3-4x, so **always name which architecture is meant**. *Earth-direct*
+(`direct_retrograde_placement_excess()`): reverse Earth's own 29.78 km/s from 1 AU,
+35.48 km/s at 4 R☉ rising to 44.94 at 32 -- the only route open to the
+**single-impulse resonant dive** and to the **split dive**, neither of which visits
+Jupiter. *Via Jupiter* (`retrograde_tangential_departure`): a one-way tangential
+launch at 11.06-11.83 km/s of Earth excess, bent retrograde by an unpowered flyby
+(72.5-77.9 deg needed against 119.6-126.5 available) -- open only to the **Jovian
+dive cycle**, and 0.95-1.09x that cycle's own departure rather than three times it.
+Co-locating the arrival with the payload in longitude *and* time costs a further
+0.12-0.32% (13-38 m/s): excess above the **dive-placement floor** sweeps the
+perihelion-longitude gap through a full 360 deg over ~50 m/s, so a root always
+exists and the solutions are **discrete**, like the **synodic closure**. The stream
+leaves Earth 6.7 d before the payload at 4 R☉ and 40.5 d after it at 32.
+_Avoid_: quoting 35.48-44.94 as "the" placement cost; assuming the Jovian route
+transfers to the split dive (it does not -- that architecture is Earth-only).
+
+**Opposing-stream charge**:
+What placing the second arrival costs once it is actually billed (ADR 0024,
+`make opposing-stream`). Growth ledger: **1.0014x doubling at 4 R☉ to 1.0075x at 32**
+for the Jovian cycle, 1.0063x to 1.0112x for the paper's dive. Pad ledger: 0.45-2.00%
+of returned mass, and it **flips no verdict** -- the rows that cleared ADR 0021's
+1/15 floor still clear it. The two readings are **not ordered**:
+`pad_charge / growth_charge` is exactly `(1 - delivered) / (1 - placed)`, so whichever
+burn wastes more of its vehicle decides which bites harder. It is small because of
+*mass*: `k_peri` = 30 means the node wants only 0.17-0.49 kg of opposing stream per
+impactor kilogram of payload, so even a 44.94 km/s placement through a nozzle
+delivering a fifth still loses ~1%.
+_Avoid_: calling either ledger "the conservative one"; quoting the bound for the
+**split dive**, whose far-node delivery is unpriced; treating the **two-leg depth
+asymmetry** as a correction to the growth numbers -- it is an impulse and node-geometry
+result, and the growth effect is a rounding error. Sensitivity is all in `k_peri`:
+still under 4% at 8.5, but 6-11% at 3 and 19-34% at 1.
+
+**Bi-elliptic co-placement**:
+Why the **split dive**'s far node needs no phasing knob. Injected there, payload and
+opposing stream fly *the same ellipse* in opposite senses -- the payload cuts its
+tangential speed to drop perihelion, the opposing stream reverses it. Same semi-major
+axis, so the same half-period; and an ellipse's perihelion is antipodal to its
+aphelion whichever way it is flown, so both perihelia are the same point. They arrive
+**together, at 180 deg, exactly**, with no residual to drive to zero. **Neither leg
+ever goes closer to the Sun than the node**, so a shallow dive's whole reason for
+existing survives. At a 1.9649 AU node the payload's cut falls 14.541 to 9.478 km/s
+from 4 to 32 R☉ while the opposing flip rises 20.362 to 25.425; a 3 AU node makes both
+cheaper (10.250/14.069 to 6.873/17.446) and roughly doubles the coast.
+_Avoid_: reaching for a timing fix here (there is nothing to fix); reading the free
+phasing as a free *placement* -- both burns still need impactors delivered to the far
+node, which is unpriced.
+
+**Node-depth admissibility**:
+The rule that **every trajectory in the architecture -- payload, opposing stream, and any
+projectile stream feeding a node -- must have a perihelion no lower than the dive node's
+depth**. Nothing may pass inside the node. Adopted 2026-09-02; see
+`docs/paper_changes_owed.md` P1.
+It disqualifies the **plunger node** outright: a zero-angular-momentum drop has perihelion
+`r = 0`, so it does not skim the Sun but enters it, and the fraction the node fails to
+consume (there is always one -- see **rendezvous timing tolerance**) is on a Sun-impacting
+trajectory. An architecture that backs the payload out to 23 R☉ for thermal reasons while
+aiming its ammunition at `r = 0` has moved the exposure onto the half of the collision
+nobody was scoring, not escaped it. The tell is that the radial placement is priced **flat
+at Earth's own 29.785 km/s at every depth** -- a depth-independent cost means the trajectory
+is not aiming at a depth. Contrast the prograde column, 24.09 falling to 14.62 km/s, which is.
+So **retrograde placement is the only admissible head-on arrival**, which makes
+**bi-elliptic co-placement** load-bearing rather than merely convenient: there both legs
+bottom out at the node by construction.
+_Avoid_: rejecting the plunger on its 135 deg geometry alone (true at `k` = 30, but it is
+inadmissible before it is inefficient); "fixing" the plunger by giving it a perihelion at the
+node -- keeping the 15.16 km/s of tangential speed that needs at 32 R☉ *is* the payload's own
+prograde injection, so it would arrive alongside rather than across and there would be no
+collision at all.
+
 **Plunger node**:
 The dive node with the opposing stream arriving on a zero-angular-momentum drop
 instead of head-on. It arrives at **135 deg, not 90** -- payload and plunger reach
@@ -1049,7 +1179,9 @@ law**'s `cos theta` debit is the impactor's own momentum arriving backwards and 
 whole **depth trade** of ADR 0020/0021/0022 assumes the head-on node -- and
 therefore the retrograde placement, the expensive half of the **two-leg depth
 asymmetry**.
-_Avoid_: reading the plunger as a 90 deg arrival; assuming a lower closing speed
+_Avoid_: treating this as a live option -- **node-depth admissibility** rules it out
+before any of this trade applies, and what follows is why it would have lost anyway;
+reading the plunger as a 90 deg arrival; assuming a lower closing speed
 means proportionally less impulse (the debit falls with it).
 
 **Plunger Isp toll**:
