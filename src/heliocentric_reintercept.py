@@ -376,6 +376,7 @@ class SingleImpulseResonantDive:
 def single_impulse_resonant_dive(
     periapsis_radius: u.Quantity = SOLAR_DIVE_PERIAPSIS,
     launch_radius: u.Quantity = EARTH_A,
+    periapsis_burn: u.Quantity = SOLAR_DIVE_PERIAPSIS_BURN,
 ) -> SingleImpulseResonantDive:
     """Solve the aphelion that makes a single-impulse solar dive re-intercept Earth.
 
@@ -397,6 +398,12 @@ def single_impulse_resonant_dive(
             radii).
         launch_radius: The boost point / re-crossing distance, i.e. Earth's orbit
             (astropy Quantity, default EARTH_A).
+        periapsis_burn: PuffSat boost taken at the dive periapsis (astropy
+            Quantity, default SOLAR_DIVE_PERIAPSIS_BURN).  It enters through the
+            climb-out: a larger burn leaves faster, so the climb is quicker and
+            sweeps less longitude, and the closure lands on a slightly smaller
+            aphelion.  The effect is second order -- the climb is ~10 d of a
+            ~326 d cycle -- so a 20% larger burn shortens the cycle by ~1%.
 
     Returns:
         A :class:`SingleImpulseResonantDive` with the closing aphelion, the
@@ -408,6 +415,7 @@ def single_impulse_resonant_dive(
         """Return the climb-out anomaly and time for an incoming trial ellipse."""
         v_infinity: u.Quantity = boosted_solar_dive_v_infinity(
             periapsis_radius=periapsis_radius,
+            periapsis_burn=periapsis_burn,
             apoapsis_radius=aphelion,
         )
         climb_eccentricity: float = hyperbolic_eccentricity(

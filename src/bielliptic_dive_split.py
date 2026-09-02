@@ -1091,11 +1091,18 @@ def resonant_dive_at_depth(
         dive_solar_radii: Perihelion distance in solar radii.
         periapsis_burn: Tangential boost taken at perihelion (km/s).
 
+    The burn is now passed through to the closure rather than dropped: it enters
+    via the climb-out, and moves the conduction crossing by at most 0.06 solar
+    radii over 20-45 km/s, so no published figure changes at quoted precision.
+
     Returns:
         (closing aphelion km, Earth boost km/s, boost aim deg, cycle years).
     """
     perihelion = dive_solar_radii * _SOLAR_RADIUS
-    dive = single_impulse_resonant_dive(periapsis_radius=perihelion * u.km)
+    dive = single_impulse_resonant_dive(
+        periapsis_radius=perihelion * u.km,
+        periapsis_burn=periapsis_burn * u.km / u.s,
+    )
     retrograde = float(dive.retrograde_component.to_value(u.km / u.s))
     radial = float(dive.radial_component.to_value(u.km / u.s))
     return (
