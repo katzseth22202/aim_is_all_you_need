@@ -67,9 +67,13 @@ analysis -- they are why it would have lost anyway at `k` = 30 -- but they stop
 being the reason it is rejected.
 
 **What changes here.** Nothing numerically: no function *selects* the plunger,
-so no published figure moves. Owed as code: an admissibility predicate on the
-placement options, so `radial_excess` and `dive_placement_excess_floor(0, ...)`
-are returned flagged rather than as peers. Not yet written.
+so no published figure moves. The rule is now **enforced rather than stated**:
+`placement_admissibility()` flags every placement sense, `admissible_placements()`
+returns only the two that comply, and `require_admissible()` raises at any site
+turning a sense into a trajectory. Worth knowing why that was needed -- the
+plunge is the **cheapest-looking** of the three from Earth (13.06 km/s against
+the retrograde placement's 15.68 at 23 solar radii), so a rule left to judgement
+is a rule left to lose.
 
 **Note against ADR 0024.** Its "considered and rejected" section calls the
 Sun-crossing "survivable, because the collision happens on the way in". That is
@@ -190,6 +194,45 @@ derived:
 
 ---
 
+## P5b. Retire the partial split's dominance, do not lift it
+
+Backing: ADR 0025 second addendum. **Answers S1, and answers it the other way
+round from what the hold was waiting for.**
+
+`sec:split_dive_growth`'s held sentence says "better on both axes the ledger
+scores", pending a price for delivering impactors to the far node. That price is
+now in, and it does not lift the hold -- it **retires the claim**.
+
+The trap is that the far node does not need mass at 1.9649 AU. It needs mass
+**moving at 153.35 km/s** there, against a vehicle doing 13.45. A Hohmann
+delivery arrives nearly co-moving and is worth nothing as an impactor.
+
+| arrival | impactor speed | Earth departure | delivered | total kg/kg | beats 2.365? |
+| :--- | ---: | ---: | ---: | ---: | :--- |
+| co-linear (lower bound) | 139.91 | **113.20** | 1.0% | **3.552** | no |
+| perpendicular (real) | 152.76 | 125.80 | 0.6% | 4.863 | no |
+
+- The delivery costs **nearly six times the payload's own departure** (113.20
+  km/s against 19.12) and delivers **1 percent** of what is launched.
+- **1.536 kg/kg becomes 3.552**, against the paper's own dive at 2.3654 -- which
+  this repository now computes from the degenerate split rather than quoting. The
+  partial split **no longer beats the dive it was said to dominate**.
+- The verdict does not rest on the arrival geometry: co-linear is the cheapest
+  possible arrival and therefore a bound, and the real perpendicular arrival
+  loses by more.
+- **So the phased split's "leftovers" are not a convenience but the only
+  affordable source.** The beam carries 153.0 km/s to the far node for nothing,
+  being a climb-out from the dive; nothing launched from 1 AU matches that at a
+  sane price, because the cheap way to make fast mass is to drop it down the
+  Sun's well first.
+
+**What the paper should do.** Strike the dominance framing rather than
+strengthening it, and keep the partial split only as the family's rate optimum
+*before* delivery is charged, clearly labelled as such. `CONTEXT.md`'s **Partial
+split** entry in this repository has been corrected the same way.
+
+---
+
 ## P6. A dangling cross-reference, and the item it points at
 
 `docs/paper_corrections_checklist.md:101` refers to a "One thing left alone"
@@ -208,16 +251,24 @@ Either fix the reference or restore the item.
 
 ---
 
+## Worklist status
+
+All three items the paper deferred are now answered. **S1** (P5b): the far-node
+delivery costs 113.20 km/s and reverses the partial split's verdict. **S2** (P3,
+P4): the direct route can fly shallow, and the stated node survival is the larger
+error. **S3** (P2): the second arrival is uncharged and worth under 1.2 percent.
+
+`deferred_to_companion_repos.md`'s "What landed" section still reads "Nothing
+yet" and can now be filled in from P2 to P5b.
+
 ## Still open
 
-- **S1** (a dedicated impactor delivery to a 1.96 AU node) is **not** blocking
-  anything the paper currently claims. It touches only the **partial split**,
-  whose far node fails outer-node co-location; the phased cycles are beam-fed and
-  need no delivery. The paper's held "better on both axes the ledger scores" is
-  correct as written, and S1 would only let it say more. It now also blocks the
-  partial split's pad ledger, for the same reason.
-- The **partial split's pad ledger** is therefore unscored, and a pad ledger that
-  omitted the far-node delivery would flatter it.
-- The **admissibility predicate** of P1 is owed as code here.
+- The **partial split's pad ledger** is deliberately not reported. Now that its
+  far node is priced the arithmetic could be done, but the launched-mass verdict
+  (P5b) already settles the architecture, and a pad number would only restate it.
 - The Jovian placement route of P2 has had **no real-ephemeris audit** (the ADR
   0011 treatment); it is a longitude and epoch match in a circular coplanar model.
+- The far-node delivery of P5b is priced as a **direct high-speed launch from
+  1 AU**. A feeder that dives first and is caught on its climb-out would be
+  cheaper, but that is a second solar-dive chain rather than a delivery, and
+  nothing has costed one.

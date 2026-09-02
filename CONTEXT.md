@@ -939,12 +939,19 @@ nearly unchanged.
 Stopping the family short of the bi-elliptic end. At `q` = 0.4918 AU on the
 shortest re-intercept resonance the cycle doubles in **0.2969 yr against the
 paper's 0.3048** and spends **1.536 kg of launched slug per delivered kilogram
-against 2.365** -- better on both axes at once, the only strictly dominating
-result in this repository's solar-dive work. The pure bi-elliptic end (`q` =
-0.99 AU) is 6 percent *worse* on doubling than the paper's dive, so the family
-punishes the intuition that a cheaper injection must be better.
-_Avoid_: quoting the partial split as though it were phased -- its outer node
-misses the beam by 110 deg and needs a dedicated delivery.
+against 2.365** -- better on both axes the ledger scores. **That dominance is
+retired.** The ledger charged the impactors consumed at both nodes and nothing
+for delivering them to the far one, and the partial split misses the beam by
+110.57 deg so it must supply that node itself. Charged (**far-node delivery
+price**), its 1.536 kg/kg becomes **3.552**, so it no longer beats the 2.365 it
+was said to dominate. The pure bi-elliptic end (`q` = 0.99 AU) is 6 percent
+*worse* on doubling than the paper's dive, so the family punishes the intuition
+that a cheaper injection must be better -- and the partial split turns out to
+punish it too, one ledger later.
+_Avoid_: quoting 1.536 kg/kg without its missing delivery, or "dominates" at all;
+quoting the partial split as though it were phased -- its outer node misses the
+beam by 110 deg. The *phased* closures (`two_node_closure`) are beam-fed and do
+not carry this cost.
 
 **Outer-node co-location**:
 The condition that the far burn happen on a ray a returning beam is already
@@ -990,6 +997,23 @@ _Avoid_: quoting a departure's closing speed without saying which end of the bur
 it is; assuming the **closing speed** rises through every departure (it does on
 the Jovian cycle's near head-on burn and falls on this one -- the sign is set by
 the aim, not by the word "departure").
+
+**Far-node delivery price**:
+What it costs to feed the **partial split**'s outer node, which fails outer-node co-location
+by 110.57 deg and so cannot eat the beam's leftovers (`far_node_delivery_price()`, ADR 0025
+second addendum; worklist S1). **The far node does not need mass at 1.9649 AU, it needs mass
+moving at 153.35 km/s there**, against a vehicle doing 13.45 -- a Hohmann delivery arrives
+co-moving and is worth nothing as an impactor. Buying that speed from 1 AU costs **113.20 km/s
+of Earth departure excess** (co-linear, a lower bound; 125.80 for the perpendicular arrival the
+beam actually makes), nearly 6x the payload's own 19.12, and delivers **1.0%** of what is
+launched. **Charged, the partial split's 1.536 kg/kg becomes 3.552 against the paper's 2.3654 --
+it no longer beats the dive it was said to dominate.**
+So the phased split's leftovers are not a convenience but **the only affordable source**: the
+beam carries 153.0 km/s to the far node for nothing, being a climb-out from the dive, and the
+cheap way to make fast mass is to drop it down the Sun's well first.
+_Avoid_: reading S1 as a cost that would merely trim the partial split's margin (it reverses
+the verdict); pricing a delivery on *arrival* rather than on *arrival speed*; quoting the
+co-linear number as the answer -- it is the cheapest possible arrival and so a bound.
 
 **Split pad crossing**:
 The depth at which the **split dive** stops earning its own launch, on ADR 0021's committed
@@ -1162,6 +1186,11 @@ is not aiming at a depth. Contrast the prograde column, 24.09 falling to 14.62 k
 So **retrograde placement is the only admissible head-on arrival**, which makes
 **bi-elliptic co-placement** load-bearing rather than merely convenient: there both legs
 bottom out at the node by construction.
+Enforced, not merely stated: `placement_admissibility()` flags every sense, `admissible_placements()`
+returns only the two that comply, and `require_admissible()` raises at any site turning a sense
+into a trajectory. The `depth_independent` flag catches the tell automatically. This matters
+because the plunge is the **cheapest-looking** of the three (13.06 km/s against the retrograde
+placement's 15.68 at 23 R☉), so a rule left to judgement is a rule left to lose.
 _Avoid_: rejecting the plunger on its 135 deg geometry alone (true at `k` = 30, but it is
 inadmissible before it is inefficient); "fixing" the plunger by giving it a perihelion at the
 node -- keeping the 15.16 km/s of tangential speed that needs at 32 R☉ *is* the payload's own
