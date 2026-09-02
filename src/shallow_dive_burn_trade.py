@@ -560,6 +560,167 @@ def far_node_delivery_price(
     )
 
 
+@dataclass(frozen=True)
+class FarNodeFeeder:
+    """Feeding the far node with a dedicated *dive* instead of a direct launch.
+
+    :func:`far_node_delivery_price` buys the far node's 153 km/s by pushing mass
+    to it from 1 AU, which costs 113 km/s of departure excess and delivers one
+    percent.  This is the other way to make fast mass, and it is the way the
+    architecture already makes it everywhere else: **drop it down the Sun's well
+    and collect it on the climb-out**.  A feeder launched onto the same dive the
+    payload flies crosses the far node radius at the same speed the split's own
+    beam does -- because it *is* the same dive -- so it meets the requirement by
+    construction rather than by brute force.
+
+    The feeder is one-way and expendable, so unlike the payload's dive it carries
+    no **Earth re-intercept** condition; it needs only to put its beam ray
+    through the far node when the vehicle is there.  It delivers nothing at
+    Earth, being 110 degrees off, and its whole cost is charged here.
+
+    Attributes:
+        feeder_solar_radii: Perihelion of the feeder's own dive.
+        beam_speed_at_node: Heliocentric speed its beam carries to the node.
+        closing_speed: That against the vehicle, vectorially.
+        required_closing_speed: What the outer burn needs.
+        meets_requirement: Whether the feeder is fast enough.
+        departure_excess: The feeder's own Earth departure (km/s).
+        departure_delivered_fraction: What survives it.
+        node_survival: What survives the feeder's perihelion boost.
+        slug_per_kg_placed: Spent slug per kilogram put at the far node.
+        direct_slug_per_kg_placed: The same for a direct high-speed launch.
+        cheaper_by: The ratio between them.
+        outer_impactor_demand: Impactor kilograms the outer node eats per
+            kilogram the loop delivers.
+        extra_slug_per_delivered_kg: What the feeder adds to the split's ledger.
+        split_slug_per_delivered_kg: The partial split before it.
+        charged_slug_per_delivered_kg: And after.
+        single_impulse_slug_per_delivered_kg: The number it has to beat.
+        still_beats_single_impulse: Whether it does.
+    """
+
+    feeder_solar_radii: float
+    beam_speed_at_node: float
+    closing_speed: float
+    required_closing_speed: float
+    meets_requirement: bool
+    departure_excess: float
+    departure_delivered_fraction: float
+    node_survival: float
+    slug_per_kg_placed: float
+    direct_slug_per_kg_placed: float
+    cheaper_by: float
+    outer_impactor_demand: float
+    extra_slug_per_delivered_kg: float
+    split_slug_per_delivered_kg: float
+    charged_slug_per_delivered_kg: float
+    single_impulse_slug_per_delivered_kg: float
+    still_beats_single_impulse: bool
+
+
+def far_node_feeder_price(
+    feeder_solar_radii: float = 4.0,
+    periapsis_burn: float = _PERIAPSIS_BURN,
+    slug_ratio: float = DEFAULT_SLUG_RATIO,
+    periapsis_slug_ratio: float = DEFAULT_PERIAPSIS_SLUG_RATIO,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> FarNodeFeeder:
+    """Feed the partial split's far node with its own dive, and re-score it.
+
+    Slug is counted the way ``split_dive_ledger`` counts it -- spent slug only,
+    the surviving mass being the impactor the ledger already tracks.  Per
+    kilogram entering the feeder's Earth burn it spends ``1 - f`` there and
+    ``f * (1 - s)`` at its perihelion, and ``f * s`` arrives, so the cost per
+    kilogram placed is ``((1 - f) + f * (1 - s)) / (f * s)``.
+
+    Args:
+        feeder_solar_radii: Perihelion of the feeder's dive.  Shallower feeders
+            climb out slower and stop meeting the node's closing speed.
+        periapsis_burn: Boost the feeder takes at its perihelion (km/s).
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        periapsis_slug_ratio: Slug ratio at the feeder's own node.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`FarNodeFeeder`.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    ledger = partial_split_optimum(params=p)
+    geometry = ledger.geometry
+    radius = geometry.node_radius
+    eccentricity = (geometry.outbound_aphelion - geometry.outbound_perihelion) / (
+        geometry.outbound_aphelion + geometry.outbound_perihelion
+    )
+    axis = 0.5 * (geometry.outbound_perihelion + geometry.outbound_aphelion)
+    momentum = float(np.sqrt(_MU_SUN * axis * (1.0 - eccentricity * eccentricity)))
+    vehicle_tangential = momentum / radius
+    vehicle_radial = float(
+        np.sqrt(
+            max(
+                0.0,
+                _MU_SUN * (2.0 / radius - 1.0 / axis)
+                - vehicle_tangential * vehicle_tangential,
+            )
+        )
+    )
+
+    perihelion = feeder_solar_radii * _SOLAR_RADIUS
+    aphelion, boost, aim, _ = resonant_dive_at_depth(feeder_solar_radii, periapsis_burn)
+    beam = returning_beam(0.5 * (aphelion + perihelion), perihelion, periapsis_burn)
+    tangential, radial = speed_components_at_radius(beam, _MU_SUN, radius)
+    closing = float(np.hypot(tangential - vehicle_tangential, radial - vehicle_radial))
+    delivered = departure_nozzle_ledger(
+        boost,
+        aim,
+        geometry.stream_excess,
+        geometry.stream_axis,
+        slug_ratio,
+        jet_energy_efficiency,
+        p,
+    ).delivered_fraction
+    survival = dive_node(
+        feeder_solar_radii,
+        periapsis_burn,
+        periapsis_slug_ratio,
+        jet_energy_efficiency,
+        p,
+    ).survival
+    per_placed = ((1.0 - delivered) + delivered * (1.0 - survival)) / (
+        delivered * survival
+    )
+    direct = far_node_delivery_price(
+        colinear=True,
+        slug_ratio=slug_ratio,
+        jet_energy_efficiency=jet_energy_efficiency,
+        params=p,
+    )
+    demand = direct.outer_impactor_demand
+    extra = demand * per_placed
+    charged = ledger.slug_per_delivered_kg + extra
+    comparator = direct.single_impulse_slug_per_delivered_kg
+    return FarNodeFeeder(
+        feeder_solar_radii=feeder_solar_radii,
+        beam_speed_at_node=float(np.hypot(tangential, radial)),
+        closing_speed=closing,
+        required_closing_speed=ledger.outer_closing_speed,
+        meets_requirement=closing >= ledger.outer_closing_speed - 0.5,
+        departure_excess=boost,
+        departure_delivered_fraction=delivered,
+        node_survival=survival,
+        slug_per_kg_placed=per_placed,
+        direct_slug_per_kg_placed=direct.extra_slug_per_delivered_kg / demand,
+        cheaper_by=(direct.extra_slug_per_delivered_kg / demand) / per_placed,
+        outer_impactor_demand=demand,
+        extra_slug_per_delivered_kg=extra,
+        split_slug_per_delivered_kg=ledger.slug_per_delivered_kg,
+        charged_slug_per_delivered_kg=charged,
+        single_impulse_slug_per_delivered_kg=comparator,
+        still_beats_single_impulse=charged < comparator,
+    )
+
+
 # --------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------

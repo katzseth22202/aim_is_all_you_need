@@ -208,11 +208,64 @@ Buying that speed from 1 AU costs:
     that at a sane price -- the cheap way to make fast mass is to drop it down the
     Sun's gravity well first, which is what the beam already is.
 
+**But that prices only one way of feeding it, and it is the wrong way.** See the
+third addendum, which reverses this verdict.
+
+## Third addendum: a feeder dive is twenty times cheaper, and revives the partial split
+
+The second addendum priced the far node's supply as a **direct high-speed launch
+from 1 AU**, and concluded the partial split loses. That priced the obvious route
+rather than the architecture's own route, and the difference is a factor of
+twenty.
+
+The architecture never makes fast mass by pushing it. It makes fast mass by
+**dropping it down the Sun's well and collecting it on the climb-out** -- that is
+what the beam is. A **feeder** launched onto the same dive the payload flies
+crosses the far node radius carrying the same speed the split's own beam does,
+because it is the same dive:
+
+| feeder depth | closing speed at the node | needed | slug per kg placed |
+| ---: | ---: | ---: | ---: |
+| **4 R_sun** | **153.29** | 153.35 | **4.706** |
+| 6 | 139.17 | 153.35 | 5.116 |
+| 8 | 129.98 | 153.35 | 5.487 |
+
+18. **A 4 solar-radii feeder meets the requirement essentially exactly** (153.29
+    against 153.35), which is not a coincidence: it is the dive that makes the
+    split's own beam.
+19. **It costs 4.706 kg of spent slug per kilogram placed, against the direct
+    launch's 96.1 -- twenty times cheaper.** Slug is counted the way
+    `split_dive_ledger` counts it: per kilogram entering the feeder's Earth burn
+    it spends `1 - f` there and `f * (1 - s)` at its perihelion, and `f * s`
+    arrives, so the cost per kilogram placed is `((1-f) + f(1-s)) / (f*s)`.
+20. **The partial split's 1.5358 kg/kg becomes 1.6345, not 3.552.** Against the
+    paper's 2.3654, **it still beats it.** S1's settling question answers *yes*
+    on this route and *no* on the other, so the honest answer is that **the
+    verdict turns entirely on how the far node is fed**, and the spread between
+    the two answers is larger than the quantity being decided.
+21. **A shallower feeder does not help twice over.** It climbs out too slowly to
+    meet the closing speed *and* costs more per kilogram placed, because node
+    survival falls faster than the departure gets cheaper. The feeder's depth is
+    set by the speed it must carry, not by its own economy.
+
+**What the feeder is not charged for, and this is the open edge.** It is one-way
+and expendable, so unlike the payload's dive it carries no **Earth re-intercept**
+condition -- it needs only to put its beam ray through the far node when the
+vehicle is there. That is two conditions (longitude and epoch) on at least two
+free knobs (launch date, departure aim), so discrete solutions should exist by
+the same argument as every other closure here. **But no such closure has been
+solved.** Until one is, the feeder is a costed route rather than a demonstrated
+one, and this addendum's verdict inherits that.
+
+Also uncharged: the feeder's own perihelion node needs an **opposing stream**,
+which ADR 0024 prices at under 1.2 percent, and the feeder delivers nothing at
+Earth -- the latter is already charged, since its entire cost is attributed here.
+
 **Consequence for the companion paper.** Its held sentence -- "better on both
-axes the ledger scores" -- should not be lifted to dominance. It should be
-**retired**: charged for its own far node, the partial split is worse than the
-dive it was said to dominate. The hold was correct and the answer is the
-opposite of the one it was waiting for.
+axes the ledger scores" -- should be **neither lifted nor retired**. It should be
+kept, with the reason made explicit: the partial split's case rests on a far-node
+supply that is affordable only as a feeder dive, and that feeder's phasing has
+not been solved.
 
 ## Consequences
 

@@ -16,6 +16,7 @@ from src.shallow_dive_burn_trade import (
     SPLIT_REUSE,
     conducting_burn,
     far_node_delivery_price,
+    far_node_feeder_price,
     shallow_dive_row,
     single_impulse_slug_per_delivered_kg,
     split_pad_crossing,
@@ -312,3 +313,48 @@ def test_the_verdict_holds_on_the_cheapest_possible_arrival():
     # Both lose, so the verdict does not rest on the geometry assumption.
     assert not cheap.still_beats_single_impulse
     assert not real.still_beats_single_impulse
+
+
+@pytest.mark.slow
+def test_a_feeder_dive_is_twenty_times_cheaper_than_pushing_mass_out():
+    """The architecture's own trick: drop mass down the well, collect the speed."""
+    feeder = far_node_feeder_price(4.0)
+    assert feeder.slug_per_kg_placed == pytest.approx(4.706, abs=0.02)
+    assert feeder.direct_slug_per_kg_placed == pytest.approx(96.1, abs=1.0)
+    assert feeder.cheaper_by > 20.0
+
+
+@pytest.mark.slow
+def test_a_four_solar_radii_feeder_meets_the_nodes_closing_speed():
+    """No coincidence: it is the same dive that makes the split's own beam."""
+    feeder = far_node_feeder_price(4.0)
+    assert feeder.meets_requirement
+    assert feeder.closing_speed == pytest.approx(feeder.required_closing_speed, abs=0.1)
+
+
+@pytest.mark.slow
+def test_a_shallower_feeder_climbs_out_too_slowly():
+    """The feeder's depth is set by the speed it must carry, not by its own cost."""
+    for depth in (6.0, 8.0):
+        feeder = far_node_feeder_price(depth)
+        assert not feeder.meets_requirement
+        assert feeder.closing_speed < feeder.required_closing_speed
+    # And it is not even cheaper to go shallow, because node survival falls.
+    assert (
+        far_node_feeder_price(8.0).slug_per_kg_placed
+        > far_node_feeder_price(4.0).slug_per_kg_placed
+    )
+
+
+@pytest.mark.slow
+def test_the_feeder_revives_the_partial_split():
+    """S1's verdict turns entirely on how the far node is fed."""
+    feeder = far_node_feeder_price(4.0)
+    direct = far_node_delivery_price(colinear=True)
+    assert feeder.charged_slug_per_delivered_kg == pytest.approx(1.6345, abs=0.01)
+    assert feeder.still_beats_single_impulse
+    # The same architecture, the same missing cost, opposite verdicts.
+    assert not direct.still_beats_single_impulse
+    assert direct.charged_slug_per_delivered_kg > 2.0 * (
+        feeder.charged_slug_per_delivered_kg
+    )

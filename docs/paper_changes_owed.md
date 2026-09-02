@@ -194,42 +194,48 @@ derived:
 
 ---
 
-## P5b. Retire the partial split's dominance, do not lift it
+## P5b. State the partial split's condition, do not state a verdict
 
-Backing: ADR 0025 second addendum. **Answers S1, and answers it the other way
-round from what the hold was waiting for.**
+Backing: ADR 0025 second and third addenda. **Answers S1, and the answer is that
+the question was underdetermined.**
 
 `sec:split_dive_growth`'s held sentence says "better on both axes the ledger
 scores", pending a price for delivering impactors to the far node. That price is
-now in, and it does not lift the hold -- it **retires the claim**.
+now in, and it comes out **two different ways depending on the route** -- by a
+factor larger than the quantity being decided.
 
 The trap is that the far node does not need mass at 1.9649 AU. It needs mass
 **moving at 153.35 km/s** there, against a vehicle doing 13.45. A Hohmann
 delivery arrives nearly co-moving and is worth nothing as an impactor.
 
-| arrival | impactor speed | Earth departure | delivered | total kg/kg | beats 2.365? |
-| :--- | ---: | ---: | ---: | ---: | :--- |
-| co-linear (lower bound) | 139.91 | **113.20** | 1.0% | **3.552** | no |
-| perpendicular (real) | 152.76 | 125.80 | 0.6% | 4.863 | no |
+| route | slug per kg placed | partial split | beats 2.3654? |
+| :--- | ---: | ---: | :--- |
+| push it out from 1 AU | **96.1** | 3.552 | no |
+| **feeder dive to 4 R_sun** | **4.706** | **1.6345** | **yes** |
 
-- The delivery costs **nearly six times the payload's own departure** (113.20
-  km/s against 19.12) and delivers **1 percent** of what is launched.
-- **1.536 kg/kg becomes 3.552**, against the paper's own dive at 2.3654 -- which
-  this repository now computes from the degenerate split rather than quoting. The
-  partial split **no longer beats the dive it was said to dominate**.
-- The verdict does not rest on the arrival geometry: co-linear is the cheapest
-  possible arrival and therefore a bound, and the real perpendicular arrival
-  loses by more.
-- **So the phased split's "leftovers" are not a convenience but the only
-  affordable source.** The beam carries 153.0 km/s to the far node for nothing,
-  being a climb-out from the dive; nothing launched from 1 AU matches that at a
-  sane price, because the cheap way to make fast mass is to drop it down the
-  Sun's well first.
+**Pushing.** Buying 140 km/s at 1.9649 AU from 1 AU takes 113.20 km/s of Earth
+departure excess -- nearly six times the payload's own 19.12 -- and delivers
+1.0 percent of what is launched. On that route the partial split loses.
 
-**What the paper should do.** Strike the dominance framing rather than
-strengthening it, and keep the partial split only as the family's rate optimum
-*before* delivery is charged, clearly labelled as such. `CONTEXT.md`'s **Partial
-split** entry in this repository has been corrected the same way.
+**Feeding.** But the architecture never makes fast mass by pushing it. It drops
+mass down the Sun's well and collects it on the climb-out, which is what the beam
+*is*. A feeder launched onto the same 4 solar-radii dive the payload flies
+arrives at the far node with **153.29 km/s** of closing speed against the 153.35
+needed -- not a coincidence, it is the dive that makes the split's own beam. It
+costs **twenty times less**, and on that route the partial split still wins.
+
+**So the honest statement is conditional.** The partial split's case rests on a
+far-node supply that is affordable only as a feeder dive. The feeder is one-way
+and expendable, so unlike the payload's dive it carries no Earth re-intercept
+condition -- it needs only its beam ray through the far node at the right epoch,
+two conditions on at least two free knobs, which should give discrete solutions
+by the same argument as every other closure here. **But no such closure has been
+solved**, so the feeder is costed and not demonstrated.
+
+**What the paper should do.** Keep the held sentence, and make its reason
+explicit rather than either lifting or retiring it: the claim rests on a feeder
+whose phasing is unsolved. `CONTEXT.md`'s **Partial split** and **Far-node
+delivery price** entries in this repository say the same.
 
 ---
 
@@ -254,7 +260,9 @@ Either fix the reference or restore the item.
 ## Worklist status
 
 All three items the paper deferred are now answered. **S1** (P5b): the far-node
-delivery costs 113.20 km/s and reverses the partial split's verdict. **S2** (P3,
+supply costs 96.1 kg/kg pushed or 4.706 fed, and the partial split loses on the
+first and wins on the second, so the claim is conditional on a feeder whose
+phasing is unsolved. **S2** (P3,
 P4): the direct route can fly shallow, and the stated node survival is the larger
 error. **S3** (P2): the second arrival is uncharged and worth under 1.2 percent.
 
@@ -268,7 +276,7 @@ yet" and can now be filled in from P2 to P5b.
   (P5b) already settles the architecture, and a pad number would only restate it.
 - The Jovian placement route of P2 has had **no real-ephemeris audit** (the ADR
   0011 treatment); it is a longitude and epoch match in a circular coplanar model.
-- The far-node delivery of P5b is priced as a **direct high-speed launch from
-  1 AU**. A feeder that dives first and is caught on its climb-out would be
-  cheaper, but that is a second solar-dive chain rather than a delivery, and
-  nothing has costed one.
+- **The feeder closure of P5b is unsolved.** Its beam ray must pass through the
+  far node at the right epoch: two conditions on at least two knobs, so discrete
+  solutions are expected, but none has been found. This is the single item on
+  which the partial split's whole case now rests.

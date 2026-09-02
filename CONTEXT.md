@@ -939,16 +939,19 @@ nearly unchanged.
 Stopping the family short of the bi-elliptic end. At `q` = 0.4918 AU on the
 shortest re-intercept resonance the cycle doubles in **0.2969 yr against the
 paper's 0.3048** and spends **1.536 kg of launched slug per delivered kilogram
-against 2.365** -- better on both axes the ledger scores. **That dominance is
-retired.** The ledger charged the impactors consumed at both nodes and nothing
-for delivering them to the far one, and the partial split misses the beam by
-110.57 deg so it must supply that node itself. Charged (**far-node delivery
-price**), its 1.536 kg/kg becomes **3.552**, so it no longer beats the 2.365 it
-was said to dominate. The pure bi-elliptic end (`q` = 0.99 AU) is 6 percent
+against 2.365** -- better on both axes the ledger scores. **Whether that is
+dominance depends entirely on how its far node is fed.** The ledger charged the
+impactors consumed at both nodes and nothing for delivering them to the far one,
+and the partial split misses the beam by 110.57 deg so it must supply that node
+itself. Pushed out from 1 AU it costs 3.552 kg/kg and loses; fed by a **feeder
+dive** it costs **1.6345** and still wins. The spread between the two answers is
+larger than the quantity being decided, and the feeder's phasing is unsolved, so
+**state the condition, do not state a verdict**. The pure bi-elliptic end (`q` = 0.99 AU) is 6 percent
 *worse* on doubling than the paper's dive, so the family punishes the intuition
 that a cheaper injection must be better -- and the partial split turns out to
 punish it too, one ledger later.
-_Avoid_: quoting 1.536 kg/kg without its missing delivery, or "dominates" at all;
+_Avoid_: quoting 1.536 kg/kg without saying how the far node is fed; "dominates"
+unqualified, in either direction;
 quoting the partial split as though it were phased -- its outer node misses the
 beam by 110 deg. The *phased* closures (`two_node_closure`) are beam-fed and do
 not carry this cost.
@@ -1006,14 +1009,21 @@ moving at 153.35 km/s there**, against a vehicle doing 13.45 -- a Hohmann delive
 co-moving and is worth nothing as an impactor. Buying that speed from 1 AU costs **113.20 km/s
 of Earth departure excess** (co-linear, a lower bound; 125.80 for the perpendicular arrival the
 beam actually makes), nearly 6x the payload's own 19.12, and delivers **1.0%** of what is
-launched. **Charged, the partial split's 1.536 kg/kg becomes 3.552 against the paper's 2.3654 --
-it no longer beats the dive it was said to dominate.**
-So the phased split's leftovers are not a convenience but **the only affordable source**: the
-beam carries 153.0 km/s to the far node for nothing, being a climb-out from the dive, and the
-cheap way to make fast mass is to drop it down the Sun's well first.
-_Avoid_: reading S1 as a cost that would merely trim the partial split's margin (it reverses
-the verdict); pricing a delivery on *arrival* rather than on *arrival speed*; quoting the
-co-linear number as the answer -- it is the cheapest possible arrival and so a bound.
+launched. Charged that way the partial split's 1.536 kg/kg becomes **3.552** and it loses.
+**But pushing is the wrong way to make fast mass.** A **feeder dive** -- launched onto the
+same 4 R☉ dive the payload flies -- crosses the far node carrying 153.29 km/s of closing
+speed against the 153.35 needed, because it *is* the dive that makes the split's own beam.
+It costs **4.706 kg of spent slug per kg placed against the direct launch's 96.1, twenty
+times cheaper**, and the partial split becomes **1.6345 kg/kg -- still beating 2.3654**.
+So the answer turns on the route, and the spread is larger than the quantity being decided.
+The feeder is one-way, so unlike the payload's dive it needs no **Earth re-intercept** --
+only its beam ray through the far node at the right epoch, two conditions on two knobs.
+**No such closure has been solved**, so the feeder is costed but not demonstrated.
+_Avoid_: quoting either verdict without its route; pricing a delivery on *arrival* rather
+than on *arrival speed*; taking the direct launch's 3.552 as the answer (it prices the
+obvious route, not the architecture's own); treating the feeder as settled while its phasing
+is unsolved. A shallower feeder helps neither way -- it climbs out too slowly *and* costs
+more per kg placed, because node survival falls faster than the departure cheapens.
 
 **Split pad crossing**:
 The depth at which the **split dive** stops earning its own launch, on ADR 0021's committed
