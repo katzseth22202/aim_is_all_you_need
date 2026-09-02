@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive opposing-stream shallow-dive two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -42,6 +42,9 @@ nozzle:  ## Run the ADR 0009 nozzle analysis (compute-intensive; not part of 'al
 
 resonance:  ## Audit 200 years of real-orbit 2S windows and the 2S/3S fallback
 	python -m src.real_orbit_resonance --years 200
+
+sep-split:  ## Price the 20-day split's correction burns, methalox vs argon SEP (ADR 0026)
+	python -m src.sep_split_correction
 
 two-wave:  ## Price the real-orbit adaptive 2S/3S cadence on the two-wave nozzle ledger
 	python -m src.two_wave_growth
