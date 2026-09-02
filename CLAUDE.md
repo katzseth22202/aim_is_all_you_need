@@ -50,6 +50,7 @@ make dive-depth     # what a shallower (32 R☉) dive costs (ADR 0020)
 make split-dive     # splitting the dive injection across two nodes (ADR 0023)
 make opposing-stream # charging the dive node's second arrival (ADR 0024)
 make shallow-dive   # what a shallow dive costs the direct route (ADR 0025)
+make sep-split      # can argon SEP buy the 20-day split's corrections? (ADR 0026)
 
 # Conda environment
 conda env create -f environment.yml
