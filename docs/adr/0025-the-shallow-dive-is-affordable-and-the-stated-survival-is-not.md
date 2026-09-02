@@ -170,6 +170,50 @@ The **partial split** is not scored here. Its far node fails outer-node
 co-location, so it needs a dedicated impactor delivery that nothing has priced
 (worklist S1), and a pad ledger that omits that delivery would flatter it.
 
+## Second addendum: the partial split's dominance does not survive its own delivery
+
+Worklist item S1, which had been recorded as a flag rather than work on the
+grounds that nothing the paper claims depends on it. That remains true of the
+paper. It is not true of the **partial split**, whose entire case is a claim
+about launched mass, and which cannot be scored at all while the cost is missing.
+
+`split_dive_ledger()` charges the impactors *consumed* at both nodes and nothing
+for getting them to the far one. The partial split (outbound perihelion 0.4918
+AU) fails outer-node co-location by 110.57 degrees, so the returning beam does
+not reach its far node at 1.9649 AU and that node must be supplied.
+
+**The trap, and the result.** The far node does not need mass at 1.9649 AU. It
+needs mass **moving at 153.35 km/s** there, against a vehicle doing 13.45. A
+Hohmann delivery arrives nearly co-moving and is worth nothing as an impactor.
+Buying that speed from 1 AU costs:
+
+| arrival | impactor speed | Earth departure | delivered | extra slug | total | beats 2.365? |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| co-linear (lower bound) | 139.91 | **113.20** | 0.0103 | 2.016 | **3.552** | no |
+| perpendicular (real) | 152.76 | 125.80 | 0.0063 | 3.327 | 4.863 | no |
+
+14. **The delivery costs about six times the payload's own departure**, 113.20
+    km/s against 19.12, and delivers **1 percent** of what is launched.
+15. **The partial split's 1.536 kg/kg becomes 3.552**, against the paper's own
+    dive at 2.3654 (computed from the degenerate split, not quoted). **It no
+    longer beats it.** S1's settling question -- "whether the partial split still
+    beats the single-impulse dive's 2.365 kg/kg once the far node's delivery is
+    added to its 1.536" -- answers **no**.
+16. **The verdict does not rest on the arrival geometry.** Co-linear is the
+    cheapest possible arrival and therefore a lower bound; the perpendicular
+    arrival the beam actually makes costs more and loses by more.
+17. **So the phased split's "leftovers" are not a convenience, they are the only
+    affordable source.** The beam carries 153.0 km/s to the far node for nothing,
+    because it is a climb-out from the dive. Nothing launched from 1 AU can match
+    that at a sane price -- the cheap way to make fast mass is to drop it down the
+    Sun's gravity well first, which is what the beam already is.
+
+**Consequence for the companion paper.** Its held sentence -- "better on both
+axes the ledger scores" -- should not be lifted to dominance. It should be
+**retired**: charged for its own far node, the partial split is worse than the
+dive it was said to dominate. The hold was correct and the answer is the
+opposite of the one it was waiting for.
+
 ## Consequences
 
 S2 lifts, and it lifts *against* the stronger claim. `sec:self_cooling_departure`

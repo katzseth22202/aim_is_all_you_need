@@ -15,7 +15,9 @@ from src.shallow_dive_burn_trade import (
     SPLIT_PAD_BRACKET,
     SPLIT_REUSE,
     conducting_burn,
+    far_node_delivery_price,
     shallow_dive_row,
+    single_impulse_slug_per_delivered_kg,
     split_pad_crossing,
     split_pad_row,
 )
@@ -256,3 +258,57 @@ def test_the_split_pad_search_boxes_are_recorded():
     """Both brackets pinned, per the ADR 0007 lesson."""
     assert SPLIT_PAD_BRACKET == (4.0, 8.0)
     assert SPLIT_REUSE == (5, 8)
+
+
+# --------------------------------------------------------------------------
+# Feeding the partial split's far node (worklist S1)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_the_comparator_is_computed_not_quoted():
+    """2.365 comes from the degenerate split, which is the paper's own dive."""
+    assert single_impulse_slug_per_delivered_kg() == pytest.approx(2.3654, abs=1e-3)
+
+
+@pytest.mark.slow
+def test_the_far_node_needs_speed_not_mass():
+    """The trap: a gentle delivery arrives co-moving and is worth nothing."""
+    row = far_node_delivery_price()
+    assert row.node_radius_au == pytest.approx(1.9649, abs=1e-3)
+    assert row.vehicle_speed == pytest.approx(13.4, abs=0.2)
+    assert row.required_closing_speed == pytest.approx(153.35, abs=0.1)
+    # The beam brings that for free, being a climb-out from the dive.
+    assert row.beam_speed_at_node == pytest.approx(153.0, abs=0.5)
+
+
+@pytest.mark.slow
+def test_buying_that_speed_from_one_au_is_prohibitive():
+    """~113 km/s of departure excess, delivering one percent of what is launched."""
+    row = far_node_delivery_price(colinear=True)
+    assert row.departure_excess == pytest.approx(113.2, abs=0.5)
+    assert row.delivered_fraction < 0.02
+    # Nearly six times the payload's own 19.12 km/s departure.
+    assert row.departure_excess / 19.118 > 5.5
+
+
+@pytest.mark.slow
+def test_the_partial_splits_dominance_does_not_survive_its_own_delivery():
+    """S1's settling question, and it settles against the partial split."""
+    row = far_node_delivery_price(colinear=True)
+    assert row.split_slug_per_delivered_kg == pytest.approx(1.536, abs=0.01)
+    assert row.charged_slug_per_delivered_kg == pytest.approx(3.552, abs=0.02)
+    assert not row.still_beats_single_impulse
+
+
+@pytest.mark.slow
+def test_the_verdict_holds_on_the_cheapest_possible_arrival():
+    """Co-linear is a lower bound; the real perpendicular arrival costs more."""
+    cheap = far_node_delivery_price(colinear=True)
+    real = far_node_delivery_price(colinear=False)
+    assert real.impactor_speed > cheap.impactor_speed
+    assert real.departure_excess > cheap.departure_excess
+    assert real.charged_slug_per_delivered_kg == pytest.approx(4.863, abs=0.03)
+    # Both lose, so the verdict does not rest on the geometry assumption.
+    assert not cheap.still_beats_single_impulse
+    assert not real.still_beats_single_impulse

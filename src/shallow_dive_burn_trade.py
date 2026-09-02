@@ -55,15 +55,20 @@ import numpy as np
 from scipy.optimize import brentq
 
 from .bielliptic_dive_split import (
+    _DIVE_PERIAPSIS,
     _MU_SUN,
     _PERIAPSIS_BURN,
     _SOLAR_RADIUS,
     DEFAULT_EXPANSION_MARGIN,
     PAD_ADMISSIBLE_DEPTH,
     direct_departure_conduction_depth,
+    partial_split_optimum,
+    reintercept_closing_aphelion,
     resonant_dive_at_depth,
     returning_beam,
     speed_components_at_radius,
+    split_dive_geometry,
+    split_dive_ledger,
     two_node_closure,
 )
 from .jovian_solar_dive_cycle import (
@@ -73,6 +78,7 @@ from .jovian_solar_dive_cycle import (
     _FlybyParams,
     _powered_flyby_params,
     cycle_growth_ledger,
+    departure_nozzle_ledger,
     launch_ledger_verdict,
 )
 from .solar_dive_depth_trade import (
@@ -397,6 +403,164 @@ def split_pad_crossing(
 
 
 # --------------------------------------------------------------------------
+# What the partial split's far node actually costs to feed
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FarNodeDelivery:
+    """Feeding the **partial split**'s far node with a dedicated wave.
+
+    The partial split does not satisfy outer-node co-location, so the returning
+    beam does not reach its far node at 1.9649 AU and the node must be supplied.
+    ``split_dive_ledger()`` charges the impactors *consumed* there and nothing
+    for getting them there.  This prices it (worklist S1).
+
+    The trap the naive reading falls into: the far node does not need mass at
+    1.9649 AU, it needs mass **moving at 153 km/s** there.  A Hohmann delivery
+    arrives nearly co-moving with the vehicle and is worth nothing as an
+    impactor.  Buying that speed from 1 AU is what costs, and the only cheap
+    source of it is a solar dive -- which is exactly what the beam already is.
+
+    Attributes:
+        node_radius_au: The far node's radius (AU).
+        geometry: ``"co-linear"`` (the cheapest arrival, a lower bound) or
+            ``"perpendicular"`` (the beam's actual near-radial arrival against a
+            mostly tangential vehicle).
+        vehicle_speed: The vehicle's own speed at the node (km/s).
+        required_closing_speed: What the outer burn needs (km/s).
+        impactor_speed: Heliocentric speed an impactor must carry there (km/s).
+        departure_excess: Earth-relative excess that buys it (km/s).
+        delivered_fraction: What survives that departure burn.
+        outer_impactor_demand: Impactor kilograms the outer node eats, per
+            kilogram the loop delivers.
+        extra_slug_per_delivered_kg: Launched slug the delivery adds.
+        split_slug_per_delivered_kg: The partial split's figure before it.
+        charged_slug_per_delivered_kg: And after.
+        single_impulse_slug_per_delivered_kg: The paper's own dive, the number
+            the partial split has to beat.
+        still_beats_single_impulse: Whether it does, once charged.
+        beam_speed_at_node: What the beam carries there for free, for contrast.
+    """
+
+    node_radius_au: float
+    geometry: str
+    vehicle_speed: float
+    required_closing_speed: float
+    impactor_speed: float
+    departure_excess: float
+    delivered_fraction: float
+    outer_impactor_demand: float
+    extra_slug_per_delivered_kg: float
+    split_slug_per_delivered_kg: float
+    charged_slug_per_delivered_kg: float
+    single_impulse_slug_per_delivered_kg: float
+    still_beats_single_impulse: bool
+    beam_speed_at_node: float
+
+
+def single_impulse_slug_per_delivered_kg(
+    params: Optional[_FlybyParams] = None,
+) -> float:
+    """The paper's own dive on the split's currency, computed not quoted.
+
+    ``split_dive_geometry`` with the outbound perihelion *at* the dive perihelion
+    and the injection at aphelion makes the outer burn zero, so the loop reduces
+    exactly to the single-impulse resonant dive (pinned in
+    ``test_the_split_reduces_to_the_papers_dive_when_nothing_is_split``).  Taking
+    the comparator from there rather than hardcoding 2.365 keeps both sides of
+    the comparison on one device.
+
+    Args:
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        Launched slug per delivered kilogram, ~2.3654.
+    """
+    aphelion = reintercept_closing_aphelion(_DIVE_PERIAPSIS, 0, params=params)
+    geometry = split_dive_geometry(_DIVE_PERIAPSIS, aphelion, 180.0, params=params)
+    if geometry is None:
+        raise ValueError("the degenerate split geometry did not build")
+    return split_dive_ledger(geometry, params=params).slug_per_delivered_kg
+
+
+def far_node_delivery_price(
+    colinear: bool = True,
+    slug_ratio: float = DEFAULT_SLUG_RATIO,
+    jet_energy_efficiency: float = DEFAULT_JET_ENERGY_EFFICIENCY,
+    params: Optional[_FlybyParams] = None,
+) -> FarNodeDelivery:
+    """Charge the partial split for delivering its own far-node impactors.
+
+    Args:
+        colinear: Take the impactor as arriving along the vehicle's own
+            velocity, which needs the least speed and so is a *lower bound* on
+            the cost.  False uses the perpendicular arrival the beam actually
+            makes, which needs more.
+        slug_ratio: Kilograms of slug per kilogram of arriving impactor.
+        jet_energy_efficiency: The paper's ``eta_jet**2``, in (0, 1].
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        The :class:`FarNodeDelivery`.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    ledger = partial_split_optimum(params=p)
+    geometry = ledger.geometry
+    radius = geometry.node_radius
+    axis = 0.5 * (geometry.outbound_perihelion + geometry.outbound_aphelion)
+    vehicle = float(np.sqrt(_MU_SUN * (2.0 / radius - 1.0 / axis)))
+    closing = ledger.outer_closing_speed
+    impactor = (
+        closing - vehicle
+        if colinear
+        else float(np.sqrt(closing * closing - vehicle * vehicle))
+    )
+    energy = 0.5 * impactor * impactor - _MU_SUN / radius
+    at_earth = float(np.sqrt(2.0 * (energy + _MU_SUN / p.r_earth_orbit)))
+    departure = at_earth - p.v_earth_orbit
+    delivered = departure_nozzle_ledger(
+        departure,
+        0.0,
+        geometry.stream_excess,
+        geometry.stream_axis,
+        slug_ratio,
+        jet_energy_efficiency,
+        p,
+    ).delivered_fraction
+    demand = (
+        (1.0 - ledger.outer_delivered_fraction)
+        / ledger.outer_delivered_fraction
+        / slug_ratio
+    )
+    extra = demand * (1.0 - delivered) / delivered
+    charged = ledger.slug_per_delivered_kg + extra
+    comparator = single_impulse_slug_per_delivered_kg(p)
+    beam = returning_beam(
+        0.5 * (geometry.outbound_aphelion + geometry.dive_perihelion),
+        geometry.dive_perihelion,
+        geometry.periapsis_burn,
+    )
+    tangential, radial = speed_components_at_radius(beam, _MU_SUN, radius)
+    return FarNodeDelivery(
+        node_radius_au=radius / 1.495978707e8,
+        geometry="co-linear" if colinear else "perpendicular",
+        vehicle_speed=vehicle,
+        required_closing_speed=closing,
+        impactor_speed=impactor,
+        departure_excess=departure,
+        delivered_fraction=delivered,
+        outer_impactor_demand=demand,
+        extra_slug_per_delivered_kg=extra,
+        split_slug_per_delivered_kg=ledger.slug_per_delivered_kg,
+        charged_slug_per_delivered_kg=charged,
+        single_impulse_slug_per_delivered_kg=comparator,
+        still_beats_single_impulse=charged < comparator,
+        beam_speed_at_node=float(np.hypot(tangential, radial)),
+    )
+
+
+# --------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------
 
@@ -487,6 +651,29 @@ def _pad_table(depths: Sequence[float] = DEPTH_GRID) -> str:
     return "\n".join(lines)
 
 
+def _delivery_table() -> str:
+    """What feeding the partial split's far node costs, both arrival geometries.
+
+    Returns:
+        A fixed-width table.
+    """
+    lines = [
+        f"{'arrival':>15} {'v_imp':>8} {'Earth dep':>10} {'delivered':>10} "
+        f"{'extra slug':>11} {'total kg/kg':>12} {'beats 2.365?':>13}",
+        "-" * 84,
+    ]
+    for colinear in (True, False):
+        row = far_node_delivery_price(colinear=colinear)
+        lines.append(
+            f"{row.geometry:>15} {row.impactor_speed:8.2f} "
+            f"{row.departure_excess:10.2f} {row.delivered_fraction:10.6f} "
+            f"{row.extra_slug_per_delivered_kg:11.3f} "
+            f"{row.charged_slug_per_delivered_kg:12.3f} "
+            f"{('yes' if row.still_beats_single_impulse else 'NO'):>13}"
+        )
+    return "\n".join(lines)
+
+
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser.
 
@@ -550,6 +737,31 @@ def main() -> None:
 
     print("\n\n3. And the split dive, on the only scoreboard it ever won: the pad.\n")
     print(_pad_table(depths))
+    print(
+        "\n\n4. And what the partial split's far node costs to feed, which is\n"
+        "   the cost nothing was charging.\n"
+    )
+    print(_delivery_table())
+    delivery = far_node_delivery_price()
+    print(
+        f"\n   The far node does not need mass at "
+        f"{delivery.node_radius_au:.4f} AU. It needs mass\n"
+        f"   moving at {delivery.required_closing_speed:.0f} km/s there, against a "
+        f"vehicle doing {delivery.vehicle_speed:.1f}. Buying\n"
+        f"   that speed from 1 AU costs {delivery.departure_excess:.0f} km/s of "
+        "departure excess and\n"
+        f"   delivers {100 * delivery.delivered_fraction:.1f} percent of what is "
+        "launched. The beam carries\n"
+        f"   {delivery.beam_speed_at_node:.0f} km/s there for nothing, because it is "
+        "a climb-out from the\n"
+        "   dive -- so the phased split's leftovers are not a convenience, they\n"
+        "   are the only affordable source. Charged, the partial split's\n"
+        f"   {delivery.split_slug_per_delivered_kg:.3f} kg/kg becomes "
+        f"{delivery.charged_slug_per_delivered_kg:.3f} against the paper's "
+        f"{delivery.single_impulse_slug_per_delivered_kg:.3f},\n"
+        "   so its dominance does not survive its own delivery."
+    )
+
     crossing = split_pad_crossing()
     if crossing is not None:
         print(
