@@ -204,6 +204,15 @@ So the plunger is ruled out **before** the 135-degree geometry and the
 slug-ratio argument apply. Those stay as recorded analysis -- they are why it
 would have lost anyway at `k` = 30 -- but they are no longer the reason.
 
+It is now **enforced rather than stated**. `placement_admissibility()` flags
+every placement sense against the rule, `admissible_placements()` returns only
+the two that comply, and `require_admissible()` raises at any site turning a
+sense into a trajectory. The dataclass also carries `depth_independent`, which
+catches the tell automatically: the radial floor is flat in depth and the two
+targeted ones are not. That matters because the plunge is the *cheapest-looking*
+of the three from Earth -- 13.06 km/s against the retrograde placement's 15.68 at
+23 solar radii -- so leaving the rule to judgement would leave it to lose.
+
 Nothing numerical in this ADR moves: no function selects the plunger, and the
 Jovian placement route it prices targets the node depth as its perihelion at
 every arrival excess, so it satisfies the constraint by construction. The same

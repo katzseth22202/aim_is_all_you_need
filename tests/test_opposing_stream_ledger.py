@@ -13,10 +13,13 @@ from src.jovian_solar_dive_cycle import (
 from src.opposing_stream_ledger import (
     COLOCATION_BRACKET,
     TANGENCY_NUDGE,
+    admissible_placements,
     bielliptic_coplacement,
     direct_dive_charge,
     jovian_cycle_charge,
     opposing_placement_route,
+    placement_admissibility,
+    require_admissible,
 )
 from src.solar_dive_depth_trade import (
     CONSERVATIVE_RETURN_EXCESS,
@@ -229,3 +232,61 @@ def test_the_colocation_bracket_is_recorded_and_narrow():
     """The search box is pinned, per the ADR 0007 lesson."""
     assert COLOCATION_BRACKET == (1.0e-4, 0.05)
     assert TANGENCY_NUDGE == 1.0e-4
+
+
+# --------------------------------------------------------------------------
+# Node-depth admissibility, enforced rather than stated
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("depth", [4.0, 8.0, 16.0, 23.0, 32.0])
+def test_the_radial_plunge_is_forbidden_at_every_depth(depth):
+    """It does not skim the Sun, it enters it: perihelion r = 0 by definition."""
+    rows = {row.label: row for row in placement_admissibility(depth)}
+    plunge = rows["radial plunge"]
+    assert not plunge.admissible
+    assert plunge.perihelion_solar_radii == 0.0
+    assert "through the Sun" in plunge.reason
+
+
+@pytest.mark.parametrize("depth", [4.0, 23.0, 32.0])
+def test_the_targeted_placements_bottom_out_at_the_node(depth):
+    """Prograde and retrograde are solved onto the node, so they comply by build."""
+    for label in ("prograde", "retrograde"):
+        row = {r.label: r for r in placement_admissibility(depth)}[label]
+        assert row.admissible
+        assert row.perihelion_solar_radii == depth
+
+
+def test_only_two_placements_survive_the_rule():
+    """The plunge was the third option; the rule removes it, not the trade."""
+    labels = [row.label for row in admissible_placements(23.0)]
+    assert labels == ["prograde", "retrograde"]
+
+
+def test_a_depth_independent_cost_is_the_tell():
+    """The radial floor is flat in depth, which is why it looked cheapest."""
+    rows = {row.label: row for row in placement_admissibility(23.0)}
+    assert rows["radial plunge"].depth_independent
+    assert not rows["prograde"].depth_independent
+    assert not rows["retrograde"].depth_independent
+    # And it is cheaper than the retrograde placement it would replace, which is
+    # exactly why the rule has to be enforced rather than left to judgement.
+    assert rows["radial plunge"].excess_floor < rows["retrograde"].excess_floor
+
+
+def test_require_admissible_raises_on_the_plunge_and_passes_the_others():
+    """The loud failure, for call sites that turn a sense into a trajectory."""
+    with pytest.raises(ValueError, match="node-depth admissibility"):
+        require_admissible(0.0, 23.0)
+    require_admissible(1.0, 23.0)
+    require_admissible(-1.0, 23.0)
+
+
+def test_the_priced_jovian_route_satisfies_the_rule():
+    """ADR 0024's placement targets the node depth at every arrival excess."""
+    for depth in (4.0, 23.0, 32.0):
+        route = opposing_placement_route(depth, _closure(depth), _PARAMS)
+        assert route is not None
+        # The dive is solved onto the node's perihelion, so it complies by build.
+        require_admissible(-1.0, depth)

@@ -58,7 +58,7 @@ Run with ``make opposing-stream``.
 
 import argparse
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.optimize import brentq
@@ -75,6 +75,7 @@ from .jovian_solar_dive_cycle import (
     _outbound_leg,
     _powered_flyby_params,
     departure_nozzle_ledger,
+    dive_placement_excess_floor,
     paper_resonant_dive_ledger,
     solve_synodic_closure,
 )
@@ -661,6 +662,157 @@ def bielliptic_coplacement(
 
 
 # --------------------------------------------------------------------------
+# Node-depth admissibility: the rule, enforced rather than stated
+# --------------------------------------------------------------------------
+
+#: Placement senses ``dive_placement_excess_floor`` accepts, by name.  +1 dives
+#: prograde, -1 retrograde, and 0 is the zero-angular-momentum radial drop.
+PLACEMENT_SENSES: Sequence[Tuple[str, float]] = (
+    ("prograde", 1.0),
+    ("radial plunge", 0.0),
+    ("retrograde", -1.0),
+)
+
+
+@dataclass(frozen=True)
+class PlacementAdmissibility:
+    """Whether one placement option obeys **node-depth admissibility**.
+
+    The rule (CONTEXT.md; ``docs/paper_changes_owed.md`` P1): every trajectory in
+    the architecture -- payload, **opposing stream**, and any projectile stream
+    feeding a node -- must have a perihelion no lower than the node's depth.
+    Nothing may pass inside the node.
+
+    Attributes:
+        label: Name of the placement sense.
+        sign: +1 prograde, -1 retrograde, 0 radial.
+        dive_solar_radii: The node's depth in solar radii.
+        perihelion_solar_radii: Where this option actually bottoms out.  A
+            targeted dive bottoms out *at* the node; a radial drop carries no
+            angular momentum and so bottoms out at the Sun's centre.
+        excess_floor: Minimum arrival excess this placement needs (km/s).
+        depth_independent: Whether that floor is flat in depth, which is the
+            tell that the trajectory is not aiming at a depth at all.
+        admissible: Whether it obeys the rule.
+        reason: Why, in one clause, for printing next to the verdict.
+    """
+
+    label: str
+    sign: float
+    dive_solar_radii: float
+    perihelion_solar_radii: float
+    excess_floor: float
+    depth_independent: bool
+    admissible: bool
+    reason: str
+
+
+def placement_perihelion_solar_radii(sign: float, dive_solar_radii: float) -> float:
+    """Where a placement of this sense actually bottoms out.
+
+    A prograde or retrograde placement is *solved onto* the node's perihelion, so
+    it bottoms out there by construction.  A radial drop carries zero angular
+    momentum, so its perihelion is the Sun's centre regardless of what depth was
+    asked for -- it crosses the node radius on the way down and keeps going.
+
+    Args:
+        sign: +1 prograde, -1 retrograde, 0 radial.
+        dive_solar_radii: The node's depth in solar radii.
+
+    Returns:
+        Perihelion in solar radii.
+    """
+    return dive_solar_radii if sign != 0.0 else 0.0
+
+
+def placement_admissibility(
+    dive_solar_radii: float, params: Optional[_FlybyParams] = None
+) -> List[PlacementAdmissibility]:
+    """Flag every placement sense against **node-depth admissibility**.
+
+    This exists so the rule is enforced rather than merely written down.
+    ``dive_placement_excess_floor`` will happily price the radial plunge, and at
+    29.785 km/s from Earth it is the cheapest-looking of the three; nothing in
+    its signature says the trajectory it prices ends inside the Sun.
+
+    Args:
+        dive_solar_radii: The node's depth in solar radii.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        One :class:`PlacementAdmissibility` per sense, in
+        :data:`PLACEMENT_SENSES` order.
+    """
+    p = params if params is not None else _powered_flyby_params()
+    radius = _dive_periapsis_radius(dive_solar_radii)
+    deeper = _dive_periapsis_radius(dive_solar_radii * 2.0)
+    rows: List[PlacementAdmissibility] = []
+    for label, sign in PLACEMENT_SENSES:
+        floor = dive_placement_excess_floor(sign, radius, p)
+        flat = abs(floor - dive_placement_excess_floor(sign, deeper, p)) < 1e-9
+        perihelion = placement_perihelion_solar_radii(sign, dive_solar_radii)
+        ok = perihelion >= dive_solar_radii
+        rows.append(
+            PlacementAdmissibility(
+                label=label,
+                sign=sign,
+                dive_solar_radii=dive_solar_radii,
+                perihelion_solar_radii=perihelion,
+                excess_floor=floor,
+                depth_independent=flat,
+                admissible=ok,
+                reason=(
+                    f"bottoms out at the node ({dive_solar_radii:g} R_sun)"
+                    if ok
+                    else "zero angular momentum, so it passes through the Sun"
+                ),
+            )
+        )
+    return rows
+
+
+def admissible_placements(
+    dive_solar_radii: float, params: Optional[_FlybyParams] = None
+) -> List[PlacementAdmissibility]:
+    """The placement senses a caller may actually choose between.
+
+    Args:
+        dive_solar_radii: The node's depth in solar radii.
+        params: Float parameter block; built with defaults when omitted.
+
+    Returns:
+        Only the admissible rows -- prograde and retrograde, never the plunge.
+    """
+    return [
+        row
+        for row in placement_admissibility(dive_solar_radii, params)
+        if row.admissible
+    ]
+
+
+def require_admissible(sign: float, dive_solar_radii: float) -> None:
+    """Raise if a placement sense would fly inside the node.
+
+    Call this at the top of anything that turns a placement sense into a
+    trajectory, so the rule fails loudly instead of being forgotten.
+
+    Args:
+        sign: +1 prograde, -1 retrograde, 0 radial.
+        dive_solar_radii: The node's depth in solar radii.
+
+    Raises:
+        ValueError: If the placement's perihelion is inside the node.
+    """
+    perihelion = placement_perihelion_solar_radii(sign, dive_solar_radii)
+    if perihelion < dive_solar_radii:
+        raise ValueError(
+            f"placement sign {sign:g} bottoms out at {perihelion:g} solar radii, "
+            f"inside the {dive_solar_radii:g} solar-radii node: node-depth "
+            "admissibility forbids any trajectory passing inside the node"
+        )
+
+
+# --------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------
 
@@ -765,6 +917,31 @@ def _coplacement_table(depths: Sequence[float] = DEPTH_GRID) -> str:
     return "\n".join(lines)
 
 
+def _admissibility_table(depths: Sequence[float] = DEPTH_GRID) -> str:
+    """Every placement sense, flagged against node-depth admissibility.
+
+    Args:
+        depths: Dive depths to sweep (solar radii).
+
+    Returns:
+        A fixed-width table.
+    """
+    lines = [
+        f"{'depth':>7} {'placement':>15} {'excess floor':>13} {'flat?':>6} "
+        f"{'bottoms out':>12} {'verdict':>9}",
+        "-" * 70,
+    ]
+    for depth in depths:
+        for row in placement_admissibility(depth):
+            lines.append(
+                f"{depth:7.2f} {row.label:>15} {row.excess_floor:13.2f} "
+                f"{('yes' if row.depth_independent else 'no'):>6} "
+                f"{row.perihelion_solar_radii:9.1f} R "
+                f"{('OK' if row.admissible else 'FORBIDDEN'):>9}"
+            )
+    return "\n".join(lines)
+
+
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser.
 
@@ -816,7 +993,20 @@ def main() -> None:
         "payload."
     )
 
-    print("\n\n3. The bi-elliptic far node, which phases itself exactly.\n")
+    print(
+        "\n\n3. Which placements are even allowed, under node-depth\n"
+        "   admissibility: nothing may pass inside the node.\n"
+    )
+    print(_admissibility_table(depths))
+    print(
+        "\n   The radial plunge carries zero angular momentum, so its perihelion\n"
+        "   is the Sun's centre whatever depth was asked for. The tell is in the\n"
+        "   'flat?' column: a placement whose cost does not move with depth is\n"
+        "   not aiming at a depth. It is forbidden before it is inefficient.\n"
+        "   Use require_admissible() at any site that turns a sense into a leg."
+    )
+
+    print("\n\n4. The bi-elliptic far node, which phases itself exactly.\n")
     print(_coplacement_table(depths))
     print(
         "\n   Both vehicles fly the SAME ellipse in opposite senses, so the\n"
