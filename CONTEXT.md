@@ -1601,12 +1601,30 @@ and calling 0.301 against 0.288 kg per launched-slug kg per year a reversal.
   number: ADR 0014 and ADR 0015 reach opposite verdicts purely from whether the
   plate is benchmarked at 0.8 or at the nozzle's own recovery. Any future
   measurement of plate restitution above ~20 km/s settles the leg-1 device choice.
-- **The two-wave split's cost is a DSM proxy, not a deep-space maneuver.** ADR
-  0013's headline — 8 of 11 flown cycles buy their **split gap** for under
-  1 m/s — is priced as an exact velocity match at the Jupiter patched-conic
-  seam (ADR 0011's proxy), not a finite-location interplanetary burn. It is the
-  claim in that ADR most exposed to a real trajectory optimization, and it is
-  load-bearing for the whole two-wave architecture. Unresolved.
+- ~~**The two-wave split's cost is a DSM proxy, not a deep-space maneuver.**~~
+  **Resolved** by ADR 0028, in the direction that costs nothing. ADR 0013's
+  headline — 8 of 11 flown cycles buy their **split gap** for under 1 m/s — is
+  priced as an exact velocity match at the Jupiter patched-conic seam (ADR
+  0011's proxy) rather than a finite-location interplanetary burn, and it was
+  the claim in that ADR most exposed to a real trajectory optimization.
+  Freeing the burn does not move it. Deleting the thrust-magnitude limit
+  relaxes the finite-thrust problem into an impulsive one, so the cheapest
+  impulsive trajectory is a floor under any low-thrust solution; solved with up
+  to five maneuvers per leg free in time, direction and magnitude, over a free
+  encounter epoch, a free aim point and a free departure excess — forty
+  parameters — the optimum on all three expensive cycles, at both the 10- and
+  20-day gaps, **is the seam trajectory itself**: a single burn just after
+  Jupiter at the perijove floor, nothing at all spent outbound, landing
+  0.015–0.09% *above* the seam charge rather than below it. The exposure was
+  one-sided in a way that flatters nobody — freeing the burn could only have
+  made the *expensive* cycles cheaper. The residue is a **bend deficit** of
+  0.97–4.63 deg at 20–21 km/s, worth 82–86% of the charge, and no placement of
+  a burn buys an angle. Bounded rather than proved: the relaxation argument is
+  exact, but a heuristic global search returns an upper bound on the
+  relaxation's own optimum, so what is established is that nothing cheaper was
+  found in that box and that the cheapest of 2,000 blind draws cost 54–237x the
+  seam. _Avoid_: reading this as a finite-thrust trajectory — it bounds the
+  delta-v only, and whether such a trajectory exists at all is untouched.
 - **An all-failed optimizer table is not a result.** It is ambiguous between an empty
   feasible set (physics) and a search that never found it (artifact), and the two look
   identical. Random-sample the box first: if blind sampling finds feasible points at a

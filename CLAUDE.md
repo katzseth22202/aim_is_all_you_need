@@ -51,6 +51,8 @@ make split-dive     # splitting the dive injection across two nodes (ADR 0023)
 make opposing-stream # charging the dive node's second arrival (ADR 0024)
 make shallow-dive   # what a shallow dive costs the direct route (ADR 0025)
 make sep-split      # can argon SEP buy the 20-day split's corrections? (ADR 0026)
+make sep-split-10d  # the same at the 10-day gap the paper flies (ADR 0026 addendum)
+make dsm-bound      # free the split's correction burn in time and place (ADR 0028)
 
 # Conda environment
 conda env create -f environment.yml
@@ -143,6 +145,14 @@ plume_state.py               ← bag_state + plume_thermal: the burn envelope an
 bag_converge.py              ← plume_state + bag_state: iterates the bag loop to
                                 a fixed point and reports the gap against the
                                 published tables (the ledger's rule 2)
+
+free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
+                                correction into a free-burn MGA-nDSM problem
+                                (40 parameters, basin hopping) to put a *lower
+                                bound* under any finite-thrust solution. The
+                                optimum is the seam trajectory itself, so
+                                ADR 0026's verdict is bounded rather than
+                                assumed (ADR 0028)
 ```
 
 One edge runs opposite the diagram: `retrograde_return_legs.py` imports

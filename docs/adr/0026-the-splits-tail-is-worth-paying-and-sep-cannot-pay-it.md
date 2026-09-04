@@ -285,3 +285,94 @@ follow-up.
    released the wave and was recovered would change the accounting entirely,
    since the array would then be amortised instead of destroyed. It is not
    modelled, and recovering it is its own trajectory problem.
+
+## Addendum, 2026-09-04: the 10-day column, and a label that read the wrong field
+
+Everything above flies the **20-day** split gap, the one the rest of this
+repository carries as `PUFFSAT_CYCLE_ORBIT_PERIOD`. **The paper flies 10 days**,
+and `sec:split_tail`'s figures are the 10-day ones, so the column above is not
+the column the paper quotes. This addendum records the 10-day run beside it and
+gives the caption a target to name: **`make sep-split-10d`**, which is exactly
+`python -m src.sep_split_correction --split-days 10`. It answers the paper
+repository's deferred item **S4**, and the paper-facing write-up is
+`docs/paper_corrections_split_tail_2026-09-04.md`.
+
+**Nothing above changes.** The 10-day gap is the same architecture flown with a
+smaller head start, and every conclusion survives it.
+
+### The same three cycles, at roughly half the price
+
+| departure | 20-day separation burn | 10-day separation burn | ratio |
+| --- | ---: | ---: | ---: |
+| 2030-02-18 | 1584.955 | 556.029 | 0.351 |
+| 2036-09-07 | 2089.377 | 1011.273 | 0.484 |
+| 2042-02-22 | 1425.619 | 398.470 | 0.279 |
+
+Burns in m/s. The tail is the same three departures at both gaps, and the eight
+cheap cycles fall from under 2 m/s to under 0.3. The chain mean total
+correction drops **465.97 → 181.03 m/s**, and the mean separation burn alone
+464.06 → **179.06 m/s** — the 0.179 km/s `sec:jupiter_only_growth` quotes.
+Halving the head start roughly halves the bill because what the
+burn is buying is a **bend deficit** — 3.34–4.63° short at 20 days,
+0.97–2.33° short at 10 — and the deficit scales with the head start (ADR 0028).
+
+### The verdict is unchanged, and the hardware is the same hardware
+
+The adaptive cadence's worst total correction is **1029.752 m/s** (2036-09-07:
+18.479 nozzle-wave DSM + 1011.273 separation), against 2107.86 at 20 days. It
+still cannot be bought with argon at the stated operating point: the cadence
+demands **1.573 kW/t**, i.e. `8.020e-5 m/s²` at 1 AU, which is **4.01× the
+stated `2.0e-5`** — where the 20-day gap is over by 8.2×. Sized at the
+reference wave that is **0.787 MW**, 40.10 N at 1 AU and 1.483 N at Jupiter
+(96% of the thrust taken by the inverse square), about 63 reference Hall
+thrusters, and a 2.4% array fraction at 15 kg/kW.
+
+Being over by 4× rather than 8× does not change the answer, and the doubling
+ledger says why paying it would be worth it if it could be paid:
+
+| cadence | cycles | 2S + 3S | methalox | argon | argon + array (15 kg/kW) |
+| --- | ---: | --- | ---: | ---: | ---: |
+| `adaptive` | 11 | 7 + 4 | 1.737 | 1.690 | 1.719 |
+| `split_aware` | 10 | 4 + 6 | 1.864 | 1.863 | 1.863 |
+| `always_2s` | 13 | 13 + 0 | 2.270 | 1.501 | 1.859 |
+
+Doubling times in years, over a 28.393 yr horizon. Argon is worth **1.1% net of
+its own array** on the adaptive cadence, and `adaptive` beats `split_aware` by
+**7.3% of the clock** — the same shape as the 20-day table. `always_2s` still
+needs 5037.0 m/s on its worst cycle and lands a fifth of the wave (0.1995) on
+methalox.
+
+### `bend_limited` was reading the architecture's name
+
+The property tested `growth.case == "dsm_only"`, which is the *name* of the
+winning maneuver architecture rather than what that architecture spends. Where
+two architectures tie it reads the wrong answer: on **2030-02-18 at the 10-day
+gap** `hybrid_50mps` returns the identical trajectory to `dsm_only` and beats
+it by **1.437e-6 m/s** — floating-point noise — so it took the label while its
+own perijove burn is exactly zero. The paper's "so on two of the three no
+change of flyby helps at all" is a faithful report of that flag.
+
+Checked directly on all six cycle-and-gap combinations: `perijove_only` admits
+**no solution at all** for any of these windows, and every winning solution —
+`dsm_only` or `hybrid_50mps` — spends **exactly 0.0** at the flyby. So it is
+all three at both gaps, and the paper's sentence wants "none of the three".
+
+`bend_limited` now tests `growth.perijove_burn <= NO_FLYBY_BURN_KM_S`, pinned
+by `test_the_ten_day_gap_is_bend_limited_on_all_three_too`. **No number in this
+ADR moves**: at the 20-day gap all three expensive cycles already won on
+`dsm_only`, so the old and new tests agree there. The 10-day
+`always_2s` cycle departing 2037-10-11 is the other cycle whose label the fix
+corrects.
+
+### Reproducing
+
+```bash
+make sep-split-10d                                   # this addendum's tables
+make sep-split                                       # the 20-day column above
+pytest tests/test_sep_split_correction.py -s
+```
+
+Same inputs as the parent ADR — start 2026-08-11, 30-year horizon, 50 m/s
+fallback threshold, fixed mean two-synodic lattice of 797.734430 d, stated
+operating point `2.0e-5 m/s²` at 1 AU — with `--split-days 10` in place of the
+default 20.

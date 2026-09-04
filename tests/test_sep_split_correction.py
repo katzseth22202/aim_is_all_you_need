@@ -25,6 +25,7 @@ from src.sep_split_correction import (
     CorrectionCycle,
     CycleFeasibility,
     LegImpulse,
+    _cheapest,
     analyze_sep_split,
     array_mass_fraction,
     characteristic_acceleration,
@@ -265,6 +266,34 @@ def test_the_expensive_splits_are_bend_limited_at_the_perijove_floor(chains):
         assert cycle.growth.perijove_radius / 71_492.0 == pytest.approx(
             1.05595, abs=1e-4
         )
+
+
+@pytest.mark.slow
+def test_the_ten_day_gap_is_bend_limited_on_all_three_too():
+    """The paper's 10-day gap is bend-limited on all three, not two of three.
+
+    `bend_limited` used to test the winning architecture's *name*, and on
+    2030-02-18 `hybrid_50mps` ties `dsm_only` to 1.4e-6 m/s and takes the label
+    while spending exactly nothing at the flyby -- which is how the paper came
+    to say "two of the three". What is actually true of every expensive window
+    at either gap is asserted here: the powered-flyby architecture admits no
+    solution at all, and whichever architecture wins spends zero at Jupiter.
+    """
+    # 50 m/s separates the bimodal split at either gap with room to spare: the
+    # cheap cycles top out at 0.53 m/s (20 d) and 0.29 (10 d), the dear ones
+    # start at 398 m/s.  A km/s cut would miss two of the three at 10 days.
+    for split_days in (10.0, 20.0):
+        dear = [
+            c
+            for c in fly_correction_chain("adaptive", split_days=split_days)
+            if c.growth.total_dv > 0.05
+        ]
+        assert len(dear) == 3
+        for cycle in dear:
+            offered = _cheapest(cycle.departure_jd, cycle.return_jd - cycle.split_days)
+            assert "perijove_only" not in offered
+            assert cycle.growth.perijove_burn == 0.0
+            assert cycle.bend_limited
 
 
 @pytest.mark.slow

@@ -1,8 +1,8 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 clean:  ## Clean up build artifacts
 	rm -rf build/
@@ -46,6 +46,9 @@ resonance:  ## Audit 200 years of real-orbit 2S windows and the 2S/3S fallback
 sep-split:  ## Price the 20-day split's correction burns, methalox vs argon SEP (ADR 0026)
 	python -m src.sep_split_correction
 
+sep-split-10d:  ## The same at the 10-day gap the paper flies, the figures tab:cadence_propellant quotes (ADR 0026 addendum)
+	python -m src.sep_split_correction --split-days 10
+
 two-wave:  ## Price the real-orbit adaptive 2S/3S cadence on the two-wave nozzle ledger
 	python -m src.two_wave_growth
 
@@ -84,6 +87,9 @@ opposing-stream:  ## Charge the dive node's second arrival, the opposing stream 
 
 shallow-dive:  ## Price a shallow dive for the direct architecture, node charged for its burn (ADR 0025)
 	python -m src.shallow_dive_burn_trade
+
+dsm-bound:  ## Free the split's correction burn in time and place; it does not get cheaper (ADR 0028; ~25 min, --split-days 10 for the paper's gap)
+	python -m src.free_dsm_bound
 
 export-env:  ## Export the current conda environment to environment.yml
 	conda env export --no-builds --from-history | grep -v "prefix:" | sed '1s/^name: .*/name: puffsat_math_env/' > environment.yml.tmp

@@ -98,6 +98,11 @@ DEFAULT_THRESHOLD_M_S = 50.0
 #: absence looked like an omission, and measuring it is how ADR 0026 retires
 #: the suspicion (it is worth 0.06%).
 MANEUVER_CASES = ("perijove_only", "dsm_only", "hybrid_50mps")
+#: Flyby burn (km/s) below which a solution is spending nothing at Jupiter.
+#: The powered cases return exact zeros on the bend-limited windows, so this
+#: only guards against a stray last-bit residue; see
+#: :attr:`CorrectionCycle.bend_limited`.
+NO_FLYBY_BURN_KM_S = 1e-9
 
 #: Argon exhaust speed (km/s) from the repo's existing SEP constant.
 VE_ARGON = float(exhaust_velocity_from_isp(ARGON_SEP_ISP).to_value(u.km / u.s))
@@ -202,13 +207,26 @@ class CorrectionCycle:
 
     @property
     def bend_limited(self) -> bool:
-        """Whether no powered-flyby solution exists for the growth wave.
+        """Whether no powered flyby helps the growth wave.
 
-        True when the required turn exceeds what even a floor perijove can
-        bend, so the residue is an angle and the deep-space burn is the only
-        way to pay it.
+        True when the winning architecture spends nothing at Jupiter, so the
+        required turn exceeds what even a floor perijove can bend: the residue
+        is an angle and the deep-space burn is the only way to pay it.
+
+        This asks what the winning architecture *spends*, not what it is
+        called, because the two disagree wherever the architectures tie. On
+        2030-02-18 at the 10-day gap ``hybrid_50mps`` returns the identical
+        trajectory to ``dsm_only`` and beats it by 1.4e-6 m/s -- floating-point
+        noise -- so a name test hands that cycle the label "flyby-assisted"
+        while its own flyby burn is exactly zero. Reading the burn instead
+        makes all three expensive cycles bend-limited at both split gaps, which
+        is what the geometry says (ADR 0026's 2026-09-04 addendum; correction
+        C2 in ``docs/paper_corrections_split_tail_2026-09-04.md``).
         """
-        return self.growth.case == "dsm_only" and self.growth.total_dv > 0.05
+        return (
+            self.growth.perijove_burn <= NO_FLYBY_BURN_KM_S
+            and self.growth.total_dv > 0.05
+        )
 
 
 def _cheapest(
