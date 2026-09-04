@@ -245,3 +245,27 @@ still doing work.
 
 `make bag-state`, sections "sec:needle_through_fog: the plug as a heat sink" and
 "The one loop the table still cuts"; `make bag-converge`, Cut 4.
+
+## Addendum, 2026-09-04: superseded by ADR 0027 in three places
+
+The paper corrected the melting enthalpy of a 122 K slug (Balloon-Pulse-Propulsion
+`1d42c91`), and ADR 0027 propagated the half of it that needed the saturation
+solve. Three findings above moved with it. They are marked here rather than
+edited in place, because the reasoning that produced them is still the reasoning
+that applies -- only the inputs changed.
+
+| stated above | now |
+| --- | --- |
+| the plug absorbs 0.73 MJ/kg, **27.4 MJ**, **20%** of the bill | 0.653 MJ/kg, **24.5 MJ**, **17.8%** |
+| Earth with the plug: **27.7 kg** of vapour at **309.3 K**, 4.2 kg of film at 23 m | **28.9 kg** at **310.2 K**, **4.4 kg** |
+| "from 122 K the slug never finishes melting with or without the plug, so on that leg the heat sink buys nothing" | **false in both halves.** Without the plug the slug melts through by 0.076 MJ/kg and boils; the plug's 0.115 MJ/kg puts it back under the gate, so on that leg the heat sink is the *only* thing keeping the bag dry |
+
+The design conclusions are unchanged. The plug still adds nothing to the film,
+still retires the pressure vessel on the Earth leg by taking the flown column
+below the handling floor (4.4 kg against 5.1), and `tab:axial_bag`'s Pressure
+column is still the no-plug case. What changed is that the plug now earns its
+keep on *both* legs instead of one.
+
+The loop-still-cut section above also narrows: the Jupiter column is no longer
+a report against `melting_fixed_point`, it *is* that solve (ADR 0027), so cut 4
+is now the Earth column alone.

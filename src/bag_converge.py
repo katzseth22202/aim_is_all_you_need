@@ -17,8 +17,10 @@ value runs 15 165-26 521 K.
 than recomputed.
 **Cut 4.** ``tab:bag_state``'s warming row warms liquid water up to the mist
 temperature, so it is an output of the row four lines below it. The published
-0.73 and 0.21 MJ/kg were closed against 306 K and 328 K, which were the mist
-of the *superseded* 4.4% leak, and the table now prints 316 K instead.
+0.21 MJ/kg was closed against 328 K, which was the mist of the *superseded*
+4.4% leak, and the table now prints 316 K instead. **The Jupiter column no
+longer cuts here** -- ADR 0027 made its warming row the solve rather than a
+report against it -- so this cut is now the Earth column alone.
 
 Cutting a loop is the right way to write a paper -- a reader can check each link
 -- and it is the wrong way to find out whether the design closes. This module
@@ -237,7 +239,8 @@ def main() -> None:
         "\nSize of the gap, stated fairly: cut 1 costs a factor of 3 in a term that\n"
         "is small either way -- 3.6% of the pulse radiated rather than 1.2%. It\n"
         "does not move the bag out of the optically thick band, and it does not\n"
-        "reach the film, which cold storage holds at zero (item 10)."
+        "reach the film, which cold storage holds under the handling floor\n"
+        "at two thirds of a kilogram (item 10, ADR 0027)."
     )
 
     print("\n--- Cut 4: the warming row is an output of the mist row ---")

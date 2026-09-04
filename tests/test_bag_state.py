@@ -14,15 +14,20 @@ from src.bag_state import (
     HANDLING_FILM_GAUGE,
     HANDLING_GAUGE_BAND,
     HOT_PULSE_STATE,
+    LEG_PLUME_STATES,
+    MELTING_GATE,
     PLUG_MASS,
     SLUG_MASS,
     SOLVED_LEAK_FRACTIONS,
     SPHERE_BORE_RADIUS,
     SUPERSEDED_LEAK_FRACTION,
+    SUPERSEDED_WARMING_TO_LIQUID,
     TABLE_CLOSING_SPEED,
+    WARMING_TO_LIQUID,
     BagState,
     bag_density_at,
     bag_surface_area,
+    boil_onset_leak,
     bore_radius,
     coldest_mist_temperature,
     confinement_field_at,
@@ -47,8 +52,11 @@ def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
 
     The table is the solved 2.54% leak at the 45.58 km/s cold end of the growth
     push -- one column of ``LEG_PLUME_STATES``, not a flown assumption.  The
-    Jupiter column is the interesting one: 0.65 MJ/kg of waste heat against
-    0.73 to melt, so nothing boils and there is no pressure vessel at all.
+    Jupiter column is the interesting one and it is the one ADR 0027 moved:
+    0.646 MJ/kg of waste heat against a 0.570 MJ/kg *melting gate*, so the
+    slug melts through with 0.076 to spare and boils 2.2% of itself.  It used
+    to read zero, because the gate was taken to be the whole 0.653 ladder --
+    liquid warming included, which is not a melting cost.
     """
     jupiter, earth = paper_bag_state("jupiter"), paper_bag_state("earth")
     for state in (jupiter, earth):
@@ -60,10 +68,20 @@ def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
         assert np.isclose(state.leak.to_value(u.MJ / u.kg), 0.55, atol=1e-2)
         assert np.isclose(state.waste_heat.to_value(u.MJ / u.kg), 0.65, atol=5e-3)
 
-    assert jupiter.boiling.to_value(u.MJ / u.kg) < 0.0  # never finishes melting
-    assert jupiter.vapour_fraction == 0.0
-    assert jupiter.mist_pressure.to_value(u.kPa) == 0.0
-    assert jupiter.film_mass.to_value(u.kg) == 0.0
+    assert jupiter.melts
+    assert np.isclose(jupiter.melting_gate.to_value(u.MJ / u.kg), 0.570, atol=5e-4)
+    # The warming row is an output on this column: the gate plus liquid
+    # warming to the solved mist, not to an assumed room temperature.
+    assert np.isclose(jupiter.warming.to_value(u.MJ / u.kg), 0.594, atol=5e-3)
+    assert np.isclose(jupiter.boiling.to_value(u.MJ / u.kg), 0.052, atol=5e-3)
+    assert np.isclose(jupiter.vapour_fraction, 0.022, atol=5e-4)
+    assert np.isclose(jupiter.vapour_mass.to_value(u.kg), 4.68, atol=0.05)
+    assert np.isclose(jupiter.mist_temperature.to_value(u.K), 278.8, atol=0.5)
+    assert np.isclose(jupiter.mist_pressure.to_value(u.kPa), 0.91, atol=0.05)
+    # "a fraction of a kilogram", and far under tab:axial_bag's 2.4-10.0 kg
+    # handling floor, so the conclusion the section rests on is unchanged.
+    assert np.isclose(jupiter.film_mass.to_value(u.kg), 0.51, atol=0.05)
+    assert jupiter.film_mass < 1.0 * u.kg
 
     assert np.isclose(earth.boiling.to_value(u.MJ / u.kg), 0.44, atol=5e-3)
     assert np.isclose(earth.vapour_fraction, 0.18, atol=5e-3)
@@ -110,35 +128,42 @@ def test_the_plug_can_only_take_vapour_away() -> None:
     """``sec:needle_through_fog``, and the direction is the whole point.
 
     The plug is 37.5 kg of extra condensed mass absorbing heat that the pulse
-    was going to deliver anyway, so at a fixed bill it removes 27 MJ from the
-    boiling step -- 20% of the 138 MJ.  Vapour mass and mist temperature must
-    both fall; the paper's text has them rising.
+    was going to deliver anyway, so at a fixed bill it removes 24.5 MJ from
+    the boiling step -- 17.8% of the 138 MJ, which is the paper's "a sixth".
+    Vapour mass and mist temperature must both fall.
+
+    The 24.5 is the corrected ladder, 0.653 MJ/kg over 37.5 kg.  It was 27.4
+    at 0.73, so this whole row moved with ADR 0027 and the paper's B1 figures
+    (27.7 kg, 309 K) move with it.
     """
     bare, plugged = (
         paper_bag_state("earth"),
         paper_bag_state("earth", plug_mass=PLUG_MASS),
     )
-    assert np.isclose((plugged.plug_sink * SLUG_MASS).to_value(u.MJ), 27.4, atol=0.1)
-    assert np.isclose(float(plugged.plug_sink / bare.waste_heat), 0.20, atol=5e-3)
+    assert np.isclose((plugged.plug_sink * SLUG_MASS).to_value(u.MJ), 24.5, atol=0.1)
+    assert np.isclose(float(plugged.plug_sink / bare.waste_heat), 0.178, atol=5e-3)
     assert np.isclose(bare.vapour_mass.to_value(u.kg), 39.3, atol=0.1)
-    assert np.isclose(plugged.vapour_mass.to_value(u.kg), 27.7, atol=0.1)
+    assert np.isclose(plugged.vapour_mass.to_value(u.kg), 28.9, atol=0.1)
     assert plugged.vapour_mass < bare.vapour_mass
     assert plugged.mist_temperature < bare.mist_temperature
-    assert np.isclose(plugged.mist_temperature.to_value(u.K), 309.3, atol=0.5)
+    assert np.isclose(plugged.mist_temperature.to_value(u.K), 310.2, atol=0.5)
     assert plugged.film_mass < bare.film_mass
 
 
-def test_the_plug_is_moot_from_cold_storage() -> None:
-    """Both columns are already dry there, so the heat sink buys nothing.
+def test_the_plug_is_what_keeps_the_cold_leg_dry() -> None:
+    """The direction reversed with ADR 0027, and the plug now earns its keep.
 
-    Which is worth pinning: the paper prices the plug as a heat sink on the
-    Jupiter leg, and on that leg the slug never finishes melting with or
-    without it.
+    Cold storage on its own no longer clears the boiling step: the bare column
+    melts through by 0.076 MJ/kg.  The plug's 24.5 MJ is 0.115 MJ/kg of slug,
+    which is more than that surplus, so it puts the column back under the gate.
+    Cold storage *plus a plug* is the one dry case left in the table.
     """
-    for plug in (0.0 * u.kg, PLUG_MASS):
-        state = paper_bag_state("jupiter", plug_mass=plug)
-        assert state.vapour_fraction == 0.0
-        assert state.film_mass.to_value(u.kg) == 0.0
+    bare = paper_bag_state("jupiter")
+    plugged = paper_bag_state("jupiter", plug_mass=PLUG_MASS)
+    assert bare.melts and bare.vapour_fraction > 0.0
+    assert not plugged.melts
+    assert plugged.vapour_fraction == 0.0
+    assert plugged.film_mass.to_value(u.kg) == 0.0
 
 
 def test_the_plug_takes_the_flown_column_below_the_handling_floor() -> None:
@@ -151,13 +176,13 @@ def test_the_plug_takes_the_flown_column_below_the_handling_floor() -> None:
     assert governing_film_mass(plugged, flown) == handling_film_mass(flown)
 
 
-def test_the_warming_row_was_closed_against_the_superseded_mist() -> None:
-    """Cut 4: the warming row is an output of the mist row four lines below it.
+def test_the_earth_warming_row_is_still_closed_against_the_superseded_mist() -> None:
+    """Cut 4, on the one column that still cuts the loop.
 
     0.21 MJ/kg warms liquid water from 278 K to 328 K, and 328 K is the
-    superseded table's Earth mist.  Closing the loop instead moves the Earth
-    column by half a kilogram of film and gives the Jupiter column a slush at
-    the freezing point rather than a dry bag -- reported, not applied.
+    superseded table's Earth mist.  Closing the loop moves that column by half
+    a kilogram of film -- reported, not applied, because the paper prints the
+    row as an input.
     """
     earth = paper_bag_state("earth")
     closed = melting_fixed_point(earth.waste_heat, "earth")
@@ -166,15 +191,71 @@ def test_the_warming_row_was_closed_against_the_superseded_mist() -> None:
     assert np.isclose(closed.mist_temperature.to_value(u.K), 318.2, atol=0.5)
     assert abs((closed.film_mass - earth.film_mass).to_value(u.kg)) < 1.0
 
-    jupiter = paper_bag_state("jupiter")
-    slush = melting_fixed_point(jupiter.waste_heat, "jupiter")
-    assert not slush.below_freezing
-    assert 273.0 < slush.mist_temperature.to_value(u.K) < 280.0
-    assert slush.film_mass.to_value(u.kg) < 0.5
 
-    # With the plug on top, the two curves stop meeting above freezing at all.
+def test_the_ice_column_is_the_solve_rather_than_a_report_against_it() -> None:
+    """ADR 0027: the Jupiter column's warming row became an output.
+
+    Its surplus over the melting gate is 0.076 MJ/kg against a 0.653 ladder,
+    so charging the liquid warming at an assumed room temperature would swamp
+    it.  ``paper_bag_state`` and ``melting_fixed_point`` must therefore agree
+    on that column exactly rather than bracket each other.
+    """
+    jupiter = paper_bag_state("jupiter")
+    solved = melting_fixed_point(jupiter.waste_heat, "jupiter")
+    assert not solved.below_freezing
+    assert np.isclose(
+        jupiter.warming.to_value(u.MJ / u.kg), solved.warming.to_value(u.MJ / u.kg)
+    )
+    assert np.isclose(jupiter.vapour_fraction, solved.vapour_fraction)
+    assert np.isclose(
+        jupiter.mist_temperature.to_value(u.K), solved.mist_temperature.to_value(u.K)
+    )
+
+    # And the column's own book balances: nothing is charged twice or dropped.
+    residual = (
+        jupiter.waste_heat - jupiter.warming - jupiter.plug_sink - jupiter.boiling
+    )
+    assert abs(residual.to_value(u.MJ / u.kg)) < 1e-9
+
+    # With the plug on top the two curves stop meeting above freezing at all,
+    # which is the same verdict ``BagState.melts`` reaches.
     frozen = melting_fixed_point(jupiter.waste_heat, "jupiter", plug_mass=PLUG_MASS)
     assert frozen.below_freezing
+    assert not paper_bag_state("jupiter", plug_mass=PLUG_MASS).melts
+
+
+def test_the_melting_gate_is_the_first_two_terms_and_nothing_else() -> None:
+    """The correction itself, stated as an identity.
+
+    Warming 122 K ice to the melting point (0.236, integrating the measured
+    heat capacity of ice Ih) plus fusion (0.334) is 0.570 MJ/kg, and that is
+    the whole gate.  The ladder adds liquid warming to room temperature and
+    reaches 0.653, which is what the plug is charged and what a shading window
+    must reject -- but it is not a melting cost, and using it as one is what
+    put a zero in the Jupiter column.
+    """
+    gate = MELTING_GATE["jupiter"]
+    ladder = WARMING_TO_LIQUID["jupiter"]
+    assert np.isclose(gate.to_value(u.MJ / u.kg), 0.570, atol=5e-4)
+    assert np.isclose(ladder.to_value(u.MJ / u.kg), 0.653, atol=1e-3)
+    assert MELTING_GATE["earth"].to_value(u.MJ / u.kg) == 0.0
+
+    # Onset follows the gate, and the paper prints 2.19%.
+    assert np.isclose(boil_onset_leak(table_stored_energy()), 0.0219, atol=1e-4)
+    # The retired claim was 2.93%: the pre-correction 0.73 ladder charged as
+    # the gate.  Both errors pushed the same way -- 0.02 MJ/kg from holding
+    # ice's heat capacity constant, 0.08 from putting liquid warming inside a
+    # melting threshold -- and together they hid the crossing.
+    superseded = float(
+        (SUPERSEDED_WARMING_TO_LIQUID["jupiter"] - paper_bag_state("jupiter").intercept)
+        * SLUG_MASS
+        / table_stored_energy()
+    )
+    assert np.isclose(superseded, 0.0293, atol=1e-4)
+    assert superseded > SOLVED_LEAK_FRACTIONS["equilibrium"][TABLE_CLOSING_SPEED]
+    assert boil_onset_leak(table_stored_energy()) < (
+        SOLVED_LEAK_FRACTIONS["equilibrium"][TABLE_CLOSING_SPEED]
+    )
 
 
 def test_stored_energy_reproduces_both_published_values() -> None:
@@ -232,18 +313,22 @@ def test_film_mass_is_linear_in_vapour_and_temperature_and_free_of_radius() -> N
 def test_the_leak_bracket_closes_dry_from_cold_storage() -> None:
     """Item 10, and it is the answer to "3.7 kg against 31 kg": neither.
 
-    At the solved residence-weighted leak the waste heat does not even finish
-    melting the slug on any leg, so nothing boils, the bag holds no pressure,
-    and the film is not a mass item at all.  The feared case -- the paper's
-    4.4% held while ``E_B`` rises to 12.2 GJ -- is 23 kg on the same leg.
+    At the solved residence-weighted leak the three hot legs never finish
+    melting and the cold one boils half a kilogram of film -- against a
+    2.4-10.0 kg handling floor, so on no leg is the pressure vessel a mass
+    item.  The feared case -- the paper's 4.4% held while ``E_B`` rises to
+    12.2 GJ -- is 21 kg on the hot leg.
     """
-    legs = {75.0: (26200, 0.573), 45.58: (14700, 0.053)}
-    for speed, (temp, ionised) in legs.items():
+    for speed, (temp, ionised) in LEG_PLUME_STATES.items():
         energy = stored_field_energy(temp * u.K, ionised)
         solved = BagState(SOLVED_LEAK_FRACTIONS["equilibrium"][speed], energy)
         feared = BagState(SUPERSEDED_LEAK_FRACTION, energy)
-        assert solved.vapour_fraction == 0.0
-        assert solved.film_mass.to_value(u.kg) == 0.0
+        if speed == TABLE_CLOSING_SPEED:  # the cold end, the only leg that melts
+            assert solved.melts
+            assert solved.film_mass.to_value(u.kg) < 1.0
+        else:
+            assert not solved.melts
+            assert solved.film_mass.to_value(u.kg) == 0.0
         assert feared.film_mass.to_value(u.kg) > 3.0
     assert (
         BagState(
@@ -253,37 +338,44 @@ def test_the_leak_bracket_closes_dry_from_cold_storage() -> None:
     )
 
 
-def test_the_cold_leg_has_the_least_margin_against_boiling() -> None:
-    """The hot legs clear it 10x over; the cold leg only 1.2x.
+def test_the_cold_leg_is_past_boiling_onset_rather_than_short_of_it() -> None:
+    """The sign of this margin flipped with ADR 0027, and the paper says so.
 
     ``E_B`` falls faster with closing speed than the leak fraction rises, so
-    the *product* is smallest on the hot legs -- but the cold leg's 2.54% leak
-    against a 2.93% onset is the one worth watching, not the 12.2 GJ store.
+    the *product* is smallest on the hot legs.  Those clear onset 4.9-7.5x
+    over.  The cold leg's 2.54% against a 2.19% onset does not clear it at
+    all: melting completes and the leg boils.  Charged against the 0.653
+    ladder instead, onset read 2.93% and the same leg looked 1.2x safe.
     """
-    onsets = {}
-    for speed, (temp, ionised) in {
-        75.0: (26200, 0.573),
-        45.58: (14700, 0.053),
-    }.items():
-        energy = stored_field_energy(temp * u.K, ionised)
-        state = BagState(0.0, energy)
-        deficit = state.warming - state.intercept
-        onsets[speed] = float(deficit * SLUG_MASS / energy)
-    assert onsets[75.0] / SOLVED_LEAK_FRACTIONS["equilibrium"][75.0] > 8.0
-    assert 1.0 < onsets[45.58] / SOLVED_LEAK_FRACTIONS["equilibrium"][45.58] < 1.5
+    ratios = {
+        speed: boil_onset_leak(stored_field_energy(temp * u.K, ionised))
+        / SOLVED_LEAK_FRACTIONS["equilibrium"][speed]
+        for speed, (temp, ionised) in LEG_PLUME_STATES.items()
+    }
+    hot = [ratio for speed, ratio in ratios.items() if speed != TABLE_CLOSING_SPEED]
+    assert 4.5 < min(hot) and max(hot) < 8.0
+    assert ratios[TABLE_CLOSING_SPEED] < 1.0
+    assert np.isclose(ratios[TABLE_CLOSING_SPEED], 0.86, atol=0.02)
 
 
 def test_warm_storage_is_what_makes_the_bag_a_pressure_vessel() -> None:
-    """Cold storage absorbs 0.73 MJ/kg that never becomes pressure.
+    """Cold storage absorbs 0.570 MJ/kg before a gram of it can boil.
 
-    From Earth's 278 K only 0.21 MJ/kg is absorbed, so the cold leg does boil
-    and does need a film -- 4.9 kg rather than nothing.
+    From Earth's 278 K there is no gate at all, so the same leg boils eight
+    times harder and does need a film -- 4.9 kg against half a kilogram.  The
+    claim the section rests on survives ADR 0027 in the form "cold storage
+    removes the pressure vessel", because half a kilogram is far under the
+    handling floor; it does not survive in the form "nothing boils".
     """
     energy = stored_field_energy(14700 * u.K, 0.053)
     leak = SOLVED_LEAK_FRACTIONS["equilibrium"][45.58]
-    assert BagState(leak, energy, "jupiter").film_mass.to_value(u.kg) == 0.0
+    cold = BagState(leak, energy, "jupiter")
     warm = BagState(leak, energy, "earth")
+    assert 0.4 < cold.film_mass.to_value(u.kg) < 0.6
     assert 4.0 < warm.film_mass.to_value(u.kg) < 6.0
+    assert warm.vapour_mass / cold.vapour_mass > 8.0
+    # Under the handling floor tab:axial_bag prints for the flown 23 m column.
+    assert cold.film_mass < handling_film_mass(23.0 * u.m, HANDLING_GAUGE_BAND[0])
 
 
 def test_bag_sizing_density_and_both_field_columns_reproduce() -> None:

@@ -31,8 +31,20 @@ branch that holds, by two to five decades.  See :data:`SOLVED_LEAK_FRACTIONS`.
 
 **That bracket is now closed in print**, and :func:`paper_bag_state` follows
 the table the paper prints today: the solved 2.54% at the cold end of the
-growth push, which boils nothing at all from Jupiter storage and leaves
-``x = 0.18`` from Earth storage.  The superseded 4.4% column is kept as
+growth push, which leaves ``x = 0.18`` from Earth storage and ``x = 0.022``
+from Jupiter's.
+
+**The Jupiter column used to read zero, and that was an accounting error**
+(ADR 0027).  Melting is gated by warming the ice and fusing it -- 0.570 MJ/kg
+-- and nothing else; the ladder's third term warms *liquid* water and was
+being charged against a threshold it does not belong to.  Against the real
+gate the cold leg's 0.646 MJ/kg of waste heat melts through with 0.076 to
+spare, that surplus splits between warming the liquid and boiling it on the
+saturation curve, and the bag holds 0.9 kPa and half a kilogram of film
+instead of nothing.  The conclusion survives -- half a kilogram is far under
+the handling floor, so cold storage still removes the *pressure vessel* -- but
+the margin does not: melting completes at a 2.19% leak and the cold leg runs
+at 2.54%, so it is past that line rather than short of it.  The superseded 4.4% column is kept as
 :func:`superseded_bag_state`, because numbers computed downstream of it are
 still in circulation and the comparison is what identifies them.
 
@@ -70,35 +82,83 @@ ATOMS_PER_MOLECULE = 3
 RADIATED_FRACTION = 0.012
 SKY_FRACTION = 0.1
 
-#: Sensible-plus-latent heat to bring the slug from storage up to liquid.
-#: Jupiter parks it at 122 K (0.26 warming ice + 0.33 melting + 0.14 warming
-#: liquid); Earth at 278 K needs only the last part of that.
-#:
-#: **The last part of each is a warming term to the mist's own temperature**,
-#: which makes these rows an output of the cascade rather than an input to it:
-#: 0.14 MJ/kg warms liquid water 33 K, to 306 K, and 0.21 warms it 50 K, to
-#: 328 K -- and those are exactly the two mist temperatures the *superseded*
-#: 4.4% table printed.  The paper still prints them, so they stay as published
-#: inputs here; :func:`melting_fixed_point` measures what closing that loop
-#: would cost instead of quietly closing it.
-WARMING_TO_LIQUID: Dict[str, u.Quantity] = {
-    "jupiter": 0.73 * u.MJ / u.kg,
-    "earth": 0.21 * u.MJ / u.kg,
-}
 #: Temperature the slug is parked at before the burn, per location.
 STORAGE_TEMPERATURE: Dict[str, u.Quantity] = {
     "jupiter": 122.0 * u.K,
     "earth": 278.0 * u.K,
 }
-#: The published warming rows, decomposed, so the loop above can be closed.
-#: ``WARMING_TO_LIQUID`` is the first two terms plus liquid warming up to the
-#: mist temperature; these are the parts that do *not* depend on it.
-WARMING_ICE_TO_MELT = 0.26 * u.MJ / u.kg
+#: Melting point, and the "room temperature" the published ladder warms to.
+FREEZING_POINT = 273.15 * u.K
+ROOM_TEMPERATURE = 293.15 * u.K
+
+#: Warming 122 K ice up to the melting point, **integrating the measured heat
+#: capacity of ice Ih rather than holding it constant**.  Consumed here as a
+#: published input: the integration itself is the paper's, in
+#: ``tab:payload_sink``, whose "warming and melting from 122 K" row is
+#: 570 kJ/kg and whose latent heat is 334, leaving 236 for this term.  Ice's
+#: capacity falls by a factor of twelve between melting and 30 K, which is why
+#: a constant is wrong and why this is 0.236 rather than the 0.26 a textbook
+#: c_p near freezing gives.
+WARMING_ICE_TO_MELT = 0.236 * u.MJ / u.kg
 HEAT_OF_FUSION = 0.334 * u.MJ / u.kg
-#: Specific heat of liquid water.  The paper's own two warming rows imply
-#: 4.10 and 4.14 kJ/kg/K when read back against the mist temperatures they
-#: were closed at, so the textbook value is what they were built from.
+#: Specific heat of liquid water.  The paper's own Earth warming row implies
+#: 4.14 kJ/kg/K when read back against the mist temperature it was closed at,
+#: so the textbook value is what it was built from.
 LIQUID_HEAT_CAPACITY = 4.18e-3 * u.MJ / (u.kg * u.K)
+
+#: **Heat that must go in before any of the slug can boil.**  From ice that is
+#: warming to the melting point plus the heat of fusion, and *only* those two:
+#: 0.570 MJ/kg.  From Earth's 278 K liquid there is no gate at all -- water in
+#: vacuum evaporates toward saturation at whatever temperature it is at.
+#:
+#: **This is the correction of ADR 0027.**  The gate used to be the whole
+#: ``WARMING_TO_LIQUID`` ladder, 0.73 MJ/kg, which charged the *liquid*
+#: warming against a melting threshold it does not belong to and made the
+#: Jupiter column read "never finishes melting".  It does finish: 0.646 MJ/kg
+#: of waste heat against a 0.570 gate clears it with 0.076 to spare.
+MELTING_GATE: Dict[str, u.Quantity] = {
+    "jupiter": WARMING_ICE_TO_MELT + HEAT_OF_FUSION,
+    "earth": 0.0 * u.MJ / u.kg,
+}
+
+#: Liquid warming on top of the gate, as the paper publishes it.  Jupiter's is
+#: the ladder's third term, 273 K to room temperature; Earth's is the whole
+#: row, and 0.21 MJ/kg warms liquid water 50 K, to 328 K -- the mist of the
+#: *superseded* 4.4% table.  The paper still prints Earth's as an input, so it
+#: stays one here and :func:`melting_fixed_point` measures the gap.
+LIQUID_WARMING: Dict[str, u.Quantity] = {
+    "jupiter": LIQUID_HEAT_CAPACITY * (ROOM_TEMPERATURE - FREEZING_POINT),
+    "earth": 0.21 * u.MJ / u.kg,
+}
+
+#: Sensible-plus-latent heat to bring the slug from storage all the way up to
+#: liquid at room temperature: 0.236 + 0.334 + 0.084 = 0.653 MJ/kg from
+#: Jupiter's 122 K ice, 0.21 from Earth's 278 K water.  **This is the ladder,
+#: not the gate** -- see :data:`MELTING_GATE`.  It is still what the plug is
+#: charged and what a shading window has to reject.
+WARMING_TO_LIQUID: Dict[str, u.Quantity] = {
+    key: MELTING_GATE[key] + LIQUID_WARMING[key] for key in MELTING_GATE
+}
+
+#: Columns whose liquid-warming term is an *output* of the mist row rather
+#: than a published input.  Only the ice column, and only because the
+#: correction above made it one: the surplus over the gate is 0.076 MJ/kg
+#: against a 0.653 ladder, so *where* the liquid warming is charged decides
+#: the entire column, and it has to be solved on the saturation curve instead
+#: of assumed at room temperature.  Earth's row is still printed as an input.
+SOLVED_WARMING = frozenset({"jupiter"})
+
+#: The warming ladder the *superseded* 4.4% table was printed with, and the
+#: model it was printed under: the whole ladder charged as the melting gate.
+#: Kept only so :func:`superseded_bag_state` still reproduces that table cell
+#: for cell -- 306 K and 328 K are the fingerprint downstream numbers are
+#: grepped for, and a reproduction that drifted would stop finding them.  The
+#: Jupiter entry carries both errors ADR 0027 corrects: a constant ice heat
+#: capacity (0.26 rather than 0.236) and liquid warming inside the gate.
+SUPERSEDED_WARMING_TO_LIQUID: Dict[str, u.Quantity] = {
+    "jupiter": 0.73 * u.MJ / u.kg,
+    "earth": 0.21 * u.MJ / u.kg,
+}
 
 #: Ice plug at the end the projectile enters, sized at half again the 25 kg
 #: projectile's mass so the crater runs wider than the rod (ADR 0018).  It is
@@ -276,7 +336,14 @@ class BagState:
         intercept: Blackbody light absorbed, per kg of slug.
         leak: Field energy leaked, per kg of slug.
         waste_heat: Their sum, which the slug must absorb.
-        warming: Heat spent bringing the slug up to liquid, per kg.
+        warming: Heat spent bringing the slug up to liquid, per kg.  A
+            published input on the Earth column; an output of the saturation
+            solve on the ice column (see :data:`SOLVED_WARMING`).
+        melting_gate: Heat that must go in before any of it boils -- warming
+            the ice and fusing it, and nothing else.
+        melts: Whether the waste heat clears that gate.  False only with the
+            plug aboard on the ice column, which is what makes cold storage
+            plus a plug the one dry case left.
         plug_sink: Heat the ice plug absorbs before boiling starts, charged
             per kg of *slug* so it subtracts from the same cascade.
         boiling: What is left to boil, per kg.
@@ -301,6 +368,7 @@ class BagState:
         bag_volume: u.Quantity = BAG_VOLUME,
         leak_energy: u.Quantity | None = None,
         plug_mass: u.Quantity = 0.0 * u.kg,
+        published_warming: u.Quantity | None = None,
     ) -> None:
         """Run the cascade.
 
@@ -314,6 +382,11 @@ class BagState:
             leak_energy: Override the leak term with an explicit energy per kg,
                 used only to reproduce the superseded table's printed 0.89
                 MJ/kg.
+            published_warming: Override the warming row, which then serves as
+                the melting gate as well.  **This is the superseded model, not
+                an option** -- charging the liquid-warming term against the
+                melting threshold is exactly the error of ADR 0027, and the
+                only caller is :func:`superseded_bag_state`.
             plug_mass: Ice plug at the bag's entrance.  **Pure added thermal
                 mass at a fixed heat input**: it absorbs 122 K ice warming and
                 melting without boiling, so it can only ever *lower* the vapour
@@ -335,7 +408,14 @@ class BagState:
             else leak_energy.to(u.MJ / u.kg)
         )
         self.waste_heat = self.intercept + self.leak
-        self.warming = WARMING_TO_LIQUID[storage]
+        self.warming = (
+            WARMING_TO_LIQUID[storage]
+            if published_warming is None
+            else published_warming
+        )
+        self.melting_gate = (
+            MELTING_GATE[storage] if published_warming is None else published_warming
+        )
         storage_temperature = STORAGE_TEMPERATURE[storage]
         # The plug is frozen at 122 K wherever the slug was stored, because a
         # plug that is not solid is not a target, so it is charged the Jupiter
@@ -343,15 +423,39 @@ class BagState:
         self.plug_sink = (plug_mass * WARMING_TO_LIQUID["jupiter"] / slug_mass).to(
             u.MJ / u.kg
         )
+        # **The gate, not the ladder, decides whether anything boils** (ADR
+        # 0027).  Only warming the ice and melting it stand between the waste
+        # heat and the first gram of vapour; warming the liquid afterwards is
+        # a real cost but it happens alongside boiling rather than before it.
+        self.melts = self.waste_heat - self.plug_sink > self.melting_gate
+        if self.melts and storage in SOLVED_WARMING and published_warming is None:
+            # The melt completes from ice, and the surplus is small enough
+            # (0.076 MJ/kg) that charging the liquid warming at an assumed
+            # room temperature would swamp it.  So the residue's split between
+            # warming the liquid and boiling it is solved on the saturation
+            # curve, which makes this column's warming row an output.
+            self._adopt(
+                melting_fixed_point(
+                    self.waste_heat,
+                    storage,
+                    shape_factor=shape_factor,
+                    plug_mass=plug_mass,
+                    slug_mass=slug_mass,
+                    bag_volume=bag_volume,
+                ),
+                plug_mass=plug_mass,
+                slug_mass=slug_mass,
+            )
+            return
         self.boiling = self.waste_heat - self.warming - self.plug_sink
         self.vapour_fraction = max(0.0, float(self.boiling / LATENT_HEAT))
         if self.vapour_fraction <= 0.0:
             # The waste heat does not even finish melting the slug, so there is
             # no vapour, no saturation pressure, and nothing for the film to
             # hold.  This is a real operating point rather than a degenerate
-            # one -- it is where every leg lands at the solved leak from cold
-            # storage -- and the bag stops being a pressure vessel and becomes
-            # a containment membrane, sized by handling rather than by stress.
+            # one -- from cold storage it is where the plugged column lands --
+            # and the bag stops being a pressure vessel and becomes a
+            # containment membrane, sized by handling rather than by stress.
             self.mist_temperature = storage_temperature
             self.mist_pressure = 0.0 * u.Pa
             self.vapour_mass = 0.0 * u.kg
@@ -366,6 +470,40 @@ class BagState:
             self.vapour_fraction, self.mist_temperature, shape_factor
         )
         self.film_mass = (self.film_fraction * slug_mass).to(u.kg)
+
+    def _adopt(
+        self,
+        solved: "MeltingFixedPoint",
+        plug_mass: u.Quantity,
+        slug_mass: u.Quantity,
+    ) -> None:
+        """Take the cascade's tail from a solved fixed point.
+
+        Used by the ice column, whose warming row is an output.  Every term is
+        recharged at the solved mist temperature, including the plug, so the
+        column's own book balances exactly: waste heat = warming + plug + boil.
+
+        Args:
+            solved: The state where the energy balance and the saturation
+                curve agree.
+            plug_mass: Ice plug at the bag's entrance.
+            slug_mass: Slug in the bag.
+        """
+        self.warming = solved.warming
+        self.plug_sink = (
+            (plug_mass / slug_mass)
+            * (
+                MELTING_GATE["jupiter"]
+                + LIQUID_HEAT_CAPACITY * (solved.mist_temperature - FREEZING_POINT)
+            )
+        ).to(u.MJ / u.kg)
+        self.boiling = self.waste_heat - self.warming - self.plug_sink
+        self.vapour_fraction = solved.vapour_fraction
+        self.vapour_mass = solved.vapour_mass
+        self.mist_temperature = solved.mist_temperature
+        self.mist_pressure = solved.mist_pressure
+        self.film_mass = solved.film_mass
+        self.film_fraction = float(self.film_mass / slug_mass)
 
 
 #: Plume state per closing speed, from item 1: ``(T, ionisation fraction)``.
@@ -451,29 +589,38 @@ def superseded_bag_state(storage: str = "jupiter") -> BagState:
         stored_energy=stored_field_energy(),
         storage=storage,
         leak_energy=SUPERSEDED_LEAK_ENERGY,
+        published_warming=SUPERSEDED_WARMING_TO_LIQUID[storage],
     )
 
 
 def boil_onset_leak(stored_energy: u.Quantity, storage: str = "jupiter") -> float:
     """Leak fraction at which the bag first has to hold pressure.
 
-    Closed form: the slug must absorb ``warming`` before any of it boils, and
-    the blackbody intercept contributes to that regardless, so boiling starts
-    at ``(warming - intercept) m / E_B``.
+    Closed form: the slug must clear :data:`MELTING_GATE` before any of it
+    boils, and the blackbody intercept contributes to that regardless, so
+    boiling starts at ``(gate - intercept) m / E_B``.
+
+    **The gate, not the ladder** (ADR 0027).  Charging the whole 0.653 MJ/kg
+    ladder here put onset at 2.93% and left the cold leg's solved 2.54% a
+    comfortable 1.2x short of it.  Against the real 0.570 gate onset is 2.19%
+    and the cold leg is *past* it: the leg melts through and boils.
 
     Args:
         stored_energy: ``E_B`` the bag confines.
         storage: ``"jupiter"`` or ``"earth"``.
 
     Returns:
-        The leak fraction at onset.
+        The leak fraction at onset.  Negative from Earth storage, where there
+        is no gate at all -- liquid water in vacuum needs no threshold to
+        start evaporating, so the blackbody intercept alone is already past
+        onset.
     """
     intercept = (
         RADIATED_FRACTION
         * SKY_FRACTION
         * plume_ignition_energy(NOZZLE_FLOOR_TEMPERATURE)
     )
-    deficit = WARMING_TO_LIQUID[storage] - intercept
+    deficit = MELTING_GATE[storage] - intercept
     return float(deficit * SLUG_MASS / stored_energy)
 
 
@@ -483,12 +630,16 @@ class MeltingFixedPoint:
 
     ``tab:bag_state``'s warming row is not independent of its mist row: the
     last part of "warming and melting the slug up to liquid" warms liquid
-    water to whatever temperature the mist ends up at, and the published 0.73
-    and 0.21 MJ/kg were closed against 306 K and 328 K -- the mist of the
-    *superseded* 4.4% table.  Solving the two together instead is a one-line
-    root find, and what it produces is a gap rather than a replacement: the
-    paper prints the warming row as an input, so :func:`paper_bag_state` keeps
-    printing it that way and this measures what that costs.
+    water to whatever temperature the mist ends up at, and the published 0.21
+    MJ/kg was closed against 328 K -- the mist of the *superseded* 4.4% table.
+    Solving the two together instead is a one-line root find.
+
+    **The ice column now runs on this rather than reporting against it**
+    (ADR 0027): once the melting gate is charged correctly the Jupiter surplus
+    is 0.076 MJ/kg, small enough that assuming a room-temperature liquid
+    warming decides the whole column, so :class:`BagState` solves that column
+    here.  Earth's row is still a published input and this still measures what
+    that costs.
 
     Attributes:
         warming: Heat to bring the slug up to liquid at the solved mist
@@ -545,10 +696,10 @@ def melting_fixed_point(
     Raises:
         KeyError: If ``storage`` is not a known location.
     """
-    freezing = 273.15
-    from_ice = storage == "jupiter"
+    freezing = FREEZING_POINT.to_value(u.K)
+    to_liquid = MELTING_GATE[storage]
+    from_ice = to_liquid > 0.0 * u.MJ / u.kg
     liquid_from = freezing if from_ice else STORAGE_TEMPERATURE[storage].to_value(u.K)
-    to_liquid = WARMING_ICE_TO_MELT + HEAT_OF_FUSION if from_ice else 0.0 * u.MJ / u.kg
     capacity = LIQUID_HEAT_CAPACITY * u.K  # per kelvin of warming
     plug_share = float(plug_mass / slug_mass)
 
@@ -558,9 +709,7 @@ def melting_fixed_point(
     def surplus(kelvin: float) -> float:
         """Vapour the energy balance leaves, less what saturation can hold."""
         plug = plug_share * (
-            WARMING_ICE_TO_MELT
-            + HEAT_OF_FUSION
-            + capacity * max(0.0, kelvin - freezing)
+            MELTING_GATE["jupiter"] + capacity * max(0.0, kelvin - freezing)
         )
         left = waste_heat - warming_at(kelvin) - plug
         by_energy = max(0.0, float(left / LATENT_HEAT))
@@ -596,13 +745,18 @@ def melting_fixed_point(
 def main() -> None:
     """Print the bag-state reproduction and the closed leak bracket."""
     rows = (
+        ("blackbody intercept [MJ/kg]", lambda s: s.intercept.to_value(u.MJ / u.kg)),
+        ("field leak [MJ/kg]", lambda s: s.leak.to_value(u.MJ / u.kg)),
         ("waste heat [MJ/kg]", lambda s: s.waste_heat.to_value(u.MJ / u.kg)),
+        ("melting gate [MJ/kg]", lambda s: s.melting_gate.to_value(u.MJ / u.kg)),
+        ("warming charged [MJ/kg]", lambda s: s.warming.to_value(u.MJ / u.kg)),
         ("left to boil [MJ/kg]", lambda s: s.boiling.to_value(u.MJ / u.kg)),
         ("vapour fraction x", lambda s: s.vapour_fraction),
         ("vapour mass [kg]", lambda s: s.vapour_mass.to_value(u.kg)),
         ("mist temperature [K]", lambda s: s.mist_temperature.to_value(u.K)),
         ("mist pressure [kPa]", lambda s: s.mist_pressure.to_value(u.kPa)),
         ("bag film [kg]", lambda s: s.film_mass.to_value(u.kg)),
+        ("bag film [% of slug]", lambda s: 100.0 * s.film_fraction),
     )
 
     print("=== tab:bag_state, as printed ===")
@@ -613,8 +767,10 @@ def main() -> None:
     print(
         f"The leak is the solved {100 * SOLVED_LEAK_FRACTIONS['equilibrium'][TABLE_CLOSING_SPEED]:.2f}%"
         f" at the {TABLE_CLOSING_SPEED} km/s cold end of the growth push.\n"
-        "Jupiter storage never finishes melting, so that column has no vapour\n"
-        "and no pressure vessel at all."
+        "Jupiter storage melts through with 0.076 MJ/kg to spare and boils\n"
+        "2.2% of the flow, so that column holds ~0.9 kPa and half a kilogram\n"
+        "of film -- far under the handling floor, but not the zero it read\n"
+        "before the melting gate was separated from the warming ladder."
     )
 
     print("\n=== The same table before the leak was solved, for comparison ===")
@@ -647,7 +803,10 @@ def main() -> None:
         )
     print(
         "\nLeak fractions are residence-weighted 1/Rm on the equilibrium branch,\n"
-        "from puffsat_impact_simulation's solved cooling history (Q-L, Q-M)."
+        "from puffsat_impact_simulation's solved cooling history (Q-L, Q-M).\n"
+        "Onset is the 0.570 MJ/kg melting gate, not the 0.653 ladder (ADR\n"
+        "0027), so a margin under 1.0x means the leg melts through and boils.\n"
+        "The cold leg does, at 0.9x; the three hot legs clear it 4.9-7.5x."
     )
 
     print("\n=== tab:bag_sizing (item 4) ===")
@@ -683,8 +842,9 @@ def main() -> None:
         )
     print(
         "Bore and conductor trade one for one; the launch envelope picks 23 m.\n"
-        "The film column is the Earth-storage pressure vessel, the only case\n"
-        "left that boils; from cold storage it is 0 kg at every length."
+        "The film column is the Earth-storage pressure vessel, which is what\n"
+        "the paper quotes; cold storage boils eight times less and pays about\n"
+        "an eighth of it, well under the handling floor at every length."
     )
 
     print("\n=== sec:needle_through_fog: the plug as a heat sink ===")
@@ -716,11 +876,13 @@ def main() -> None:
             )
     print(
         "The plug is pure added thermal mass at a fixed heat input, so it can\n"
-        "only lower the vapour mass and cool the mist. From cold storage both\n"
-        "columns are dry and the plug changes nothing the bag has to hold.\n"
-        "From Earth storage it takes the flown 23 m column below the 12.7 um\n"
-        "handling floor, so the plug is what stops the bag being a pressure\n"
-        "vessel at all on the leg that still boils."
+        "only lower the vapour mass and cool the mist. From cold storage that\n"
+        "is now enough to matter: the bare column melts through by 0.076\n"
+        "MJ/kg, and the plug's 24.5 MJ takes it back under the gate, so cold\n"
+        "storage plus a plug is the one dry case left (ADR 0027). From Earth\n"
+        "storage it takes the flown 23 m column below the 12.7 um handling\n"
+        "floor, so the plug is what stops the bag being a pressure vessel at\n"
+        "all on the leg that boils hardest."
     )
 
     print("\n=== The one loop the table still cuts: warming vs mist temperature ===")
@@ -763,11 +925,11 @@ def main() -> None:
                     f"{press.to_value(u.kPa):>8.2f}k{film.to_value(u.kg):>7.2f}kg{edge}"
                 )
     print(
-        "The printed warming rows were closed against the superseded table's\n"
-        "306 K and 328 K, so they overcharge the slug now. Closing the loop\n"
-        "moves Earth storage up about 4 kg of vapour and 2 K, and gives the\n"
-        "Jupiter column a slush at the freezing point rather than a dry bag.\n"
-        "Reported, not applied: the paper prints the warming row as an input."
+        "Earth's printed warming row was closed against the superseded\n"
+        "table's 328 K, so it overcharges the slug now: closing the loop moves\n"
+        "that column up about 4 kg of vapour and 2 K. Reported, not applied --\n"
+        "the paper prints that row as an input. The Jupiter column IS this\n"
+        "solve now (ADR 0027), so its two lines agree by construction."
     )
 
     print("\n=== D4: the handling floor under the film ===")
@@ -1048,8 +1210,9 @@ def coldest_mist_temperature(
     """Mist temperature in a spherical bag of this radius.
 
     The vapour fraction is held at ``tab:bag_state``'s Earth-storage value --
-    the only column that still boils -- and only the volume changes, so a
-    bigger bag holds the same vapour more thinly and condenses colder.
+    the column the paper's caption names, and the one that boils eight times
+    harder -- and only the volume changes, so a bigger bag holds the same
+    vapour more thinly and condenses colder.
 
     **The default is read off the table rather than pinned**, because this
     column was left behind once already: it was written against the superseded

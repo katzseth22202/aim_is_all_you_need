@@ -127,7 +127,11 @@ nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that deci
 
 bag_state.py                 ← plume_thermal only: the waste-heat cascade behind
                                 tab:bag_state, and the field-leak bracket that
-                                sizes the slug bag (ledger items 5-8 and 10)
+                                sizes the slug bag (ledger items 5-8 and 10).
+                                Melting is gated by warming the ice and fusing
+                                it and by nothing else, so the ice column's
+                                warming row is solved on the saturation curve
+                                rather than assumed (ADR 0027)
 
 cruise_thermal.py            ← plume_thermal only: ice sublimation equilibrium
                                 for the projectile (ledger item 14)

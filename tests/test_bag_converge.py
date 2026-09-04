@@ -86,10 +86,25 @@ def test_every_converged_bag_stays_optically_thick() -> None:
 
 
 def test_the_gap_does_not_reach_the_film() -> None:
-    """Cold storage holds the film at zero however the bag is sized (item 10)."""
+    """Cold storage holds the film under the handling floor however the bag is
+    sized (item 10).
+
+    Zero on the hot leg, which never finishes melting, and two thirds of a
+    kilogram on the cold one, which does (ADR 0027).  Converging the loop
+    shrinks the bag and so raises the leak, which is why this is 0.66 kg
+    against the cut table's 0.51 -- still an order of magnitude under
+    ``tab:axial_bag``'s 2.4 kg handling floor, so the gap does not reach the
+    film in the sense that matters: what the bag is sized by.
+    """
     for speed in (75.0, 45.58):
         *_, state, _ = converge(speed, SOLVED_LEAK_FRACTIONS["equilibrium"][speed])
-        assert state.film_mass.to_value(u.kg) == 0.0
+        assert state.film_mass.to_value(u.kg) < 1.0
+    hot, cold = (
+        converge(speed, SOLVED_LEAK_FRACTIONS["equilibrium"][speed])[-2]
+        for speed in (75.0, 45.58)
+    )
+    assert hot.film_mass.to_value(u.kg) == 0.0
+    assert 0.5 < cold.film_mass.to_value(u.kg) < 0.8
 
 
 def test_a_hotter_pulse_wants_a_bigger_bag_not_a_smaller_one() -> None:
