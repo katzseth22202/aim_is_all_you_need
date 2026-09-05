@@ -1,8 +1,16 @@
 # The melting gate is not the warming ladder, and the cold bag does boil
 
-Status: accepted
+Status: accepted, and its figures superseded in the third digit by ADR 0029
 
 Date: 2026-09-04
+
+> ADR 0029 moved the bag's standoff volume from the 5.4 m sphere's 659.6 m3 to
+> the flown column's 672.9, so every figure below that depends on the vapour
+> *density* moved with it -- the Jupiter column's `x` to 0.02224, its mist to
+> 278.70 K, its pressure to 0.905 kPa, its film to 0.515 kg, and the Earth
+> column's pressure to 8.52 kPa. The reasoning here is untouched and none of
+> its conclusions move. The merged edit for the paper is
+> `docs/paper_corrections_bag_state_2026-09-05.md`.
 
 ## Context
 

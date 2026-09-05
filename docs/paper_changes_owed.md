@@ -255,6 +255,13 @@ resized the bag -- but the intended baseline cannot be recovered from here.
 
 Either fix the reference or restore the item.
 
+**Closed 2026-09-05.** The paper's own
+`deferred_to_companion_repos.md` records P6 as a stale note rather than a paper
+error -- `sec:axial_bag` already says 1.3 kg -- and the 0.8 was never a live
+figure. Re-confirmed at the geometry ADR 0029 adopted: the flown column costs
+6.162 - 4.844 = **1.32 kg** more film than the sphere, against 1.31 before, so
+the printed 1.3 stands through the volume change as well.
+
 ---
 
 ## Worklist status

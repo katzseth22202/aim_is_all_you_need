@@ -59,6 +59,16 @@ from src.plume_state import FLOWN_BAG_DENSITY, plume_state
 from src.plume_thermal import plume_ignition_energy
 
 #: Bag radius the paper flies, and the radiated share it was sized at.
+#:
+#: **Left at 5.4 m by ADR 0029, deliberately.**  This module works the optical
+#: depth as ``kappa rho r`` against :data:`~src.plume_state.FLOWN_BAG_DENSITY`,
+#: which is the vendored solve's 0.323 kg/m^3, and 5.4 m is the radius that
+#: holds 213 kg at that density.  The two are one pair from
+#: ``puffsat_impact_simulation``, so moving one without the other would size the
+#: bag at 217 kg.  The bag ``bag_state`` now adopts is the flown column's
+#: 672.9 m^3, whose equal-volume sphere is 5.44 m at 0.3165 kg/m^3; ``tau``
+#: differs by 0.7% between the two pairs, which does not reach any conclusion
+#: here.
 FLOWN_RADIUS = 5.4 * u.m
 FLOWN_RADIATED_SHARE = 0.0117
 

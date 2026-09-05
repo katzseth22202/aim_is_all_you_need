@@ -1,6 +1,6 @@
 """What the slug bag weighs, and the field leak that decides it.
 
-The bag holds 213 kg of slug spread over 659.6 m^3 so the plume has something
+The bag holds 213 kg of slug spread over 672.9 m^3 so the plume has something
 to be a plume *in*.  It is not free: waste heat boils part of the slug, the
 vapour has a saturation pressure, and the film has to hold that pressure.  The
 whole chain is six dependent steps and the paper prints it as
@@ -71,8 +71,34 @@ from src.plume_thermal import (
 
 #: Slug mass the bag holds.
 SLUG_MASS = 213.0 * u.kg
-#: Enclosed bag volume, the standoff volume of ``tab:bag_sizing``.
-BAG_VOLUME = 659.6 * u.m**3
+#: The column the launch envelope picks: 23.8 m at a 3.00 m bore, which is
+#: ``puffsat_impact_simulation``'s and which the paper adopted in reply R14.
+#: Every film mass ``sec:axial_bag`` quotes is worked at this length.
+FLOWN_COLUMN_LENGTH = 23.8 * u.m
+#: Bore of that column.  ``eq:bore_from_length`` is ``r = sqrt(V / pi l)``, so
+#: this and the length above are what fix :data:`BAG_VOLUME`.
+FLOWN_BORE_RADIUS = 3.00 * u.m
+#: Enclosed bag volume: the standoff volume ``tab:axial_bag`` pours into every
+#: shape, and the volume the mist of ``tab:bag_state`` fills.  **Derived from
+#: the column above rather than written down**, which is the whole of ADR 0029.
+#:
+#: **672.9 m^3 is the flown column's own volume, adopted 2026-09-05 in place of
+#: the 659.6 that used to stand here** (paper reply R14, ADR 0029).  The two
+#: numbers are two answers to the same question and the paper printed both.
+#: 659.6 is the 5.4 m sphere of ``tab:bag_sizing``; 672.9 is
+#: ``pi r^2 l`` for the 23.8 m column at a 3.00 m bore that
+#: ``puffsat_impact_simulation`` flies and that the paper's *prose* has always
+#: quoted -- "3.0 m", "28 m^2", "aspect 4" are roundings of the sim's pair and
+#: not of the stated one.  The sim's pair is self-consistent, so it is the one
+#: adopted, and the equal-volume sphere moves with it to
+#: :data:`SPHERE_BORE_RADIUS` = 5.44 m rather than 5.40.
+#:
+#: **What it does and does not move.**  ``eq:bag_film_mass`` is
+#: ``F x rho_f R_g T / (M sigma)`` -- volume does not appear -- so the film
+#: column of ``tab:axial_bag`` inherits the change only through the mist
+#: temperature, which falls 0.4 K because the same vapour is spread more
+#: thinly.  That is a 0.1% effect on the film and a 2% one on the pressure.
+BAG_VOLUME = (np.pi * FLOWN_BORE_RADIUS**2 * FLOWN_COLUMN_LENGTH).to(u.m**3)
 #: Free particles per water molecule once dissociated (2 H + O).
 ATOMS_PER_MOLECULE = 3
 
@@ -827,12 +853,15 @@ def main() -> None:
 
     print("\n=== tab:axial_bag (item 9) ===")
     print(f"{'length':>9}{'bore':>9}{'conductor':>12}{'F':>7}{'film':>9}")
-    reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
+    sphere_length = SPHERE_BAG_LENGTH.to_value(u.m)
+    reference = SPHERE_BORE_RADIUS.to_value(u.m) * sphere_length
     sphere_film = paper_bag_state("earth").film_mass
     for length in AXIAL_BAG_LENGTHS:
         metres = length * u.m
         radius = (
-            SPHERE_BORE_RADIUS if length == 10.8 else bore_radius(metres)
+            SPHERE_BORE_RADIUS
+            if np.isclose(length, sphere_length)
+            else bore_radius(metres)
         ).to_value(u.m)
         factor = shape_factor(metres)
         film = sphere_film * factor / SPHERE_SHAPE_FACTOR
@@ -841,10 +870,12 @@ def main() -> None:
             f"{factor:>7.2f}{film.to_value(u.kg):>8.1f}kg"
         )
     print(
-        "Bore and conductor trade one for one; the launch envelope picks 23 m.\n"
+        "Bore and conductor trade one for one; the launch envelope picks\n"
+        "23.8 m -- the sim's column, adopted with its 672.9 m3 (ADR 0029).\n"
         "The film column is the Earth-storage pressure vessel, which is what\n"
-        "the paper quotes; cold storage boils eight times less and pays about\n"
-        "an eighth of it, well under the handling floor at every length."
+        "the paper quotes; cold storage boils eight times less into a colder\n"
+        "mist and so pays about a tenth of it -- 0.51 kg at the sphere to\n"
+        "0.68 at 50 m, under the handling floor at every length (ADR 0027)."
     )
 
     print("\n=== sec:needle_through_fog: the plug as a heat sink ===")
@@ -862,7 +893,7 @@ def main() -> None:
             if state.vapour_fraction <= 0.0:
                 print(f"{label:>21}: nothing boils")
                 continue
-            flown = 23.0 * u.m
+            flown = FLOWN_COLUMN_LENGTH
             column = state.film_mass * shape_factor(flown) / SPHERE_SHAPE_FACTOR
             governing = governing_film_mass(column, flown)
             print(
@@ -870,7 +901,7 @@ def main() -> None:
                 f"  x {state.vapour_fraction:.4f}"
                 f"  mist {state.mist_temperature.to_value(u.K):6.2f} K"
                 f"  film(F=1.5) {state.film_mass.to_value(u.kg):5.2f} kg"
-                f"  film(23 m) {column.to_value(u.kg):5.2f} kg"
+                f"  film(23.8 m) {column.to_value(u.kg):5.2f} kg"
                 f"  flies {governing.to_value(u.kg):5.2f} kg"
                 f" ({'handling' if governing > column else 'pressure'})"
             )
@@ -880,7 +911,7 @@ def main() -> None:
         "is now enough to matter: the bare column melts through by 0.076\n"
         "MJ/kg, and the plug's 24.5 MJ takes it back under the gate, so cold\n"
         "storage plus a plug is the one dry case left (ADR 0027). From Earth\n"
-        "storage it takes the flown 23 m column below the 12.7 um handling\n"
+        "storage it takes the flown 23.8 m column below the 12.7 um handling\n"
         "floor, so the plug is what stops the bag being a pressure vessel at\n"
         "all on the leg that boils hardest."
     )
@@ -954,8 +985,9 @@ def main() -> None:
             f"{pressure.to_value(u.kg):>10.1f}kg{governs:>10}"
         )
     print(
-        "The pressure column is the coldest leg from Earth storage, the only\n"
-        "case left that still boils; from cold storage it is 0 kg everywhere.\n"
+        "The pressure column is the coldest leg from Earth storage, which is\n"
+        "the leg that boils hardest; from cold storage it is a tenth of this,\n"
+        "0.51-0.68 kg, and under the floor at every length (ADR 0027).\n"
         "The handling floor is not, so the bag never weighs nothing -- and a\n"
         "capsule's area is 2 pi r L, so a longer column costs film as well as\n"
         "conductor. Seams, ripstop, metallisation and inflation hardware are\n"
@@ -1049,11 +1081,26 @@ def radiated_fraction(
 
 # --- Item 9: tab:axial_bag -------------------------------------------------
 
-#: Column lengths ``tab:axial_bag`` tabulates; the first is the sphere.
-AXIAL_BAG_LENGTHS = (10.8, 16.0, 23.0, 32.0, 50.0)
 #: Bore radius of the spherical row, which is the sphere's own radius rather
-#: than ``eq:bore_from_length``'s.
-SPHERE_BORE_RADIUS = 5.40 * u.m
+#: than ``eq:bore_from_length``'s.  **Derived from :data:`BAG_VOLUME` rather
+#: than written down**, because the two used to be able to drift: the table
+#: normalises its conductor column to "the sphere of the same volume", and a
+#: hardcoded 5.40 m stopped being that sphere the moment the standoff volume
+#: moved to the flown column's 672.9 m^3.  It is now 5.4361 m, so the sphere
+#: row is 10.9 m across rather than 10.8.
+SPHERE_BORE_RADIUS = ((3.0 * BAG_VOLUME / (4.0 * np.pi)) ** (1.0 / 3.0)).to(u.m)
+#: Length of the spherical row: its own diameter.
+SPHERE_BAG_LENGTH = 2.0 * SPHERE_BORE_RADIUS
+#: Column lengths ``tab:axial_bag`` tabulates; the first is the sphere and the
+#: third is :data:`FLOWN_COLUMN_LENGTH`, which sits with :data:`BAG_VOLUME`
+#: because it is what defines it.
+AXIAL_BAG_LENGTHS = (
+    SPHERE_BAG_LENGTH.to_value(u.m),
+    16.0,
+    FLOWN_COLUMN_LENGTH.to_value(u.m),
+    32.0,
+    50.0,
+)
 
 
 def bore_radius(

@@ -9,11 +9,13 @@ import numpy as np
 import pytest
 
 from src.nozzle_geometry import (
+    BAG_SLUG_MASS,
     BAG_VOLUME,
     BORE_RADIUS,
     DESIGN_ARRIVAL_FRACTION,
     IMPACTOR_MASS,
     PLUG_MASS,
+    SIM_SOLVE_DENSITY,
     arrival_fraction_for,
     bag_density,
     conductor_mass,
@@ -28,9 +30,18 @@ from src.nozzle_geometry import (
 
 
 def test_full_bore_sweep_reproduces_the_papers_slug_ratio() -> None:
-    """`rho A L / m` = 8.69, which is where the paper's 8.5 comes from."""
-    assert np.isclose(full_bore_slug_ratio(), 8.692, rtol=1e-3)
-    assert np.isclose(bag_density(), 0.3229, rtol=1e-3)
+    """`rho A L / m` = 8.52, which is where the paper's 8.5 comes from.
+
+    Exactly ``BAG_SLUG_MASS / IMPACTOR_MASS``, because the density and the
+    swept volume are now the same bag: ADR 0029 derives ``BAG_VOLUME`` from the
+    bore and the column instead of carrying the 5.4 m sphere's 659.6, which had
+    the sweep returning 8.69 for a quantity whose definition is 213/25.
+    """
+    assert np.isclose(full_bore_slug_ratio(), 8.52, rtol=1e-9)
+    assert np.isclose(full_bore_slug_ratio(), BAG_SLUG_MASS / IMPACTOR_MASS, rtol=1e-9)
+    assert np.isclose(bag_density(), 0.3165, rtol=1e-3)
+    # The companion sim's runs were solved at the old density and stay reachable.
+    assert np.isclose(full_bore_slug_ratio(SIM_SOLVE_DENSITY), 8.692, rtol=1e-3)
 
 
 def test_rigid_front_is_exactly_quadratic_in_arrival_radius() -> None:
@@ -56,23 +67,36 @@ def test_the_design_arrival_is_the_compact_aperture_not_a_wide_front() -> None:
 
 
 def test_the_compact_needle_beats_the_wide_front_on_k_as_well_as_aperture() -> None:
-    """It is not a compromise: 7.21 is inside ADR 0016's 6.75-7.77 optimum band.
+    """It is not a compromise: 7.10 is inside ADR 0016's 6.75-7.77 optimum band.
 
-    The wide front's 8.60 overshoots it, so the compact projectile wins on
-    aperture, on slug ratio, and on chain growth at once.
+    The wide front's 8.43 overshoots it, so the compact projectile wins on
+    aperture, on slug ratio, and on chain growth at once.  Both figures fell
+    2% with the adopted bag density (ADR 0029) and the verdict is unmoved --
+    the compact arrival had 0.46 of band to spare and now has 0.67.
     """
     compact = self_consistent_slug_ratio(DESIGN_ARRIVAL_FRACTION)
     wide = self_consistent_slug_ratio(0.8)
     assert 6.75 <= compact <= 7.77
     assert wide > 7.77
-    assert np.isclose(compact, 7.214, rtol=5e-3)
+    assert np.isclose(compact, 7.100, rtol=5e-3)
 
 
 def test_wide_front_numbers_stay_reachable_for_comparison() -> None:
-    """The rigid-front bound at 0.8/0.9 is quoted in ADR 0016 addendum 1."""
-    assert np.isclose(swept_slug_ratio(0.8), 5.563, rtol=1e-3)
-    assert np.isclose(swept_slug_ratio(0.8, 3.0), 8.277, rtol=2e-3)
-    assert np.isclose(swept_slug_ratio(0.9), 7.041, rtol=1e-3)
+    """The rigid-front bound at 0.8/0.9, quoted in ADR 0016 addendum 1.
+
+    The addendum's own 5.563 / 8.277 / 7.041 were computed at the 659.6 m^3
+    density, and are still reachable through ``slug_density``; the flown bag
+    delivers 2% less of each (ADR 0029).
+    """
+    assert np.isclose(swept_slug_ratio(0.8), 5.453, rtol=1e-3)
+    assert np.isclose(swept_slug_ratio(0.8, 3.0), 8.111, rtol=2e-3)
+    assert np.isclose(swept_slug_ratio(0.9), 6.901, rtol=1e-3)
+    for fraction, expansion, published in ((0.8, 0.0, 5.563), (0.9, 0.0, 7.041)):
+        assert np.isclose(
+            swept_slug_ratio(fraction, expansion, slug_density=SIM_SOLVE_DENSITY),
+            published,
+            rtol=1e-3,
+        )
 
 
 def test_a_compact_ice_rod_falls_out_the_bottom_of_the_window() -> None:
@@ -85,7 +109,7 @@ def test_a_compact_ice_rod_falls_out_the_bottom_of_the_window() -> None:
     radius = (3.0 * (IMPACTOR_MASS / 917.0) / (4.0 * np.pi)) ** (1.0 / 3.0)
     assert np.isclose(radius, 0.1867, rtol=1e-3)
     delivered = swept_slug_ratio(radius / BORE_RADIUS)
-    assert np.isclose(delivered, 0.0337, rtol=1e-2)
+    assert np.isclose(delivered, 0.0330, rtol=1e-2)
     assert delivered < 0.084
 
 
@@ -105,10 +129,10 @@ def test_spreading_makes_the_arrival_radius_nearly_irrelevant() -> None:
 
 def test_arrival_fraction_inverts_the_sweep() -> None:
     """The optimiser picks k; this says whether the geometry can supply it."""
-    for k in (3.0, 5.563, 6.75, 8.692):
+    for k in (3.0, 5.453, 6.75, 8.52):
         assert np.isclose(swept_slug_ratio(arrival_fraction_for(k)), k, rtol=1e-9)
-    # The tolled optimum needs 0.88, not the 0.97 that k = 8.5 demanded.
-    assert np.isclose(arrival_fraction_for(6.75), 0.881, rtol=2e-3)
+    # The tolled optimum needs 0.89, not the 0.97 that k = 8.5 demanded.
+    assert np.isclose(arrival_fraction_for(6.75), 0.890, rtol=2e-3)
 
 
 def test_arrival_fraction_reports_the_infeasible_case_rather_than_clipping() -> None:
@@ -143,17 +167,27 @@ def test_sound_speed_rises_with_front_speed_and_clamps_outside_the_table() -> No
 
 
 def test_self_consistent_front_makes_the_arrival_radius_nearly_irrelevant() -> None:
-    """The finding: 0.03-8.7 rigid collapses to 7.2-8.7 once the front may widen.
+    """The finding: 0.03-8.5 rigid collapses to 7.1-8.5 once the front may widen.
 
     Pinned against a direct run of ``puffsat_impact_simulation``'s ``eos_water``
     at commit ``0216a09``, which gave 7.240 and 8.601 for these two cases; the
     in-repo interpolation must track that solve, not merely be self-consistent.
+    **That run was solved at the 659.6 m^3 bag**, so the pin is evaluated at
+    :data:`SIM_SOLVE_DENSITY` rather than at the flown density ADR 0029
+    adopted; re-solving it at 0.3165 is an ask on the companion repository.
     """
     compact = (3.0 * (IMPACTOR_MASS / 917.0) / (4.0 * np.pi)) ** (1.0 / 3.0)
+    for fraction, published in ((compact / BORE_RADIUS, 7.240), (0.8, 8.601)):
+        assert np.isclose(
+            self_consistent_slug_ratio(fraction, slug_density=SIM_SOLVE_DENSITY),
+            published,
+            rtol=5e-3,
+        )
+    # At the flown density every figure falls by the density ratio, near enough.
     assert np.isclose(
-        self_consistent_slug_ratio(compact / BORE_RADIUS), 7.240, rtol=5e-3
+        self_consistent_slug_ratio(compact / BORE_RADIUS), 7.100, rtol=5e-3
     )
-    assert np.isclose(self_consistent_slug_ratio(0.8), 8.601, rtol=5e-3)
+    assert np.isclose(self_consistent_slug_ratio(0.8), 8.432, rtol=5e-3)
     # The whole spread across every plausible arrival radius is now under 1.5 in k.
     ratios = [self_consistent_slug_ratio(f) for f in (0.3, 0.5, 0.8, 1.0)]
     assert max(ratios) - min(ratios) < 1.5
@@ -191,8 +225,15 @@ def test_virial_floor_reproduces_both_of_the_papers_bands() -> None:
 
 
 def test_confinement_field_matches_the_bag_sizing_row() -> None:
-    """``E_B = B^2 V / 2 mu0`` inverted gives 4.11 T at the standoff volume."""
-    assert np.isclose(confinement_field(4.427e9), 4.11, rtol=5e-3)
+    """``E_B = B^2 V / 2 mu0`` inverted, for the two bags that differ by 2%.
+
+    ``tab:bag_sizing``'s 4.11 T is its 5.4 m *sphere*, 659.6 m^3.  The flown
+    column holds 672.9 and therefore stands the same energy off with 4.07 T:
+    ``B`` goes as ``V^-1/2``, so the 2% in volume is 1% in field.  ADR 0029
+    made the module default the column, so the sphere is now asked for by name.
+    """
+    assert np.isclose(confinement_field(4.427e9, 659.6), 4.11, rtol=5e-3)
+    assert np.isclose(confinement_field(4.427e9), 4.07, rtol=5e-3)
 
 
 def test_conductor_term_is_not_negligible_against_the_structure_floor() -> None:

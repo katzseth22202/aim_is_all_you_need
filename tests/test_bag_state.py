@@ -11,6 +11,8 @@ import pytest
 from src.bag_state import (
     AXIAL_BAG_LENGTHS,
     BAG_SIZING_RADII,
+    BAG_VOLUME,
+    FLOWN_COLUMN_LENGTH,
     HANDLING_FILM_GAUGE,
     HANDLING_GAUGE_BAND,
     HOT_PULSE_STATE,
@@ -19,6 +21,7 @@ from src.bag_state import (
     PLUG_MASS,
     SLUG_MASS,
     SOLVED_LEAK_FRACTIONS,
+    SPHERE_BAG_LENGTH,
     SPHERE_BORE_RADIUS,
     SUPERSEDED_LEAK_FRACTION,
     SUPERSEDED_WARMING_TO_LIQUID,
@@ -75,10 +78,10 @@ def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
     assert np.isclose(jupiter.warming.to_value(u.MJ / u.kg), 0.594, atol=5e-3)
     assert np.isclose(jupiter.boiling.to_value(u.MJ / u.kg), 0.052, atol=5e-3)
     assert np.isclose(jupiter.vapour_fraction, 0.022, atol=5e-4)
-    assert np.isclose(jupiter.vapour_mass.to_value(u.kg), 4.68, atol=0.05)
-    assert np.isclose(jupiter.mist_temperature.to_value(u.K), 278.8, atol=0.5)
+    assert np.isclose(jupiter.vapour_mass.to_value(u.kg), 4.74, atol=0.05)
+    assert np.isclose(jupiter.mist_temperature.to_value(u.K), 278.7, atol=0.5)
     assert np.isclose(jupiter.mist_pressure.to_value(u.kPa), 0.91, atol=0.05)
-    # "a fraction of a kilogram", and far under tab:axial_bag's 2.4-10.0 kg
+    # "a fraction of a kilogram", and far under tab:axial_bag's 2.5-10.3 kg
     # handling floor, so the conclusion the section rests on is unchanged.
     assert np.isclose(jupiter.film_mass.to_value(u.kg), 0.51, atol=0.05)
     assert jupiter.film_mass < 1.0 * u.kg
@@ -86,9 +89,13 @@ def test_reproduces_every_printed_cell_of_tab_bag_state() -> None:
     assert np.isclose(earth.boiling.to_value(u.MJ / u.kg), 0.44, atol=5e-3)
     assert np.isclose(earth.vapour_fraction, 0.18, atol=5e-3)
     assert np.isclose(earth.mist_temperature.to_value(u.K), 316.0, atol=1.0)
-    assert np.isclose(earth.mist_pressure.to_value(u.kPa), 8.7, rtol=4e-2)
-    assert np.isclose(earth.film_mass.to_value(u.kg), 4.9, atol=0.15)
-    assert np.isclose(earth.film_fraction, 0.023, atol=5e-4)  # "2.3%, 4.9 kg"
+    # 8.52 kPa and 4.84 kg at the adopted 672.9 m^3, against the 8.7 and 4.9
+    # the paper still prints from the 5.4 m sphere's 659.6 (ADR 0029).  The
+    # mist is the same to the printed kelvin; the pressure and the film are
+    # not, and both are corrections owed rather than drift here.
+    assert np.isclose(earth.mist_pressure.to_value(u.kPa), 8.52, rtol=4e-3)
+    assert np.isclose(earth.film_mass.to_value(u.kg), 4.84, atol=0.02)
+    assert np.isclose(earth.film_fraction, 0.0227, atol=5e-4)  # "2.3%, 4.8 kg"
 
 
 def test_the_table_is_the_cold_leg_and_says_so() -> None:
@@ -168,7 +175,7 @@ def test_the_plug_is_what_keeps_the_cold_leg_dry() -> None:
 
 def test_the_plug_takes_the_flown_column_below_the_handling_floor() -> None:
     """So on the leg that does boil, the plug retires the pressure vessel."""
-    flown = 23.0 * u.m
+    flown = FLOWN_COLUMN_LENGTH
     scale = shape_factor(flown) / 1.5
     bare = paper_bag_state("earth").film_mass * scale
     plugged = paper_bag_state("earth", plug_mass=PLUG_MASS).film_mass * scale
@@ -315,7 +322,7 @@ def test_the_leak_bracket_closes_dry_from_cold_storage() -> None:
 
     At the solved residence-weighted leak the three hot legs never finish
     melting and the cold one boils half a kilogram of film -- against a
-    2.4-10.0 kg handling floor, so on no leg is the pressure vessel a mass
+    2.5-10.3 kg handling floor, so on no leg is the pressure vessel a mass
     item.  The feared case -- the paper's 4.4% held while ``E_B`` rises to
     12.2 GJ -- is 21 kg on the hot leg.
     """
@@ -374,8 +381,10 @@ def test_warm_storage_is_what_makes_the_bag_a_pressure_vessel() -> None:
     assert 0.4 < cold.film_mass.to_value(u.kg) < 0.6
     assert 4.0 < warm.film_mass.to_value(u.kg) < 6.0
     assert warm.vapour_mass / cold.vapour_mass > 8.0
-    # Under the handling floor tab:axial_bag prints for the flown 23 m column.
-    assert cold.film_mass < handling_film_mass(23.0 * u.m, HANDLING_GAUGE_BAND[0])
+    # Under the floor tab:axial_bag prints for the flown 23.8 m column.
+    assert cold.film_mass < handling_film_mass(
+        FLOWN_COLUMN_LENGTH, HANDLING_GAUGE_BAND[0]
+    )
 
 
 def test_bag_sizing_density_and_both_field_columns_reproduce() -> None:
@@ -468,35 +477,81 @@ def test_the_mist_column_tracks_the_table_rather_than_a_pinned_fraction() -> Non
 
 
 def test_axial_bag_reproduces_every_cell() -> None:
-    """Item 9: all five rows, bore and conductor and shape factor and film.
+    """Item 9: all five rows, bore and conductor and shape factor and area.
 
-    The film column is ``tab:axial_bag``'s **Pressure** column, which the
-    caption pins to ``tab:bag_state``'s Earth-storage vapour state -- the only
-    case left that boils.  It scales with nothing but ``F``.
+    The geometry is the paper's as it stands at ``85f29ec``, which adopted
+    ``puffsat_impact_simulation``'s 23.8 m column and its 672.9 m^3 (reply R14,
+    ADR 0029).  Bore, conductor, ``F`` and area all reproduce to the digits the
+    paper prints; the **Pressure** column does not, and
+    :func:`test_the_papers_hand_recomputed_pressure_column_is_high_by_the_volume`
+    is where that lives.
     """
     published = {
-        10.8: (5.40, 1.00, 1.50, 4.9),
-        16.0: (3.62, 0.99, 1.82, 5.9),
-        23.0: (3.02, 1.19, 1.90, 6.2),
-        32.0: (2.56, 1.41, 1.94, 6.3),
-        50.0: (2.05, 1.76, 1.97, 6.4),
+        10.9: (5.44, 1.00, 1.50, 371.0),
+        16.0: (3.66, 0.99, 1.82, 368.0),
+        23.8: (3.00, 1.21, 1.91, 449.0),
+        32.0: (2.59, 1.40, 1.94, 520.0),
+        50.0: (2.07, 1.75, 1.97, 650.0),
     }
-    reference = SPHERE_BORE_RADIUS.to_value(u.m) * 10.8
-    sphere = paper_bag_state("earth").film_mass.to_value(u.kg)
-    for length, (bore, conductor, factor, film) in published.items():
-        metres = length * u.m
+    sphere_length = SPHERE_BAG_LENGTH.to_value(u.m)
+    reference = SPHERE_BORE_RADIUS.to_value(u.m) * sphere_length
+    for length, (bore, conductor, factor, area) in published.items():
+        # The sphere row is the one the paper rounds: 10.872 m prints as 10.9.
+        metres = (sphere_length if np.isclose(length, 10.9, atol=0.1) else length) * u.m
         radius = (
-            SPHERE_BORE_RADIUS if length == 10.8 else bore_radius(metres)
+            SPHERE_BORE_RADIUS
+            if np.isclose(metres.to_value(u.m), sphere_length)
+            else bore_radius(metres)
         ).to_value(u.m)
         assert np.isclose(radius, bore, rtol=5e-3)
-        assert np.isclose(radius * length / reference, conductor, rtol=1e-2)
+        assert np.isclose(
+            radius * metres.to_value(u.m) / reference, conductor, rtol=1e-2
+        )
         assert np.isclose(shape_factor(metres), factor, rtol=5e-3)
-        assert np.isclose(sphere * shape_factor(metres) / 1.5, film, atol=0.1)
+        assert np.isclose(bag_surface_area(metres).to_value(u.m**2), area, atol=0.5)
+
+
+def test_the_papers_hand_recomputed_pressure_column_is_high_by_the_volume() -> None:
+    """ADR 0029's finding, kept executable because the paper still prints it.
+
+    ``85f29ec`` recomputed ``tab:axial_bag`` by hand at the adopted 672.9 m^3
+    and printed 4.9 / 6.0 / 6.3 / 6.4 / 6.5 kg of film.  The model gives
+    4.8 / 5.9 / 6.2 / 6.3 / 6.4, and multiplying it by the volume ratio
+    reproduces all five printed cells to the digit -- which is what identifies
+    the error rather than merely noting a disagreement.
+
+    ``eq:bag_film_mass`` is ``F x rho_f R_g T / (M sigma)``: volume does not
+    appear, because the film sizes a vessel holding ``PV = n R_g T`` and a
+    bigger bag drops ``P`` by exactly what it adds to ``V``.  Scaling the film
+    by the new volume therefore charges the change twice -- once in ``V``, and
+    once already inside the ``P`` the old volume produced.  The real effect
+    runs the *other* way and is a tenth of the size: the same vapour spread
+    more thinly saturates 0.4 K colder, and film is linear in ``T``.
+    """
+    printed = {10.9: 4.9, 16.0: 6.0, 23.8: 6.3, 32.0: 6.4, 50.0: 6.5}
+    sphere_length = SPHERE_BAG_LENGTH.to_value(u.m)
+    sphere = paper_bag_state("earth").film_mass.to_value(u.kg)
+    old_volume = 659.6 * u.m**3
+    ratio = float(BAG_VOLUME / old_volume)
+    for length, film in printed.items():
+        metres = (sphere_length if np.isclose(length, 10.9, atol=0.1) else length) * u.m
+        modelled = sphere * shape_factor(metres) / 1.5
+        assert np.isclose(modelled * ratio, film, atol=0.05)
+        assert modelled < film
+    # And the honest change from 659.6 m^3 is a cooler mist, not a heavier bag.
+    at_old = BagState(
+        SOLVED_LEAK_FRACTIONS["equilibrium"][TABLE_CLOSING_SPEED],
+        table_stored_energy(),
+        "earth",
+        bag_volume=old_volume,
+    )
+    assert at_old.mist_temperature > paper_bag_state("earth").mist_temperature
+    assert at_old.film_mass > paper_bag_state("earth").film_mass
 
 
 def test_the_sphere_is_the_lightest_film_and_the_long_tube_the_heaviest() -> None:
     """``F`` runs 1.5 to 2.0, so stretching the bag costs a third of the film."""
-    assert np.isclose(shape_factor(10.8 * u.m), 1.5, rtol=1e-3)
+    assert np.isclose(shape_factor(SPHERE_BAG_LENGTH), 1.5, rtol=1e-9)
     assert shape_factor(50.0 * u.m) < 2.0
     assert shape_factor(200.0 * u.m) > shape_factor(50.0 * u.m)
 
@@ -530,21 +585,21 @@ def test_the_handling_floor_does_not_care_whether_the_slug_boils() -> None:
     """Which is the whole point: ``eq:bag_film_mass`` returns 0 kg, a bag does not.
 
     From cold storage the solved leak boils nothing, so the pressure vessel is
-    massless.  The flown 23 m column still needs 2.4-10.0 kg of film depending
-    on gauge, centred on 5.1 kg at Echo 1's half-mil.
+    massless.  The flown 23.8 m column still needs 2.5-10.3 kg of film depending
+    on gauge, centred on 5.2 kg at Echo 1's half-mil.
     """
-    flown = 23.0 * u.m
+    flown = FLOWN_COLUMN_LENGTH
     thin, thick = HANDLING_GAUGE_BAND
-    assert np.isclose(handling_film_mass(flown).to_value(u.kg), 5.1, atol=0.1)
-    assert np.isclose(handling_film_mass(flown, thin).to_value(u.kg), 2.4, atol=0.1)
-    assert np.isclose(handling_film_mass(flown, thick).to_value(u.kg), 10.0, atol=0.1)
+    assert np.isclose(handling_film_mass(flown).to_value(u.kg), 5.2, atol=0.1)
+    assert np.isclose(handling_film_mass(flown, thin).to_value(u.kg), 2.5, atol=0.1)
+    assert np.isclose(handling_film_mass(flown, thick).to_value(u.kg), 10.3, atol=0.1)
     assert governing_film_mass(0.0 * u.kg, flown) == handling_film_mass(flown)
 
 
 def test_the_pressure_vessel_still_wins_when_the_slug_does_boil() -> None:
     """The floor is a floor, not a replacement: whichever is larger flies."""
     heavy = 40.0 * u.kg
-    assert governing_film_mass(heavy, 23.0 * u.m) == heavy
+    assert governing_film_mass(heavy, FLOWN_COLUMN_LENGTH) == heavy
 
 
 def test_the_gauge_band_brackets_the_quoted_gauge() -> None:

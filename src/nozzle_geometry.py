@@ -12,12 +12,12 @@ The relation is exact and quadratic when the front does not spread:
     k_eff / k_full = (r_arrival / R_bore)^2
 
 so ``k = 8.5`` is really the statement *the front sweeps the whole bag*: the
-volume it needs is 658.1 m^3 against the bag's 659.6.  Half the bore radius
+volume it needs is 671.4 m^3 against the bag's 672.9.  Half the bore radius
 delivers a quarter of ``k``, and there is no shallow region in between.
 
 **The parameter only bites if the front does not spread.**  Letting it grow as
 ``dr/dx = c_exp/v`` with momentum shared inelastically, a front arriving at even
-0.6 of the bore closes to the wall and recovers ``k`` = 7.3-8.0 at
+0.6 of the bore closes to the wall and recovers ``k`` = 7.1-7.9 at
 ``c_exp`` = 3-8 km/s.  It has 23.8 m of column to close 1.2 m of gap.  So the
 honest statement is not "the arrival radius must be large" but "the arrival
 radius matters exactly insofar as the front is rigid", and ``c_exp`` is a 2D
@@ -25,7 +25,7 @@ hydro question neither repository solves (``puffsat_impact_simulation``, Q-Q).
 
 **The design arrival is compact, and the chain arithmetic is why.**  Because the
 front widens itself, a 0.15 m arrival still sweeps most of the bag -- ``k`` =
-7.21, which is *inside* ADR 0016's tolled optimum band, where the 8.60 a wide
+7.07, which is *inside* ADR 0016's tolled optimum band, where the 8.43 a wide
 arrival delivers overshoots it.  Compact therefore wins on delivered growth
 before any aperture argument is made.  See :data:`DESIGN_ARRIVAL_FRACTION`.
 
@@ -61,12 +61,30 @@ import numpy as np
 
 #: Slug mass the flown bag holds (kg).
 BAG_SLUG_MASS = 213.0
-#: Enclosed bag volume (m^3), the standoff volume of ``tab:bag_sizing``.
-BAG_VOLUME = 659.6
 #: Bore radius the snowplow sweeps through (m).
 BORE_RADIUS = 3.0
 #: Column length that makes the full-bore sweep reproduce the paper's k (m).
 COLUMN_LENGTH = 23.8
+#: Enclosed bag volume (m^3), **derived from the bore and column above** rather
+#: than written down, which is the whole of the fix below.
+#:
+#: **672.9 rather than the 659.6 that stood here until 2026-09-05** (paper reply
+#: R14, ADR 0029).  659.6 was the 5.4 m sphere of ``tab:bag_sizing``, and this
+#: module's own bore and column were already the flown pair, so the two
+#: disagreed by 2% *inside one module*: :func:`full_bore_slug_ratio` swept
+#: 672.9 m^3 at a density computed from 659.6 and returned 8.69, where the
+#: definition of a full-bore sweep is ``m_slug / m_impactor`` = 213/25 = 8.52
+#: exactly.  Deriving the volume closes that, and 8.5 stays the round figure
+#: the paper prints.
+BAG_VOLUME = float(np.pi * BORE_RADIUS**2 * COLUMN_LENGTH)
+#: Bag density (kg/m^3) the **companion sim's** snowplow and plume figures were
+#: solved at: 213 kg in the 659.6 m^3 sphere that used to be
+#: :data:`BAG_VOLUME`.  Every number this module pins against
+#: ``puffsat_impact_simulation`` was produced at this density, so the pins are
+#: evaluated here rather than at the adopted 0.3165 -- see the ``slug_density``
+#: argument on the sweeps.  Re-solving the companion's runs at 0.3165 is an ask
+#: on that repository (ADR 0029), not something this module can do.
+SIM_SOLVE_DENSITY = 213.0 / 659.6
 #: Projectile mass (kg).
 IMPACTOR_MASS = 25.0
 #: Aperture the compact projectile enters through (m).  ``sec:needle_through_fog``
@@ -76,9 +94,9 @@ ENTRY_APERTURE_RADIUS = 0.15
 #:
 #: **Corrected 2026-08-26 from the 0.8 set on 2026-08-25, and the calculation is
 #: the reason, not the paper.**  Self-widening
-#: (:func:`self_consistent_slug_ratio`) delivers ``k`` = 7.21 from a 0.15 m
-#: arrival against 8.60 from 0.8 of the bore.  **7.21 sits inside ADR 0016's
-#: tolled optimum band of 6.75-7.77; 8.60 overshoots it.**  So the compact
+#: (:func:`self_consistent_slug_ratio`) delivers ``k`` = 7.07 from a 0.15 m
+#: arrival against 8.43 from 0.8 of the bore.  **7.07 sits inside ADR 0016's
+#: tolled optimum band of 6.75-7.77; 8.43 overshoots it.**  So the compact
 #: arrival delivers 99.4% of the achievable chain growth at ``eta_geom`` = 1
 #: against the wide front's 91.7%.  On the chain arithmetic alone, compact wins.
 #:
@@ -101,29 +119,41 @@ DESIGN_ARRIVAL_FRACTION = ENTRY_APERTURE_RADIUS / BORE_RADIUS
 _STEPS = 100_000
 
 
-def bag_density() -> float:
+def bag_density(volume: float = BAG_VOLUME) -> float:
     """Slug density of the flown bag (kg/m^3).
 
+    Args:
+        volume: Enclosed bag volume (m^3).
+
     Returns:
-        ``BAG_SLUG_MASS / BAG_VOLUME``, the 0.323 kg/m^3 the plume state is
-        solved at.
+        ``BAG_SLUG_MASS / BAG_VOLUME``, which is 0.3165 kg/m^3 and prints as
+        the paper's 0.32.  **The vendored plume solve was run at 0.323**, the
+        old volume's density; see :data:`src.plume_state.FLOWN_BAG_DENSITY`.
     """
-    return BAG_SLUG_MASS / BAG_VOLUME
+    return BAG_SLUG_MASS / volume
 
 
-def full_bore_slug_ratio() -> float:
+def full_bore_slug_ratio(slug_density: float | None = None) -> float:
     """Slug ratio a front spanning the whole bore from ``x = 0`` delivers.
 
+    Args:
+        slug_density: Bag density (kg/m^3).  Defaults to the flown bag's;
+            pass :data:`SIM_SOLVE_DENSITY` to reproduce a companion-sim run.
+
     Returns:
-        ``rho A L / m``, which is 8.69 and is what the paper's 8.5 comes from.
+        ``rho A L / m``, which is 8.52 -- exactly ``BAG_SLUG_MASS /
+        IMPACTOR_MASS``, since the density and the swept volume are now the
+        same bag -- and is what the paper's round 8.5 comes from.
     """
-    return bag_density() * np.pi * BORE_RADIUS**2 * COLUMN_LENGTH / IMPACTOR_MASS
+    rho = bag_density() if slug_density is None else slug_density
+    return rho * np.pi * BORE_RADIUS**2 * COLUMN_LENGTH / IMPACTOR_MASS
 
 
 def swept_slug_ratio(
     arrival_fraction: float = DESIGN_ARRIVAL_FRACTION,
     expansion_speed: float = 0.0,
     closing_speed: float = 45.58,
+    slug_density: float | None = None,
 ) -> float:
     """Slug ratio a front arriving at ``arrival_fraction`` of the bore delivers.
 
@@ -139,6 +169,8 @@ def swept_slug_ratio(
         closing_speed: Impactor speed relative to the vehicle (km/s).  A faster
             projectile has less time to spread, so this only matters when
             ``expansion_speed`` is non-zero.
+        slug_density: Bag density (kg/m^3).  Defaults to the flown bag's; pass
+            :data:`SIM_SOLVE_DENSITY` to reproduce a companion-sim run.
 
     Returns:
         The delivered slug ratio ``k_eff``.
@@ -148,9 +180,10 @@ def swept_slug_ratio(
     """
     if not 0.0 < arrival_fraction <= 1.0:
         raise ValueError("arrival_fraction must be in (0, 1]")
-    rho, radius, mass = bag_density(), arrival_fraction * BORE_RADIUS, IMPACTOR_MASS
+    rho = bag_density() if slug_density is None else slug_density
+    radius, mass = arrival_fraction * BORE_RADIUS, IMPACTOR_MASS
     if expansion_speed <= 0.0:
-        return full_bore_slug_ratio() * arrival_fraction**2
+        return full_bore_slug_ratio(rho) * arrival_fraction**2
     step = COLUMN_LENGTH / _STEPS
     rate = (expansion_speed / closing_speed) / IMPACTOR_MASS
     for _ in range(_STEPS):
@@ -160,7 +193,7 @@ def swept_slug_ratio(
     return (mass - IMPACTOR_MASS) / IMPACTOR_MASS
 
 
-def arrival_fraction_for(slug_ratio: float) -> float:
+def arrival_fraction_for(slug_ratio: float, slug_density: float | None = None) -> float:
     """Arrival radius a rigid front needs to deliver ``slug_ratio``.
 
     The inverse of :func:`swept_slug_ratio` at ``expansion_speed = 0``, which is
@@ -169,13 +202,14 @@ def arrival_fraction_for(slug_ratio: float) -> float:
 
     Args:
         slug_ratio: The delivered ``k`` wanted.
+        slug_density: Bag density (kg/m^3), as on :func:`swept_slug_ratio`.
 
     Returns:
         Required front radius as a fraction of the bore; above 1.0 the rigid
         front cannot supply it at all and the bag must be resized or the front
         must spread.
     """
-    return float(np.sqrt(slug_ratio / full_bore_slug_ratio()))
+    return float(np.sqrt(slug_ratio / full_bore_slug_ratio(slug_density)))
 
 
 #: Post-shock sound speed of the plume [km/s] against the front's own speed
@@ -196,6 +230,12 @@ def arrival_fraction_for(slug_ratio: float) -> float:
 #: temperature through the full dissociation and ``O+ .. O8+`` ionisation
 #: ladder, which is what keeps the temperature finite.  The 4x compression is
 #: the weakest input and barely matters: 2x-16x moves ``c_s`` by 9%.
+#:
+#: **The 659.6 in the recipe is the volume this module carried when the table
+#: was generated, and it is left as run** (ADR 0029 moved :data:`BAG_VOLUME` to
+#: 672.9).  Regenerating at the new density would change the recipe's ``rho`` by
+#: 2%, which is a fortieth of the 8x compression span that moves ``c_s`` by 9%,
+#: so the table stands.
 _SOUND_SPEED_TABLE = (
     (2.0, 0.8432),  # T =    1249 K
     (3.0, 1.1151),  # T =    2297 K
@@ -243,6 +283,7 @@ def shocked_sound_speed(front_speed: float) -> float:
 def self_consistent_slug_ratio(
     arrival_fraction: float = DESIGN_ARRIVAL_FRACTION,
     closing_speed: float = 45.58,
+    slug_density: float | None = None,
 ) -> float:
     """Slug ratio when the front widens at its own computed sound speed.
 
@@ -254,12 +295,14 @@ def self_consistent_slug_ratio(
 
     **The result is that the arrival radius almost does not matter.** The front
     reaches the bore wall within the first few metres of a 23.8 m column from
-    any plausible arrival radius, and ``k`` lands at 7.2-8.7 rather than the
-    rigid model's 0.03-8.7.
+    any plausible arrival radius, and ``k`` lands at 7.0-8.5 rather than the
+    rigid model's 0.03-8.5.
 
     Args:
         arrival_fraction: Front radius at entry, as a fraction of the bore.
         closing_speed: Impactor speed relative to the vehicle (km/s).
+        slug_density: Bag density (kg/m^3).  Defaults to the flown bag's; pass
+            :data:`SIM_SOLVE_DENSITY` to reproduce a companion-sim run.
 
     Returns:
         The delivered slug ratio.
@@ -269,7 +312,8 @@ def self_consistent_slug_ratio(
     """
     if not 0.0 < arrival_fraction <= 1.0:
         raise ValueError("arrival_fraction must be in (0, 1]")
-    rho, mass = bag_density(), IMPACTOR_MASS
+    rho = bag_density() if slug_density is None else slug_density
+    mass = IMPACTOR_MASS
     radius = arrival_fraction * BORE_RADIUS
     step = COLUMN_LENGTH / _STEPS
     for _ in range(_STEPS):

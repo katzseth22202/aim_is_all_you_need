@@ -44,7 +44,15 @@ from src.plume_thermal import specific_thermal_energy
 #: Vendored solve from ``puffsat_impact_simulation``.
 PLUME_STATE_CSV = Path(__file__).resolve().parent.parent / "data" / "plume_state.csv"
 
-#: Bag density the paper's own rows are worked at, ``213 kg / 659.6 m^3``.
+#: Bag density the vendored plume solve was run at, ``213 kg / 659.6 m^3``.
+#:
+#: **This is an input from ``puffsat_impact_simulation``, not a quantity this
+#: repository derives, so it is not moved by ADR 0029.**  The bag's adopted
+#: volume is now the flown column's 672.9 m^3 and its density 0.3165 kg/m^3, 2%
+#: below this.  Both print as the paper's 0.32.  ``data/plume_state.csv``, the
+#: conductivity fits at ``_SEED_WINDOW_SIGMA`` and the cliff temperature were
+#: solved at 0.323, and re-solving them is an ask on the companion repository
+#: rather than an edit here -- recorded in the 2026-09-05 corrections document.
 FLOWN_BAG_DENSITY = 0.323
 
 #: The four closing speeds the paper quotes plume states for.  75 and 65 are

@@ -1,5 +1,13 @@
 # Corrections owed to the paper: `tab:bag_state`'s Jupiter column, regenerated
 
+> **SUPERSEDED 2026-09-05 by `paper_corrections_bag_state_2026-09-05.md`. Do not
+> work this file.** It was written against the paper at `1d42c91` and never
+> applied. The paper then adopted `puffsat_impact_simulation`'s 23.8 m column
+> and its 672.9 m³ (reply R14, commit `85f29ec`), which moves the third digit of
+> every figure below and adds four items of its own. Every C-item here is
+> carried forward into the 09-05 file, renumbered A4-A9 and A13, with its
+> numbers refreshed. Kept only because ADR 0027 cites it.
+
 **Written to be copied into
 [`katzseth22202/Balloon-Pulse-Propulsion`](https://github.com/katzseth22202/Balloon-Pulse-Propulsion)
 and worked there**, on `templateArxiv.tex`. Self-contained: every number needed
