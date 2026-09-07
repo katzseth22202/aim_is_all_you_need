@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -72,6 +72,9 @@ bag-converge:  ## Iterate the bag loop to a fixed point and report the gap (rule
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse
+
+fly-park:  ## Fly a shorter, hotter cycle and park to hold the 3S clock; the sweet phase and the launch-cadence tables (ADR 0030)
+	python -m src.fly_and_park
 
 jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S works, 2S does not (ADR 0019)
 	python -m src.jovian_solar_dive_cycle

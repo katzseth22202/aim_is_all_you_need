@@ -498,6 +498,37 @@ _Avoid_: reading the window as physics rather than as a property of the
 **departure-burn accounting seam** — under nozzle exhaust every phase is live
 and the ranking inverts.
 
+**Departure phase**:
+Where Earth and Jupiter stand relative to one another when the payload leaves
+Earth, as a fraction of one Earth-Jupiter synodic period (1.0923 yr). Phase 0 and
+phase 1 are the same geometry. It is a *relative longitude on a relative epoch*,
+never a calendar date.
+_Avoid_: reading it as a launch date; comparing phases across models with
+different epoch conventions.
+
+**Sweet phase**:
+The **departure phase** at which reaching Jupiter is cheapest — 0.726 in this
+model, where the cheapest available departure burn is **4.409 km/s**
+(`sweet_phase()`, `src/fly_and_park.py`, `make fly-park`). Because a transfer must
+arrive where Jupiter actually *is*, that cheapest burn swings to **38.485 km/s**
+at the worst phase, a **8.7× span** (`departure_burn_span()`). This is the
+mechanism behind the whole 3S clock: a departure stage that cannot afford the
+dear phases is pinned to the sweet one, and being pinned to one phase is what
+forces the cycle onto an integer number of synodic periods. The clock is a
+*consequence*, not a choice.
+_Avoid_: quoting the 3S clock without this — it reads as an assumption otherwise;
+treating the sweet phase as a constant of the architecture rather than an output
+of the grid.
+
+**Usable phase**:
+A **departure phase** from which at least one closing cycle *grows* the payload,
+at a stated departure exhaust speed (`usable_phase_fraction()`). Distinct from
+reachable: a phase can be perfectly reachable and still unusable because every
+trajectory leaving it costs more mass than the arriving impactor mints.
+Reachability does not move with exhaust speed; usability does — 18% of phases at
+Isp 380, 100% at 1900.
+_Avoid_: conflating it with reachability; quoting the fraction without its Isp.
+
 **Fly hot, park to rephase**:
 The constructive form of the parking result (ADR 0030). Parking does *not* pay at
 methalox, but above ~Isp 1200 it does: hold the departure on one Earth-Jupiter

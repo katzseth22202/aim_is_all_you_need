@@ -29,6 +29,66 @@ figure by 3.1x and retires a claim.
 | **N2** | same subsection | the **exchange rate** that decides whether it pays, and why methalox misses by 5% |
 | **N3** | same subsection | the **launch-cadence** consequence: one narrow window per 1.09 yr becomes continuous |
 | **N4** | same subsection | what is **not** claimed, stated explicitly |
+| **T1** | glossary / first use in `sec:jupiter_only_growth` | **four terms that must be defined in the paper before any of the above is written** |
+
+---
+
+## T1. Terminology the paper must define before using any of this
+
+**Do this first.** Every claim in N1-N3 is stated in these four terms, and three
+of them do not currently appear in the paper at all. Define them at first use in
+`sec:jupiter_only_growth`, or add them to the glossary. Suggested wording, in
+plain language, is given for each.
+
+### Departure phase
+
+> **Departure phase.** Where Earth and Jupiter stand relative to one another at
+> the moment the payload leaves Earth, written as a fraction of one Earth-Jupiter
+> synodic period (1.0923 years). Phase 0 and phase 1 are the same geometry, so
+> the phase runs around a circle and comes back.
+
+This is the independent variable of every table in N2 and N3. Note it is a
+*relative* longitude, not a date: the model is circular, coplanar and on a
+relative epoch, never a calendar.
+
+### Sweet phase
+
+> **Sweet phase.** The departure phase at which reaching Jupiter is cheapest.
+> Because a transfer must arrive where Jupiter actually is, the departure burn
+> needed to get there depends strongly on the phase you leave on: across the
+> circle the cheapest available burn runs from **4.41 km/s at the sweet phase to
+> 38.49 km/s at the worst**, a factor of 8.7. A departure stage that cannot
+> afford the expensive phases is therefore pinned to the sweet one -- and being
+> pinned to one phase is what forces the loop onto a whole number of synodic
+> periods, so that each cycle returns to the phase it can afford.
+
+**This is the single most important definition in the document**, because it
+supplies the *mechanism* for the paper's existing three-synodic result. The paper
+currently reports the 3S clock; it does not say why. The answer is that the clock
+is not chosen, it is the consequence of an 8.7-fold swing in the price of
+reaching Jupiter. Computed by `sweet_phase()` in `src/fly_and_park.py`, which
+locates it at phase 0.726 rather than assuming it.
+
+### Usable phase
+
+> **Usable phase.** A departure phase from which at least one closing trajectory
+> actually *grows* the payload -- the arriving impactor mints more mass than the
+> departure burn spent. A phase can be perfectly reachable and still be unusable,
+> if every trajectory leaving it costs more than it returns.
+
+The distinction matters because N3's headline is a count of usable phases, not
+of reachable ones. Reachability never changes with exhaust speed; usability does.
+
+### Fly-and-park
+
+> **Fly-and-park.** Flying a trajectory *shorter* than the three-synodic window
+> and parking in the bound near-escape orbit for the remainder, so that flight
+> plus park is exactly 3.00 synodic periods and the next departure falls on the
+> same phase. The clock is preserved exactly; nothing drifts.
+
+Note for the writer: the parking orbit is not new hardware. It is the same bound
+near-escape orbit the architecture already uses as its phasing buffer and aim
+reversal; fly-and-park only lengthens it, from 20 days to about 100.
 
 ---
 
@@ -241,12 +301,23 @@ The chain figures are printed by `make run` and pinned by the slow tests
 `test_the_perijove_burn_converges_to_zero_and_buys_nothing` and
 `test_the_converged_chain_settles_onto_the_synodic_clock`.
 
-**The phase sweeps, the exchange rate, and the fly-and-park comparison are not
-yet committed code.** They were computed by enumerating `_cycle_branches` across
-73 departure phases spanning one synodic period (3,483 closing cycles) and
-re-scoring each with `M(v_b) * exp(-dv/v_e)` at the stated exhaust speeds, with
-`M(v_b) = 2f/ln(v_b/(v_b - v_rf))`, `f` = 0.8, `v_rf` = 10.9503 km/s. Anyone
-quoting these in the paper should ask for that harness to be committed first --
-this repository has been bitten before by figures whose scratch harness vanished
-(ADR 0007), and CLAUDE.md's rule is explicit that committed work must not depend
-on gitignored state.
+**The phase sweeps, the exchange rate, and the fly-and-park comparison are
+committed as `src/fly_and_park.py`.** Reproduce every table in T1, N1, N2 and N3
+with:
+
+```bash
+make fly-park
+```
+
+It enumerates `_cycle_branches` across 73 departure phases spanning one synodic
+period (3,483 closing cycles) and re-scores each with
+`M(v_b) * exp(-dv/v_e)`, where `M(v_b) = 2f/ln(v_b/(v_b - v_rf))`, `f` = 0.8 and
+`v_rf` = 10.9503 km/s -- re-scored rather than taken from the chain, because the
+chain charges methalox and the whole subject here is what happens when it does
+not. The search box is recorded in the module docstring. Runtime ~8 s.
+
+Pinned by `tests/test_fly_and_park.py`: the sweet phase and its 8.7x swing, the
+usable-phase fractions and their monotonicity in Isp, the methalox-loses /
+impactor-wins verdict, the 5%-at-sweet-phase / 27%-off-phase shape, and that
+flight plus park is exactly 3.00 S. Run with `pytest tests/test_fly_and_park.py`;
+the sweep-backed cases are marked `slow`.
