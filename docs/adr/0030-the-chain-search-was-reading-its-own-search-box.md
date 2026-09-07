@@ -150,6 +150,69 @@ exact: waiting until the relative longitude repeats converts *any* cycle into a
 trajectory outright (rate 0.1496/yr for 2.19 S and 0.1508 for 2.88 S, against
 **0.1895** for 3.00 S). Waiting costs precisely what it buys.
 
+### The constructive result: fly hot, park to rephase
+
+The negative result above -- "parking and waiting does not rescue a fast cycle" --
+is true at methalox and **false above about Isp 1200 s**. It deserves stating
+positively, because it is what the whole line of inquiry was reaching for.
+
+Hold the departure on one Earth-Jupiter phase so the clock never drifts, but
+spend part of the 3S window *parked* rather than flying: take a shorter, hotter
+return and pad the remainder to exactly 3.00 S. Because every candidate is padded
+to the same total, **cycle time cancels entirely** and the comparison collapses to
+per-cycle growth, i.e. to a single exchange rate -- how much extra departure burn
+a hotter `v_b` is worth:
+
+| `v_b` (km/s) | mass-ratio gain | Isp 380 | Isp 1200 | Isp 2214 |
+|---:|---:|---:|---:|---:|
+| 56 | x1.053 | 0.19 | 0.60 | 1.11 |
+| **60** | x1.136 | **0.48** | **1.51** | **2.78** |
+| 64 | x1.220 | 0.74 | 2.34 | 4.32 |
+| 68 | x1.304 | 0.99 | 3.13 | 5.77 |
+
+(km/s of extra departure burn that exactly cancels the gain, against a 53.5 km/s
+baseline and the 20-day cycle orbit's `v_rf` = 10.9503 km/s.)
+
+At methalox, going 53.5 -> 60 km/s buys only **0.48 km/s** of Δv headroom, which
+is why fly-and-park loses there. At Isp 1200 it is 1.51 km/s, which is enough.
+
+Availability is never the constraint. At *every* departure phase that supports a
+viable pure-3S cycle, a sub-3S cycle reaching `v_b` >= 60 also exists:
+
+| | phases with a viable 3S cycle | sub-3S reaching `v_b` >= 60 | fly-and-park beats pure 3S |
+|---|---:|---:|---:|
+| Isp 380 | 11/73 | 11 | **1** |
+| Isp 1200 | 30/73 | 30 | **17** |
+| Isp 2214 | 30/73 | 30 | **25** |
+
+At Isp 2214, by departure phase:
+
+| phase | pure 3S: `v_b` / dv / growth | fly-and-park: flight / park / `v_b` / dv / growth | gain |
+|---|---|---|---:|
+| 0.71 | 62.4 / 5.97 / 6.300 | 2.78 S / 0.22 S / **68.3** / 7.09 / 6.606 | x1.048 |
+| 0.75 | 60.7 / 5.60 / 6.213 | 2.75 / 0.25 / **68.1** / 6.64 / 6.727 | x1.083 |
+| 0.81 | 56.7 / 7.48 / 5.283 | 2.68 / 0.32 / **68.6** / 8.61 / 6.184 | x1.171 |
+| 0.86 | 53.0 / 11.85 / 4.007 | 2.60 / 0.40 / **69.0** / 13.49 / 4.976 | x1.242 |
+| 0.89 | 50.9 / 14.57 / 3.378 | 2.62 / 0.38 / **68.0** / 16.55 / 4.254 | x1.267 |
+
+Two things to take from the shape. **The gain is smallest at the sweet phase and
+largest off it** -- 5% at phase 0.71, 27% at 0.89 -- so this is a *robustness*
+mechanism that flattens the off-phase penalty, not a headline optimizer. And the
+`v_b` column sits at **67-69 km/s throughout**: this is the **perfect-retrograde
+boundary** of CONTEXT.md, reached without touching the clock. Fly a 2.6-2.8 S
+perfect-retrograde return at `v_b` ~ 68, park 0.2-0.4 S (about 80-160 days),
+depart again on the same phase.
+
+Parking that long moves `v_rf` from 10.9503 to ~10.99 km/s as the cycle orbit
+lengthens, worth 0.2% on the mass ratio -- checked, not assumed, and the table
+above is computed at the 20-day value so it is not flattered by it.
+
+**Caveat: this is a single-cycle exchange-rate comparison, not a chain run.**
+Every candidate is padded to the same 3.00 S and returns to the same departure
+phase, so it should chain trivially -- but that has not been run, and this ADR
+already records one case (the 2.09 S inversion) where a single-cycle result did
+not survive the chain.
+
 ### The open question this exposed: the two models price different machines
 
 The verdict above holds **only under the chain's accounting**, which charges the

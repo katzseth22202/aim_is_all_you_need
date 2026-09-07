@@ -498,6 +498,24 @@ _Avoid_: reading the window as physics rather than as a property of the
 **departure-burn accounting seam** — under nozzle exhaust every phase is live
 and the ranking inverts.
 
+**Fly hot, park to rephase**:
+The constructive form of the parking result (ADR 0030). Parking does *not* pay at
+methalox, but above ~Isp 1200 it does: hold the departure on one Earth-Jupiter
+phase, fly a **shorter, hotter** return, and pad the remainder to exactly 3.00 S.
+Padding makes every candidate the same length, so cycle time cancels and the
+whole decision is one exchange rate — how much extra departure Δv a hotter `v_b`
+buys. Against a 53.5 km/s baseline, reaching 60 km/s is worth 0.48 km/s of burn
+at Isp 380, **1.51 at 1200**, 2.78 at 2214; reaching 68 is worth 0.99 / 3.13 /
+5.77. Availability is never the limit — every phase with a viable 3S cycle also
+offers a sub-3S cycle at `v_b` ≥ 60 — but it only *pays* at 1 of 11 phases on
+methalox against 17 of 30 at Isp 1200 and 25 of 30 at 2214. The gain runs 5% at
+the sweet phase to 27% well off it, so it is a **robustness** mechanism that
+flattens the off-phase penalty, and the winning cycles sit at `v_b` 67–69 —
+the **perfect-retrograde boundary**, reached with the clock untouched.
+_Avoid_: quoting it as a headline growth win (it is worth 5% where the loop
+already runs well); using it at methalox Isp (it loses); forgetting it is a
+single-cycle comparison, not yet a chain run.
+
 **Departure-burn accounting seam**:
 The unresolved disagreement between two models of the same machine (ADR 0030).
 `jovian_cycle_phasing.py` charges the departure burn to **methalox** (Isp 380 s,
