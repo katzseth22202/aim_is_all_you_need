@@ -4,8 +4,10 @@ import numpy as np
 import pytest
 from astropy import units as u
 
+import src.jovian_cycle_phasing as jcp
 from src.astro_constants import METHALOX_VACUUM_ISP
 from src.jovian_cycle_phasing import (
+    _EARTH_JUPITER_SYNODIC_YEARS,
     ChainResult,
     _closing_returns,
     _cycle_branches,
@@ -21,6 +23,21 @@ from src.retrograde_return_legs import _assist_chain_params, _earth_phase_mismat
 # sweeping the initial phase; the incumbent powered flyby's ~4.4 km/s departure).
 _GOOD_JUPITER_LON = 1.702  # rad
 _YEAR_S = float((1.0 * u.year).to_value(u.s))
+
+
+@pytest.fixture
+def coarse_search(monkeypatch):
+    """Run the chain search on the pre-ADR-0030 coarse box, for speed.
+
+    ADR 0030's converged settings (200 samples, 200-wide beam) cost ~32 s a call,
+    which does not belong in the fast suite. The tests using this fixture protect
+    *structure* -- that each departure is pinned to the previous arrival, and
+    that a self-sustaining chain closes at all -- and neither reads a figure off
+    the search, so a coarse box proves exactly as much. Anything that quotes a
+    number runs converged and is marked ``slow`` (CLAUDE.md, "The slow split").
+    """
+    monkeypatch.setattr(jcp, "_OUTBOUND_TOF_SAMPLES", 26)
+    monkeypatch.setattr(jcp, "_BEAM_WIDTH", 48)
 
 
 def _params() -> object:
@@ -96,7 +113,7 @@ def test_cycle_branches_are_growth_viable_at_a_good_phase() -> None:
     assert all(b.next_departure > 1.1 * _YEAR_S for b in branches)
 
 
-def test_chain_departures_are_pinned_to_the_previous_arrival() -> None:
+def test_chain_departures_are_pinned_to_the_previous_arrival(coarse_search) -> None:
     # The mass cannot wait: each cycle's launch is the previous cycle's launch
     # plus its full cycle time (outbound + return + 20-day coast).
     result = optimize_jovian_cycle_chain(years=12.0, powered=False)
@@ -115,7 +132,7 @@ def test_chain_departures_are_pinned_to_the_previous_arrival() -> None:
         )
 
 
-def test_unpowered_chain_self_sustains() -> None:
+def test_unpowered_chain_self_sustains(coarse_search) -> None:
     # The headline: with no perijove burn the loop keeps closing at growth-viable
     # cost, so the launched mass compounds rather than stalling.
     result = optimize_jovian_cycle_chain(years=12.0, powered=False)
@@ -126,15 +143,36 @@ def test_unpowered_chain_self_sustains() -> None:
 
 
 @pytest.mark.slow
-def test_powered_chain_beats_unpowered_over_30_years() -> None:
-    # Over the full horizon both self-sustain, and the perijove burn -- a second
-    # steering knob -- packs in more compounded mass than bending alone.
-    unpowered = optimize_jovian_cycle_chain(years=30.0, powered=False)
-    powered = optimize_jovian_cycle_chain(years=30.0, powered=True)
+def test_the_perijove_burn_converges_to_zero_and_buys_nothing() -> None:
+    # ADR 0030, retiring ADR 0010 decision 3. Handed a free perijove burn the
+    # optimizer drives every cycle's burn to exactly zero and reproduces the
+    # unpowered chain. The "+20% from a second steering knob" was an artifact of
+    # the old 26-sample / 48-wide search box; at converged settings the two runs
+    # are identical. Run at 12 yr, not 30 -- the powered branch set is 5x the
+    # unpowered one, and the equality is a structural claim, not a horizon one.
+    unpowered = optimize_jovian_cycle_chain(years=12.0, powered=False)
+    powered = optimize_jovian_cycle_chain(years=12.0, powered=True)
     assert unpowered.all_growth_positive
     assert powered.all_growth_positive
-    assert unpowered.mass_multiple_30yr > 10.0
-    assert powered.mass_multiple_30yr >= unpowered.mass_multiple_30yr
+    # mass_multiple_30yr is the compounded total over whatever horizon was run,
+    # so at years=12 it is the 12-year figure (~6.85 across 3 cycles), not 233.
+    assert unpowered.mass_multiple_30yr > 5.0
+
+    # Every perijove burn on the powered chain is zero...
+    for cycle in powered.cycles:
+        assert float(cycle.flyby_burn.to_value(u.km / u.s)) == pytest.approx(
+            0.0, abs=1e-9
+        )
+    # ...so the powered run cannot do better, and in fact matches exactly.
+    assert powered.mass_multiple_30yr == pytest.approx(
+        unpowered.mass_multiple_30yr, rel=1e-9
+    )
+    assert len(powered.cycles) == len(unpowered.cycles)
+    for lhs, rhs in zip(unpowered.cycles, powered.cycles):
+        assert float(lhs.collision_speed.to_value(u.km / u.s)) == pytest.approx(
+            float(rhs.collision_speed.to_value(u.km / u.s)), rel=1e-9
+        )
+
     # The milestones grow monotonically along each chain.
     for result in (unpowered, powered):
         assert (
@@ -142,3 +180,23 @@ def test_powered_chain_beats_unpowered_over_30_years() -> None:
             <= result.mass_multiple_20yr
             <= result.mass_multiple_30yr
         )
+
+
+@pytest.mark.slow
+def test_the_converged_chain_settles_onto_the_synodic_clock() -> None:
+    # ADR 0030. Nothing in _cycle_branches knows what a synodic period is, and
+    # the search may return any real cycle length -- yet at converged settings
+    # every cycle but the horizon-truncated last one lands within a few percent
+    # of an integer multiple of the 1.0923 yr Earth-Jupiter synodic. Outside a
+    # narrow ~2.92-3.06 S window the next departure offers no growing cycle at
+    # all, so the chain has nowhere else to stand.
+    result = optimize_jovian_cycle_chain(years=30.0, powered=False)
+    assert len(result.cycles) >= 8
+    synodics = [
+        float(c.cycle_time.to_value(u.year)) / _EARTH_JUPITER_SYNODIC_YEARS
+        for c in result.cycles[:-1]  # the last cycle is cut short by the horizon
+    ]
+    for value in synodics:
+        assert abs(value - round(value)) < 0.05, synodics
+    # And the clock it picks is 3S, not the 2S the paper's resonance audit uses.
+    assert round(synodics[0]) == 3

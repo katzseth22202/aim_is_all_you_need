@@ -1,8 +1,26 @@
 # The phased Jupiter-only loop self-sustains without waiting; the return bend steers it and the perijove burn adds a cycle
 
-Status: accepted
+Status: accepted, with decision 2's figures and decision 3 retired by ADR 0030
 
 Date: 2026-07-22
+
+> **Note (2026-09-07), ADR `0030-the-chain-search-was-reading-its-own-search-box`.**
+> Decisions 1 and 4 **stand**: the forward chain search is the right instrument,
+> and a self-sustaining 30-year chain exists with no waiting. Two corrections:
+>
+> 1. **Decision 2's figures were under-searched by 3.1x.** The committed
+>    `_OUTBOUND_TOF_SAMPLES` = 26 and `_BEAM_WIDTH` = 48 do not converge. The
+>    unpowered chain is **9 cycles / x233.4** over 30 years, not 8 / x74.8. The
+>    two knobs are coupled: at 26 samples the beam never binds (48, 128 and 320
+>    all return 74.795), and at converged resolution it binds every generation.
+> 2. **Decision 3 is retired in full.** At converged settings the powered run
+>    returns a bit-identical chain with **all nine perijove burns exactly 0.0**.
+>    The 9th cycle is present in *both* runs; the under-searched unpowered run
+>    was missing it, rather than the burn buying it. There is no "second
+>    steering knob" and no +20%. This restores agreement with ADR 0006
+>    decision 1 and ADR 0002, which ADR 0010 was alone in contradicting.
+>
+> The title's "and the perijove burn adds a cycle" is therefore stale.
 
 ## Context
 

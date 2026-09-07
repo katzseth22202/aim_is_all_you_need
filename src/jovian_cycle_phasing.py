@@ -28,6 +28,20 @@ launched off Earth over the horizon, run with and without the powered perijove
 burn. All in the repo's circular, coplanar model;
 launch times are a relative epoch, not calendar dates (ADR 0006's ephemeris
 study is still deferred).
+
+Two cautions about reading anything off this module (ADR 0030):
+
+* **The search settings are coupled and must both be converged.**
+  ``_OUTBOUND_TOF_SAMPLES`` decides which arcs exist and ``_BEAM_WIDTH`` must
+  then exceed the successor count that grid produces. Tuning either alone gives
+  a wrong answer that looks stable. The converged result is 9 cycles and x233.4
+  over 30 years, and the perijove burn converges to **exactly zero on every
+  cycle** -- the powered run reproduces the unpowered chain.
+* **The departure burn here is methalox** (``_net_growth`` divides by
+  ``params.flyby.exhaust_speed``, Isp 380 s). ADR 0009/0012 drive that same burn
+  with the returning stream through the head-on nozzle at 19-22 km/s. The two
+  accountings disagree about which clock the loop wants, and the disagreement is
+  not resolved -- see CONTEXT.md, "Departure-burn accounting seam".
 """
 
 from dataclasses import dataclass
@@ -65,7 +79,12 @@ from src.retrograde_return_legs import (
 # powered flyby's 1.31 yr outbound lives.
 _OUTBOUND_TOF_MIN = 1.1  # yr
 _OUTBOUND_TOF_MAX = 5.8  # yr; leaves room under the 7 yr total-TOF cap
-_OUTBOUND_TOF_SAMPLES = 26
+# 200, not 26. The objective is not converged below ~160 samples: the 30-year
+# compounded mass reads 74.8 at 26, 125.1 at 80, 142.5 at 120, 227.0 at 160 and
+# 233.4 at 200, 233.2 at 260. Refining the grid also raises the successor count
+# per generation from under 48 to 94-403, which is what makes ``_BEAM_WIDTH``
+# binding -- the two knobs are coupled and neither converges alone (ADR 0030).
+_OUTBOUND_TOF_SAMPLES = 200
 _PERIAPSIS_RATIO_MAX = 50.0  # periapsis scanned from the floor up to 50x it
 _PERIAPSIS_SAMPLES = 26
 _POWERED_BURN_MAX = 4.0  # km/s; perijove burn axis for the powered run
@@ -73,10 +92,19 @@ _POWERED_BURN_SAMPLES = 5
 
 # Chain-search discretization. The search is a generational beam over cycles:
 # each generation keeps the ``_BEAM_WIDTH`` highest-growth departure states,
-# bucketing near-identical departure times so phase duplicates collapse.
+# bucketing near-identical departure times so phase duplicates collapse. The
+# bucket is a *dedup key only*: ``add_node`` carries the branch's exact
+# ``next_departure`` forward, so bucketing never lets a chain slip its clock.
+# Coarsening it is therefore purely lossy -- at a non-binding beam the 30-year
+# mass reads 233.4 at both 3 and 7 days, 214.8 at 14 and 125.9 at 28.
 _STATE_BUCKET_DAYS = 7.0  # departure times within a bucket are treated as one
 _SEED_SAMPLES = 16  # candidate seed launches across the first synodic period
-_BEAM_WIDTH = 48  # departure states carried between generations
+# 200, not 48. At the converged grid every generation offers 94-403 successors,
+# so a 48-wide beam cut *every* generation and under-reported the chain by 3.1x
+# (74.8 against 233.4). It looked harmless only because at the old 26-sample
+# grid the successor count never reached 48, so widening the beam alone changed
+# nothing -- 48, 128 and 320 all returned 74.795 (ADR 0030).
+_BEAM_WIDTH = 200  # departure states carried between generations
 _EARTH_JUPITER_SYNODIC_YEARS = 1.0923  # Kepler synodic of Earth and Jupiter
 
 

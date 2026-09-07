@@ -85,17 +85,27 @@ def _print_cycle_chain(label: str, chain: ChainResult) -> None:
     print_paper_point(
         "Phased 30-Year Jupiter-Only Growth Chain -- PLANNED for the paper "
         "under Jupiter-Only Exponential Launch Growth (sec:jupiter_only_growth); "
-        f"ADR 0010 -- {label}",
+        f"ADR 0010 as corrected by ADR 0030 -- {label}",
         "proposed claim: the returning mass cannot wait, yet the Jupiter bend "
         "steers each arrival onto a growth-viable next launch, so the loop "
-        "self-sustains and the launched mass compounds over decades",
+        "self-sustains and the launched mass compounds over decades -- and it "
+        "does so on an integer synodic clock nobody imposed",
         f"self-sustaining (every cycle grows): {chain.all_growth_positive}; "
         f"{len(chain.cycles)} cycles in 30 yr",
         f"compounded launched mass x seed = {chain.mass_multiple_10yr:.1f} at "
         f"10 yr, {chain.mass_multiple_20yr:.1f} at 20 yr, "
-        f"{chain.mass_multiple_30yr:.1f} at 30 yr",
+        f"{chain.mass_multiple_30yr:.1f} at 30 yr (quote as ~x233, +/-1% of "
+        "residual grid scatter -- ADR 0030)",
+        "every cycle but the horizon-truncated last runs 2.98-3.01 Earth-Jupiter "
+        "synodic periods, and the perijove burn is zero on all of them: handed a "
+        "free burn the optimizer declines it (ADR 0030 retires ADR 0010's "
+        "'second steering knob')",
         "caveat: circular-coplanar phasing, relative epoch -- real calendar "
         "windows still need the ephemeris/Lambert study (ADR 0006)",
+        "caveat: the departure burn here is charged to methalox (Isp 380 s); "
+        "ADR 0009/0012 drive it with the returning stream at 19-22 km/s, which "
+        "reverses which clock the loop prefers -- CONTEXT.md, 'Departure-burn "
+        "accounting seam'",
     )
     print(
         tabulate(
@@ -592,20 +602,20 @@ def main() -> None:
     )
 
     # Phased 30-year chain: the mass cannot wait, so each cycle's departure is
-    # pinned to the previous arrival; the Jupiter bend (and, powered, the perijove
-    # burn) steers the arrival to keep the next launch on a growth-viable Jupiter
-    # phase. A forward chain search maximizes compounded mass off Earth (ADR 0010).
-    for label, chain in (
-        (
-            "unpowered (bend only)",
-            optimize_jovian_cycle_chain(years=30.0, powered=False),
-        ),
-        (
-            "powered (perijove burn)",
-            optimize_jovian_cycle_chain(years=30.0, powered=True),
-        ),
-    ):
-        _print_cycle_chain(label, chain)
+    # pinned to the previous arrival; the Jupiter bend steers the arrival to keep
+    # the next launch on a growth-viable Jupiter phase. A forward chain search
+    # maximizes compounded mass off Earth (ADR 0010, as corrected by ADR 0030).
+    #
+    # Only the unpowered run is printed. At the converged search settings the
+    # powered run returns the *same chain* -- same cycles, same v_b, all nine
+    # perijove burns exactly 0.0 -- so printing it costs ~10 minutes to repeat a
+    # table verbatim. ADR 0010's "+20% from a 9th cycle" was a search artifact of
+    # the 26-sample / 48-wide box. The powered path stays available through the
+    # ``powered`` argument and is pinned by a slow test (ADR 0030).
+    _print_cycle_chain(
+        "unpowered (bend only)",
+        optimize_jovian_cycle_chain(years=30.0, powered=False),
+    )
 
     suborbital_frac = float(suborbital_200km_propellant_fraction())
     print_paper_point(

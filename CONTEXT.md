@@ -455,14 +455,79 @@ across ~1130 days (~3 Earth-Jupiter synodics, ADR 0006), so each return is chose
 to land the next launch on a growth-viable Jupiter phase. That couples the cycles
 into a **chain** (cycle k's bend sets cycle k+1's departure phase), searched
 forward as a generational beam over cycles that maximizes compounded mass
-launched off Earth. Result: the loop self-sustains both ways — unpowered (bend
-only) 8 cycles / ×74.8 over 30 yr, powered (perijove burn) 9 cycles / ×90.2, the
-burn acting as a **second steering knob** that tightens the return timing enough
-to fit one more cycle. _Avoid_: the "wait for a good window" model (ADR 0005's
+launched off Earth. Result: the loop self-sustains **9 cycles / ×233 over
+30 yr** (±1%; 233.4 fenced, 235.5 with the outbound floor freed), and the perijove burn buys *nothing* — handed a free burn the optimizer
+drives all nine to exactly 0.0 and reproduces the unpowered chain (ADR
+`0030-the-chain-search-was-reading-its-own-search-box`; the older ×74.8 / ×90.2
+"second steering knob" figures were a 26-sample, 48-wide search artifact).
+_Avoid_: the "wait for a good window" model (ADR 0005's
 windowed cycle) here — that staggering is available to the assist-chain *fleet*,
 not to a single returning mass; and treating a direct off-phase relaunch as cheap
-(it is ~4.45 km/s only on-phase, 10–38 km/s off it). Circular-coplanar, relative
+(it is ~4.45 km/s only on-phase, 10–38 km/s off it); quoting any chain figure
+without checking `_OUTBOUND_TOF_SAMPLES` and `_BEAM_WIDTH` together (neither
+converges alone — see **chain-search convergence**). Circular-coplanar, relative
 epoch, not calendar dates.
+
+**Chain-search convergence**:
+The two coupled knobs that decide whether a chain figure means anything
+(ADR 0030). `_OUTBOUND_TOF_SAMPLES` sets which arcs exist; `_BEAM_WIDTH` must
+then exceed the resulting successor count per generation (94–403 at the
+converged grid). At the old 26-sample grid the successor count never reached 48,
+so widening the beam alone changed nothing — 48, 128 and 320 all returned
+74.795 — and refining the grid alone stalls at ×152.1. Together they converge to
+×233.4 at 200 samples / 200 beam, stable across seeds, periapsis samples and
+buckets ≤ 7 d, to about ±1% — quote ~×233, not 233.3555, which is
+reproducibility at fixed grid rather than accuracy. `_STATE_BUCKET_DAYS` is a
+**dedup key, not a clock**: `add_node`
+carries the exact `next_departure` forward, so bucketing can never let a chain
+slip its phase; coarsening it is purely lossy.
+_Avoid_: reading five cycles pinned at `_OUTBOUND_TOF_MIN` as a binding fence
+(converged, 1.1 yr and 0.70 yr differ by 0.3%); tuning one knob and declaring
+convergence.
+
+**Phase-viability window**:
+Why the converged chain lands on the synodic clock nobody imposed — its cycles
+run 3.01, 2.99, 3.01, 2.99, 3.01, 3.01, 2.98, 3.01 synodic periods, eight in a
+row at 3.00. Outside roughly **2.92–3.06 S** the next departure offers *no*
+growing cycle at all (best `net_growth` 0.03–0.9), so a faster round trip is a
+one-way door rather than merely a worse one. Parking and waiting does not rescue
+it: waiting for the relative longitude to repeat converts *any* cycle into a
+3.00 S cycle, so the fast trajectory is dominated outright by the 3.00 S one
+(0.1496/yr at 2.19 S and 0.1508 at 2.88 S against 0.1895 at 3.00 S).
+_Avoid_: reading the window as physics rather than as a property of the
+**departure-burn accounting seam** — under nozzle exhaust every phase is live
+and the ranking inverts.
+
+**Departure-burn accounting seam**:
+The unresolved disagreement between two models of the same machine (ADR 0030).
+`jovian_cycle_phasing.py` charges the departure burn to **methalox** (Isp 380 s,
+`v_e` = 3.727 km/s) in `_net_growth`; ADR 0009/0012 and
+`circular_resonance_impulse.py` drive that same burn with the returning stream
+through the **head-on nozzle** (`v_e` = 19–22 km/s at `k` = 3). Swap the exhaust
+and the chain's conclusions reverse: the **phase-viability window** disappears
+(38/38, 45/45 growing branches at every phase) and the best single-cycle rate
+moves from 3.00 S / 0.546 per yr to **2.09 S / 0.781**, with the 66.05 km/s
+cycle at 2.88 S also beating 3S. Which model is right decides whether the loop
+wants a 3S clock at 50–60 km/s or a ~2.1S clock at 62–69.
+The seam is a **continuum in departure Isp**, and what it buys is launch-window
+coverage. Across 73 departure phases spanning one synodic period, the fraction
+admitting *any* growing cycle runs 18% at methalox (380 s), 49% at 1000 s, 60%
+at 1200, 77% at 1500, and **100% at 1900 s** — and ADR 0019's departure-nozzle
+ledger already claims **2214 s**. The usable launch window widens from about
+−36/+24 days out of 399 (rate falling 65% across it) to ±96 days, flat to within
+1% over ±24 days. A 72-hour stagger is negligible either way; what changes is
+one narrow window per 1.09 yr becoming a continuous one.
+**The exhaust speed does ~85% of the work, the hotter impactor ~15%**: per-cycle
+growth goes 1.65 → 6.13, of which the mass ratio contributes ×1.18 (`v_b` 53.5 →
+62.4) and the departure burn's surviving fraction ×3.14 (0.236 → 0.741).
+_Avoid_: quoting either model's clock or `v_b` preference as settled; treating
+the nozzle figures as a result (single-point `beta`, and nothing is charged for
+delivering the head-on stream, whose own phasing is unmodelled); selling the
+high-Isp case as "faster impactors carry more kinetic energy" (the impulse law is
+*linear* in closing speed, and the speed is the small term); assuming the payload
+must *park* to wait for phase once Isp is high (at full coverage every phase is
+live, so it relaunches immediately — parking is the methalox-era workaround, and
+waiting converts any cycle back into a 3.00 S one).
 
 ### Unpowered assist chain
 
@@ -539,17 +604,35 @@ The chain's hard limit on Earth-closing speed, ~56.27 km/s: an unpowered flyby c
 grow the ~15.369 km/s Jovian excess, so the most retrograde state reachable is full
 reversal (`v_t = v_Jupiter − v∞ = −2.31 km/s`). The catalog's three Jovian rows assume
 the retrograde-Hohmann 69.27 km/s, which needs 20.47 km/s of outgoing excess and is
-therefore **unreachable at any phase, periapsis or arrival time** — not merely
-disfavoured. Buying it costs a 2.62 km/s Jovian burn and drops end-to-end 5.72 → 3.93.
+therefore **unreachable at any phase, periapsis or arrival time _by this chain_** —
+not merely disfavoured. Buying it *within the chain* costs a 2.62 km/s Jovian burn and
+drops end-to-end 5.72 → 3.93.
 The ceiling is a function of *this chain's* arrival excess, not a universal constant:
 it is `v_Jupiter + v∞`, so a hotter Jovian arrival lifts it. The direct powered flyby
 reaches `v_b` 60 and even 65 with a **zero** Jovian burn, by departing harder
 (5.34 / 5.99 km/s) and arriving with more excess. 56.27 bounds the *unpowered chain*,
-not the architecture.
+not the architecture — and the catalog's 69.27 itself is reachable with a **zero**
+Jovian burn on a direct departure: `v_inf` 13.812 km/s at Earth (a 6.712 km/s burn
+above the 10.9503 parking periapsis, +1.557 over the 3S optimum) arrives at 20.473 and
+needs 76.8° of bend against 106.3° available (ADR 0030).
 _Avoid_: treating 69.27 as a maximum (it is the *minimum-energy* retrograde arrival —
 the only purely tangential one); expecting timing to raise it (timing sets position,
 energy sets speed, and they are separate currencies); quoting 56.27 as a limit on any
-trajectory that did not inherit the chain's 15.369 km/s arrival.
+trajectory that did not inherit the chain's 15.369 km/s arrival; reading "unreachable"
+as a statement about the architecture rather than about the Tisserand-locked chain.
+
+**Perfect-retrograde boundary**:
+The `v_b`-maximizing return is not one trajectory but two regimes, split at
+20.473 km/s of Jupiter arrival excess (ADR 0030). *Below* it the best bend is full
+reversal and the 1 AU arrival is partly radial (`v_b` < 69.24). *At and above* it the
+maximizing return is purely tangential with perihelion pinned at exactly 1 AU —
+"perfect retrograde" — and `v_b` climbs from 69.24 to 72.74 at solar escape
+(`v_inf` 71.907) and past it on unbound arcs. The retrograde-Hohmann is the *cheapest*
+member of that family, not the fastest. Note per-cycle growth peaks at `v_b` ≈ 69.4
+and **falls** above it: the mass-ratio law `2f/ln(v_b/(v_b − v_rf))` is asymptotically
+linear in `v_b`, so past ~70 km/s extra speed buys a shorter clock, not a harder push.
+_Avoid_: calling 69.27 the "theoretical maximum" (it is a corner, and solar escape is
+2.5 km/s above it); assuming more `v_b` always means more payload per pass.
 
 **`v_b` lottery**:
 The price of free phasing: the bend that places Earth *dictates* the collision speed
