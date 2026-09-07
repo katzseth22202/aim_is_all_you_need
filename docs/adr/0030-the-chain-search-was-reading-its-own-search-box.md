@@ -207,6 +207,47 @@ Parking that long moves `v_rf` from 10.9503 to ~10.99 km/s as the cycle orbit
 lengthens, worth 0.2% on the mass ratio -- checked, not assumed, and the table
 above is computed at the 20-day value so it is not flattered by it.
 
+**What it costs, against what it may spend.** The exchange-rate table above says
+what a hotter `v_b` is *worth*; this is what it actually *costs*. Both cycles
+depart the 20-day cycle orbit's periapsis (`v_rf` = 10.9503 km/s at 200 km,
+escape there 11.0086):
+
+| phase | | out | ret | park | dep dv | `v_inf` | `v_b` |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 0.71 | exact 3S, repeats | 1.11 yr | 2.09 yr | -- | **5.974** | 12.85 | 62.43 |
+| | perfect retrograde + park | 1.01 | 2.03 | 0.22 S | **7.094** | 14.30 | **68.32** |
+| 0.74 | exact 3S, repeats | 1.11 | 2.08 | -- | **5.559** | 12.30 | 61.29 |
+| | perfect retrograde + park | 0.98 | 2.01 | 0.26 S | **6.735** | 13.84 | **68.67** |
+| 0.75 | exact 3S, repeats | 1.11 | 2.08 | -- | **5.599** | 12.36 | 60.68 |
+| | perfect retrograde + park | 0.98 | 2.02 | 0.25 S | **6.636** | 13.71 | **68.13** |
+
+Across all viable phases the extra departure burn runs **+0.000 to +1.978 km/s,
+median +1.036**. Against the `v_b` 68 budget of 0.99 / 3.13 / 5.77 km/s at Isp
+380 / 1200 / 2214, that is:
+
+| | budget at `v_b` 68 | cost | verdict |
+|---|---:|---:|---|
+| Isp 380 | 0.99 | +1.04 | **just over -- a wash to a slight loss** |
+| Isp 1200 | 3.13 | +1.04 | 3x headroom |
+| Isp 2214 | 5.77 | +1.04 | 5.5x headroom |
+
+Methalox is not far from working -- it is about 5% short, which is exactly why
+fly-and-park wins at 1 phase of 11 rather than at none.
+
+The `+0.000` rows at phases 0.45-0.55 are not a bargain: there the exact-3S cycle
+*already is* the perfect-retrograde one (`v_b` 67.6-69.1), but its departure burn
+is **15-21 km/s** because the phase is far from Jupiter's cheap position. Hot,
+not attractive.
+
+**Cross-check against the free-bend estimate.** A circular-coplanar hand
+derivation with a free bend and *no* Earth-intercept constraint (recorded under
+"A related correction to CONTEXT.md's Tisserand `v_b` ceiling" below) predicted
+Earth departure `v_inf` 13.812 km/s and a 6.712 km/s burn, +1.557 over the 3S
+optimum. The Lambert model with Jupiter's true position and Earth intercept
+enforced gives `v_inf` 13.71-14.30, burn 6.64-7.09, +1.04 to +1.18. The two agree
+to about 0.2 km/s on the burn; what the estimate could not see was the phase
+structure, which turned out to be the whole story.
+
 **Caveat: this is a single-cycle exchange-rate comparison, not a chain run.**
 Every candidate is padded to the same 3.00 S and returns to the same departure
 phase, so it should chain trivially -- but that has not been run, and this ADR
