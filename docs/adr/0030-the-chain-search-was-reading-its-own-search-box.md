@@ -337,13 +337,34 @@ perfect-retrograde arrivals) that land back on phase.
 So the exhaust speed does **not** buy a shorter clock. It buys growth per cycle,
 1.83 -> ~6.3, and the launch-window coverage above. Quote it that way.
 
-**Open, not settled: is there a true 2S fixed point?** Cycles within 1% of
-exactly 2.00 S exist (20 of 3,483 enumerated), reaching growth 6.021 at 15 of 73
-phases. An exactly-2.00 S cycle returns to its own departure phase, so if one
-could be *held* it would compound at 0.810/yr against 3S's 0.576 -- about 1000x
-over 30 years. The chain search never finds one it can sustain, and reaches only
-x2.5e6, below even the x3.2e7 a repeatable 3.00 S cycle would give. Whether the
-fixed point does not exist, or the beam cannot hold it, is unresolved.
+**Resolved: the 2S fixed point exists, and declining it on methalox is correct.**
+This was recorded here as open; it is not. `fixed_points(grid, multiple=2)` finds
+a cycle of **1.9998 synodic periods** at departure phase 0.8082
+(Earth-minus-Jupiter -69.04 deg), drifting **-0.0002 S per repetition** -- 130
+repeats before it leaves a 0.02 S band, so it repeats for far longer than any
+horizon here. It arrives at `v_b` 63.35 km/s on a **1.20 yr inbound return**
+(ADR 0006's fast branch) for a **8.613 km/s** departure burn.
+
+| departure Isp | 2S fixed point | best 3S as the chain flies it | winner |
+|---|---|---:|---|
+| 380 (methalox) | **shrinks** (growth 0.838) | 0.178 /yr | **3S** |
+| 1200 | **0.641 /yr** | 0.499 /yr | **2S**, +28% |
+| 2214 | **0.794 /yr** | 0.567 /yr | **2S**, +40% |
+
+So the chain never selecting it is **not** a search failure. On methalox the 2S
+point does not merely score worse, it *loses mass* -- `exp(-8.613/3.727)` = 0.099
+against a mass ratio of 8.44. Declining it is the right answer. Give the
+departure a real exhaust speed and it wins by 28-40%, which is the same verdict
+as fly-and-park and for the same reason.
+
+**And the real-orbit answer already exists.** ADR 0011 audits this exact
+resonance against Astropy ephemerides over 200 years and finds only **45 of 91
+windows (49.5%) clear the 4,000 km perijove floor**. Note *why*: not timing drift
+-- the period varies only 2.28% and the speeds 8-9% -- but the perijove, because
+the required turn maps nonlinearly into perijove radius. That is why
+`real_orbit_resonance.py` already carries a chained fall-back that flies 2S when
+it closes and 3S when its DSM proxy exceeds a threshold. The eccentric, inclined
+Jupiter is what turns a clean 2S fixed point into a 2S-with-3S-fallback cadence.
 
 So "the growth loop wants a 3S clock and a 50-60 km/s stream" is right about the
 **clock** under either accounting, and wrong about the **stream and the rate**

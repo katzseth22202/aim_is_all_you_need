@@ -278,15 +278,28 @@ Include this, or the paper will overreach on three points.
    that compounds mass declines it. What the exhaust speed buys is growth per
    cycle (1.83 -> ~6.3) and the window coverage above -- not a faster loop.
 
-**One open item worth flagging in the text.** Cycles within 1% of exactly 2.00 S
-exist (20 of 3,483 enumerated), reaching per-cycle growth 6.021 at 15 of 73
-phases. An exactly-2.00 S cycle returns to its own departure phase, so if one
-could be *held* it would compound at 0.810 per year against 3S's 0.576 -- roughly
-1000x over 30 years. The chain search never sustains one, and reaches only x2.5e6
-against the x3.2e7 a repeatable 3.00 S cycle would give, so it is not finding the
-best available fixed point either. Whether a true 2S fixed point does not exist,
-or the beam cannot hold one, is unresolved and is the largest open question this
-analysis raised.
+**The two-synodic resonance, which the paper already discusses.** It survives
+this model: a cycle of **1.9998 synodic periods** at Earth-minus-Jupiter
+-69.04 deg, drifting only -0.0002 S per repetition, arriving at `v_b` 63.35 km/s
+on a 1.20 yr inbound return for an 8.613 km/s departure burn. Its verdict follows
+the same rule as everything else in this document:
+
+| departure Isp | 2S fixed point | best 3S as flown | winner |
+|---|---|---:|---|
+| **380 (methalox)** | **shrinks** -- growth 0.838, it loses mass | 0.178 /yr | **3S** |
+| 1200 | **0.641 /yr** | 0.499 /yr | **2S**, +28% |
+| 2214 | **0.794 /yr** | 0.567 /yr | **2S**, +40% |
+
+Two things the paper should say about it. First, **methalox cannot fly the 2S
+resonance at all** -- not "less well", but below break-even, because an 8.613 km/s
+departure burn at 3.727 km/s exhaust delivers 9.9% of the vehicle. Second, in
+**real orbits it does not repeat**: ADR 0011 audits it against ephemerides over
+200 years and only **45 of 91 windows (49.5%) clear the 4,000 km perijove floor**.
+The failure is not timing drift -- the period varies 2.28% and the speeds 8-9% --
+but the perijove, because the required turn maps nonlinearly into perijove
+radius. `src/real_orbit_resonance.py` already implements the consequence: fly 2S
+when it closes, fall back to 3S when it does not. So the honest cadence claim is
+**2S with a 3S fallback roughly half the time**, not a clean 2S loop.
 
 ---
 

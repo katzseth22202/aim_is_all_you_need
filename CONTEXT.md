@@ -529,6 +529,26 @@ Reachability does not move with exhaust speed; usability does — 18% of phases 
 Isp 380, 100% at 1900.
 _Avoid_: conflating it with reachability; quoting the fraction without its Isp.
 
+**Two-synodic fixed point**:
+The paper's own resonance (ADR 0011), tested against the growth model's
+Earth-intercept constraint and found to survive (`fixed_points()`,
+`src/fly_and_park.py`): **1.9998 S at departure phase 0.8082** (Earth-minus-Jupiter
+−69.04°), drifting −0.0002 S per repetition — 130 repeats before it leaves a
+0.02 S band. `v_b` 63.35 km/s on a **1.20 yr inbound return** (the fast branch of
+the **return-branch knob**) for an **8.613 km/s** departure burn. Its verdict is
+the **departure-burn accounting seam** again: on methalox it **shrinks** (growth
+0.838 — an 8.613 km/s burn at 3.727 km/s exhaust delivers 9.9%), so the chain
+declining it is *correct, not a search failure*; at Isp 1200 it runs 0.641/yr
+against the flown 3S cycle's 0.499, and at 2214, 0.794 against 0.567 — winning by
+28% and 40%. In **real orbits it does not repeat**: only 45/91 windows (49.5%)
+clear the 4,000 km perijove floor over 200 years, and the failure is the perijove
+rather than the clock (period varies 2.28%, speeds 8–9%, but the required turn
+maps nonlinearly into perijove radius), which is why `real_orbit_resonance.py`
+carries a 2S-with-3S-fallback cadence.
+_Avoid_: reading the chain's refusal of 2S as a search limitation (it is a
+correct rejection at methalox Isp); quoting a clean 2S loop for real orbits — it
+is 2S with a 3S fallback about half the time.
+
 **Fly hot, park to rephase**:
 The constructive form of the parking result (ADR 0030). Parking does *not* pay at
 methalox, but above ~Isp 1200 it does: hold the departure on one Earth-Jupiter

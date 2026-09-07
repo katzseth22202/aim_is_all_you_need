@@ -97,6 +97,11 @@ EXCHANGE_BASELINE_SPEED = 53.5
 THREE_SYNODIC_TOLERANCE = 0.03
 #: Minimum park, in synodic periods, for a cycle to count as fly-and-park.
 MINIMUM_PARK = 0.02
+#: How close to an exact integer a cycle must be to count as a fixed point, in
+#: synodic periods. A cycle this close drifts out of a 0.02 S band only after
+#: 0.02/tolerance repetitions, which at 1e-3 is 20 cycles -- longer than the
+#: 30-year horizon carries.
+FIXED_POINT_TOLERANCE = 1.0e-3
 #: Arrival speed at or above which a cycle counts as perfect-retrograde for the
 #: premium table. The perfect-retrograde boundary itself is 69.24 km/s; 66 admits
 #: the near-boundary arrivals the comparison is actually about.
@@ -550,6 +555,96 @@ def perfect_retrograde_premium(
     return out
 
 
+@dataclass(frozen=True)
+class FixedPoint:
+    """A cycle that returns to its own departure phase, so it can repeat.
+
+    A cycle of *exactly* N synodic periods leaves the next departure on the same
+    Earth-Jupiter geometry, so the identical trajectory can be flown again
+    forever. Anything else drifts, and the drift is what the growth chain refuses
+    to accumulate (ADR 0030).
+
+    Attributes:
+        cycle: The closing cycle itself.
+        synodics: Its length in synodic periods, including the 20-day coast.
+        multiple: The integer it is closest to.
+        drift: ``synodics - multiple``, the phase slip per repetition.
+        repeats_before_drifting: How many repetitions before the slip reaches
+            0.02 synodic periods, the width of the band this module counts as
+            "on the clock".
+    """
+
+    cycle: Cycle
+    synodics: float
+    multiple: int
+    drift: float
+    repeats_before_drifting: int
+
+
+def fixed_points(
+    grid: Dict[float, List[Cycle]],
+    multiple: int = 2,
+    tolerance: float = FIXED_POINT_TOLERANCE,
+) -> List[FixedPoint]:
+    """Cycles that repeat: those within ``tolerance`` of an integer synodic count.
+
+    The two-synodic resonance is the paper's own baseline (ADR 0011), so whether
+    one survives *this* model's Earth-intercept constraint is worth answering
+    rather than assuming. It does: see the module tests.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        multiple: Integer number of synodic periods to look for.
+        tolerance: How close to that integer a cycle must be, in synodic periods.
+
+    Returns:
+        One :class:`FixedPoint` per qualifying cycle, best (least drift) first.
+    """
+    coast = (
+        float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year))
+        / _EARTH_JUPITER_SYNODIC_YEARS
+    )
+    out: List[FixedPoint] = []
+    for phase in sorted(grid):
+        for cycle in grid[phase]:
+            synodics = cycle.flight_synodics + coast
+            drift = synodics - multiple
+            if abs(drift) > tolerance:
+                continue
+            out.append(
+                FixedPoint(
+                    cycle=cycle,
+                    synodics=synodics,
+                    multiple=multiple,
+                    drift=drift,
+                    repeats_before_drifting=(
+                        int(0.02 / abs(drift)) if abs(drift) > 1e-12 else 10_000
+                    ),
+                )
+            )
+    return sorted(out, key=lambda f: abs(f.drift))
+
+
+def growth_rate(cycle: Cycle, exhaust: float, push_target: float) -> float:
+    """E-foldings per year for a cycle repeated on its own clock.
+
+    Args:
+        cycle: The closing cycle.
+        exhaust: Departure-stage effective exhaust speed (km/s).
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+
+    Returns:
+        ``ln(growth) / cycle_years``, or ``-inf`` when the cycle shrinks. A
+        shrinking cycle is not infeasible, it is a negative gradient (CONTEXT.md,
+        "Growth rate").
+    """
+    coast_years = float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year))
+    growth = cycle.growth(exhaust, push_target)
+    if growth <= 1.0:
+        return float("-inf")
+    return float(np.log(growth)) / (cycle.flight_years + coast_years)
+
+
 def hottest_reachable(
     grid: Dict[float, List[Cycle]], minimum_park: float = MINIMUM_PARK
 ) -> float:
@@ -706,6 +801,66 @@ def _report(grid: Dict[float, List[Cycle]], params: _AssistChainParams) -> None:
         budget = exchange_rate(68.0, exhaust_speed_from_isp(isp), push)
         verdict = "CLEARS" if budget > median_extra else "FAILS"
         print(f"  budget at Isp {isp:5d} = {budget:5.2f} km/s -> {verdict}")
+
+    print("\nTWO-SYNODIC FIXED POINT -- the paper's own resonance (ADR 0011),")
+    print("tested against this model's Earth-intercept constraint")
+    twos = fixed_points(grid, multiple=2)
+    # The 3S reference is the best cycle the chain actually *flies*, which runs
+    # 2.98-3.01 S and is re-steered each cycle -- not a strict fixed point.
+    # Holding 3S to the 1e-3 fixed-point tolerance would understate it.
+    three = fixed_points(grid, multiple=3, tolerance=THREE_SYNODIC_TOLERANCE)
+    if not twos:
+        print("  none found")
+    else:
+        best = twos[0]
+        print(
+            f"  found {len(twos)} cycle(s) within {FIXED_POINT_TOLERANCE} S of exactly "
+            f"2.000; best is {best.synodics:.4f} S at phase {best.cycle.departure_phase:.4f} "
+            f"({best.cycle.departure_phase * 360 - 360:.2f} deg)"
+        )
+        print(
+            f"  drift {best.drift:+.4f} S per repetition -> "
+            f"{best.repeats_before_drifting} repeats before it leaves the band"
+        )
+        print(
+            f"  v_b {best.cycle.collision_speed:.2f} km/s, departure burn "
+            f"{best.cycle.departure_burn:.3f} km/s"
+        )
+        ref = max(
+            (f for f in three),
+            key=lambda f: growth_rate(f.cycle, exhaust_speed_from_isp(2214), push),
+            default=None,
+        )
+        rows = []
+        for isp in (380, 1200, 2214):
+            exhaust = exhaust_speed_from_isp(isp)
+            r2 = growth_rate(best.cycle, exhaust, push)
+            r3 = growth_rate(ref.cycle, exhaust, push) if ref else float("-inf")
+            rows.append(
+                [
+                    f"{isp}",
+                    "shrinks" if r2 == float("-inf") else f"{r2:.3f}",
+                    "shrinks" if r3 == float("-inf") else f"{r3:.3f}",
+                    "3S" if r3 >= r2 else "2S",
+                ]
+            )
+        print(
+            tabulate(
+                rows,
+                headers=[
+                    "Isp (s)",
+                    "2S fixed point /yr",
+                    "best 3S as flown /yr",
+                    "winner",
+                ],
+                tablefmt="grid",
+            )
+        )
+        print("  the chain search runs on methalox, where the 2S point SHRINKS --")
+        print("  declining it is correct, not a search failure (ADR 0030).")
+        print("  Real orbits: ADR 0011 audits this resonance against ephemerides and")
+        print("  finds only 45/91 windows clear the perijove floor over 200 years,")
+        print("  which is why real_orbit_resonance.py carries a fall-back to 3S.")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

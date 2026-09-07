@@ -6,15 +6,19 @@ from astropy import units as u
 
 from src.fly_and_park import (
     EXCHANGE_BASELINE_SPEED,
+    FIXED_POINT_TOLERANCE,
     METHALOX_ISP_SECONDS,
     MINIMUM_PARK,
     PERFECT_RETROGRADE_SPEED,
+    THREE_SYNODIC_TOLERANCE,
     Cycle,
     departure_burn_span,
     enumerate_phase_grid,
     exchange_rate,
     exhaust_speed_from_isp,
+    fixed_points,
     fly_and_park_comparison,
+    growth_rate,
     hottest_reachable,
     payload_mass_ratio_float,
     perfect_retrograde_premium,
@@ -234,3 +238,60 @@ def test_every_premium_row_actually_buys_a_hotter_arrival(grid) -> None:
         assert item.hot.collision_speed >= item.pure.collision_speed
         assert item.extra_burn >= -1e-9
         assert item.hot.flight_synodics <= 3.0 - MINIMUM_PARK
+
+
+@pytest.mark.slow
+def test_a_two_synodic_fixed_point_exists(grid) -> None:
+    # ADR 0011's resonance -- the paper's own baseline -- survives this model's
+    # Earth-intercept constraint. ADR 0030 originally recorded its existence as
+    # unresolved; it is not.
+    twos = fixed_points(grid, multiple=2)
+    assert twos, "no two-synodic fixed point found"
+    best = twos[0]
+    assert abs(best.drift) <= FIXED_POINT_TOLERANCE
+    assert best.synodics == pytest.approx(2.0, abs=1e-3)
+    # It really does repeat: the drift is small enough to fly for decades.
+    assert best.repeats_before_drifting >= 100
+    # Its identity, so a change to the grid is noticed rather than absorbed.
+    assert best.cycle.collision_speed == pytest.approx(63.35, abs=0.2)
+    assert best.cycle.departure_burn == pytest.approx(8.613, abs=0.05)
+
+
+@pytest.mark.slow
+def test_the_two_synodic_point_shrinks_on_methalox_and_wins_above_it(grid) -> None:
+    # The resolution of ADR 0030's open question. The chain never selects the 2S
+    # point not because the search fails but because on methalox it *shrinks* --
+    # declining it is correct. Give the departure a real exhaust speed and it
+    # beats the 3S cycle the chain actually flies.
+    best2 = fixed_points(grid, multiple=2)[0].cycle
+    three = fixed_points(grid, multiple=3, tolerance=THREE_SYNODIC_TOLERANCE)
+    assert three
+
+    methalox = exhaust_speed_from_isp(METHALOX_ISP_SECONDS)
+    assert best2.growth(methalox, _PUSH) < 1.0
+    assert growth_rate(best2, methalox, _PUSH) == float("-inf")
+    # ...while 3S grows on the same propellant.
+    assert max(growth_rate(f.cycle, methalox, _PUSH) for f in three) > 0.1
+
+    for isp in (1200.0, 2214.0):
+        exhaust = exhaust_speed_from_isp(isp)
+        rate2 = growth_rate(best2, exhaust, _PUSH)
+        rate3 = max(growth_rate(f.cycle, exhaust, _PUSH) for f in three)
+        assert rate2 > rate3, (isp, rate2, rate3)
+        assert rate2 / rate3 > 1.25  # 2S wins by 28% at 1200 and 40% at 2214
+
+
+@pytest.mark.slow
+def test_growth_rate_reports_minus_infinity_for_a_shrinking_cycle(grid) -> None:
+    # A shrinking cycle is a negative gradient, not an error (CONTEXT.md,
+    # "Growth rate"): it must be comparable, not raise.
+    shrinking = Cycle(
+        departure_phase=0.0,
+        outbound_years=1.0,
+        return_years=2.0,
+        departure_burn=40.0,
+        flyby_burn=0.0,
+        collision_speed=55.0,
+    )
+    assert shrinking.growth(exhaust_speed_from_isp(380.0), _PUSH) < 1.0
+    assert growth_rate(shrinking, exhaust_speed_from_isp(380.0), _PUSH) == float("-inf")
