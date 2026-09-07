@@ -8,6 +8,7 @@ from src.fly_and_park import (
     EXCHANGE_BASELINE_SPEED,
     METHALOX_ISP_SECONDS,
     MINIMUM_PARK,
+    PERFECT_RETROGRADE_SPEED,
     Cycle,
     departure_burn_span,
     enumerate_phase_grid,
@@ -16,6 +17,7 @@ from src.fly_and_park import (
     fly_and_park_comparison,
     hottest_reachable,
     payload_mass_ratio_float,
+    perfect_retrograde_premium,
     phase_reaches,
     sweet_phase,
     usable_phase_fraction,
@@ -191,3 +193,44 @@ def test_parking_never_makes_the_cycle_longer_than_three_synodics(grid) -> None:
         assert comp.parked.flight_synodics <= 3.0 - MINIMUM_PARK
         assert comp.park_synodics >= MINIMUM_PARK
         assert comp.parked.flight_synodics + comp.park_synodics == pytest.approx(3.0)
+
+
+@pytest.mark.slow
+def test_the_perfect_retrograde_premium_is_what_adr_0030_quotes(grid) -> None:
+    # ADR 0030 and the paper document both quote "+0.000 to +1.978 km/s, median
+    # +1.036" as the cost of buying a perfect-retrograde arrival. That number was
+    # a scratch figure until this harness landed; pin it so it stays reproducible.
+    premiums = perfect_retrograde_premium(grid, exhaust_speed_from_isp(2214.0), _PUSH)
+    assert premiums
+    extras = [p.extra_burn for p in premiums]
+    assert min(extras) == pytest.approx(0.0, abs=1e-6)
+    assert max(extras) == pytest.approx(1.978, abs=0.02)
+    assert float(np.median(extras)) == pytest.approx(1.036, abs=0.02)
+
+
+@pytest.mark.slow
+def test_the_premium_fails_the_methalox_budget_and_clears_the_impactor_one(
+    grid,
+) -> None:
+    # The architecture verdict in one assertion: methalox cannot afford the
+    # perfect-retrograde arrival and an impactor-driven departure can. Methalox
+    # misses narrowly -- 0.99 against 1.036 -- which is the point.
+    premiums = perfect_retrograde_premium(grid, exhaust_speed_from_isp(2214.0), _PUSH)
+    cost = float(np.median([p.extra_burn for p in premiums]))
+    methalox = exchange_rate(68.0, exhaust_speed_from_isp(METHALOX_ISP_SECONDS), _PUSH)
+    assert methalox < cost
+    assert cost - methalox < 0.10  # it fails by a little, not by a lot
+    for isp in (1200.0, 2214.0):
+        assert exchange_rate(68.0, exhaust_speed_from_isp(isp), _PUSH) > cost
+
+
+@pytest.mark.slow
+def test_every_premium_row_actually_buys_a_hotter_arrival(grid) -> None:
+    # The premium is selected by arrival speed, so every row must clear the
+    # threshold and none may be cheaper than the cycle it is measured against.
+    premiums = perfect_retrograde_premium(grid, exhaust_speed_from_isp(2214.0), _PUSH)
+    for item in premiums:
+        assert item.hot.collision_speed >= PERFECT_RETROGRADE_SPEED
+        assert item.hot.collision_speed >= item.pure.collision_speed
+        assert item.extra_burn >= -1e-9
+        assert item.hot.flight_synodics <= 3.0 - MINIMUM_PARK

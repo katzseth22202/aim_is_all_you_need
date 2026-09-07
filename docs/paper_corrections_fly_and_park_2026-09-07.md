@@ -316,8 +316,16 @@ period (3,483 closing cycles) and re-scores each with
 chain charges methalox and the whole subject here is what happens when it does
 not. The search box is recorded in the module docstring. Runtime ~8 s.
 
+`make fly-park` also prints the **perfect-retrograde premium** table -- the
+per-phase departure burn of the plain 3S cycle against the hot parkable one, and
+their difference -- which is where N1's "+1.04 km/s" and its `+0.000 to +1.978,
+median +1.036` range come from. It ends by checking that median against the
+exchange rate at each Isp and printing `FAILS` for methalox, `CLEARS` for 1200
+and 2214.
+
 Pinned by `tests/test_fly_and_park.py`: the sweet phase and its 8.7x swing, the
 usable-phase fractions and their monotonicity in Isp, the methalox-loses /
-impactor-wins verdict, the 5%-at-sweet-phase / 27%-off-phase shape, and that
-flight plus park is exactly 3.00 S. Run with `pytest tests/test_fly_and_park.py`;
+impactor-wins verdict, the 5%-at-sweet-phase / 27%-off-phase shape, the premium's
+range and median, that methalox misses it by under 0.1 km/s rather than by a lot,
+and that flight plus park is exactly 3.00 S. Run with `pytest tests/test_fly_and_park.py`;
 the sweep-backed cases are marked `slow`.

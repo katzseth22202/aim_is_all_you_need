@@ -222,7 +222,9 @@ escape there 11.0086):
 | | perfect retrograde + park | 0.98 | 2.02 | 0.25 S | **6.636** | 13.71 | **68.13** |
 
 Across all viable phases the extra departure burn runs **+0.000 to +1.978 km/s,
-median +1.036**. Against the `v_b` 68 budget of 0.99 / 3.13 / 5.77 km/s at Isp
+median +1.036** (`perfect_retrograde_premium()`, printed by `make fly-park`;
+selection is by *arrival speed* so the premium is a property of the geometry, not
+of the exhaust speed being scored). Against the `v_b` 68 budget of 0.99 / 3.13 / 5.77 km/s at Isp
 380 / 1200 / 2214, that is:
 
 | | budget at `v_b` 68 | cost | verdict |

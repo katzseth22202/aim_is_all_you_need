@@ -97,6 +97,10 @@ EXCHANGE_BASELINE_SPEED = 53.5
 THREE_SYNODIC_TOLERANCE = 0.03
 #: Minimum park, in synodic periods, for a cycle to count as fly-and-park.
 MINIMUM_PARK = 0.02
+#: Arrival speed at or above which a cycle counts as perfect-retrograde for the
+#: premium table. The perfect-retrograde boundary itself is 69.24 km/s; 66 admits
+#: the near-boundary arrivals the comparison is actually about.
+PERFECT_RETROGRADE_SPEED = 66.0
 
 
 def exhaust_speed_from_isp(specific_impulse: float) -> float:
@@ -464,6 +468,88 @@ def phase_reaches(
     )
 
 
+@dataclass(frozen=True)
+class RetrogradePremium:
+    """What a perfect-retrograde arrival costs against the plain 3S cycle.
+
+    The **exchange rate** says what a hotter arrival is *worth*; this says what
+    it actually *costs*. Both cycles occupy exactly 3.00 synodic periods, one by
+    flying it and one by flying less and parking, so the difference is entirely
+    in the departure burn.
+
+    Attributes:
+        phase: Departure phase as a fraction of one synodic period.
+        pure: The best cycle already flying ~3.00 synodic periods.
+        hot: The best parkable cycle at or above the perfect-retrograde speed.
+        extra_burn: ``hot`` minus ``pure`` departure burn (km/s).
+    """
+
+    phase: float
+    pure: Cycle
+    hot: Cycle
+    extra_burn: float
+
+
+def perfect_retrograde_premium(
+    grid: Dict[float, List[Cycle]],
+    exhaust: float,
+    push_target: float,
+    minimum_speed: float = PERFECT_RETROGRADE_SPEED,
+    minimum_park: float = MINIMUM_PARK,
+) -> List[RetrogradePremium]:
+    """Extra departure burn to buy a perfect-retrograde arrival, per phase.
+
+    Selection is by *arrival speed*, not by growth, so the answer is a property
+    of the geometry rather than of the exhaust speed being scored. The exhaust
+    speed still selects which pure-3S cycle it is measured against.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        exhaust: Departure-stage effective exhaust speed (km/s), used only to
+            pick the pure-3S cycle the premium is measured against.
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        minimum_speed: Arrival speed at or above which a cycle qualifies (km/s).
+        minimum_park: Park required, in synodic periods, to qualify.
+
+    Returns:
+        One :class:`RetrogradePremium` per phase offering both a growing pure-3S
+        cycle and a qualifying parkable one, in phase order.
+    """
+    coast = (
+        float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year))
+        / _EARTH_JUPITER_SYNODIC_YEARS
+    )
+    out: List[RetrogradePremium] = []
+    for phase in sorted(grid):
+        cycles = grid[phase]
+        three = [
+            c
+            for c in cycles
+            if abs(c.flight_synodics + coast - 3.0) <= THREE_SYNODIC_TOLERANCE
+        ]
+        hot = [
+            c
+            for c in cycles
+            if c.collision_speed >= minimum_speed
+            and c.flight_synodics <= 3.0 - minimum_park
+        ]
+        if not three or not hot:
+            continue
+        best_pure = max(three, key=lambda c: c.growth(exhaust, push_target))
+        if best_pure.growth(exhaust, push_target) <= 1.0:
+            continue
+        best_hot = max(hot, key=lambda c: c.growth(exhaust, push_target))
+        out.append(
+            RetrogradePremium(
+                phase=phase,
+                pure=best_pure,
+                hot=best_hot,
+                extra_burn=best_hot.departure_burn - best_pure.departure_burn,
+            )
+        )
+    return out
+
+
 def hottest_reachable(
     grid: Dict[float, List[Cycle]], minimum_park: float = MINIMUM_PARK
 ) -> float:
@@ -580,6 +666,46 @@ def _report(grid: Dict[float, List[Cycle]], params: _AssistChainParams) -> None:
     print(
         "  (the perfect-retrograde boundary; CONTEXT.md, 'Perfect-retrograde boundary')"
     )
+
+    print("\nPERFECT-RETROGRADE PREMIUM -- what the hot arrival costs, against")
+    print("what the exchange rate above says it may spend")
+    premiums = perfect_retrograde_premium(grid, exhaust_speed_from_isp(2214), push)
+    extras = [p.extra_burn for p in premiums]
+    print(
+        tabulate(
+            [
+                [
+                    f"{item.phase:.3f}",
+                    f"{item.pure.collision_speed:.2f}",
+                    f"{item.pure.departure_burn:.3f}",
+                    f"{item.hot.collision_speed:.2f}",
+                    f"{item.hot.departure_burn:.3f}",
+                    f"{3.0 - item.hot.flight_synodics:.2f}",
+                    f"{item.extra_burn:+.3f}",
+                ]
+                for item in premiums
+            ],
+            headers=[
+                "phase",
+                "3S v_b",
+                "3S dv",
+                "hot v_b",
+                "hot dv",
+                "park S",
+                "extra dv",
+            ],
+            tablefmt="grid",
+        )
+    )
+    median_extra = float(np.median(extras))
+    print(
+        f"extra departure burn: {min(extras):+.3f} to {max(extras):+.3f} km/s, "
+        f"median {median_extra:+.3f}"
+    )
+    for isp in (380, 1200, 2214):
+        budget = exchange_rate(68.0, exhaust_speed_from_isp(isp), push)
+        verdict = "CLEARS" if budget > median_extra else "FAILS"
+        print(f"  budget at Isp {isp:5d} = {budget:5.2f} km/s -> {verdict}")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
