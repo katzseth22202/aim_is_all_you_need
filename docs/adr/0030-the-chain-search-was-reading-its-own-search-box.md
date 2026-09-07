@@ -164,9 +164,9 @@ methalox reverses both findings:
 
 - Every phase becomes live. The 0-growing-cycle phases above go to 38/38, 41/41,
   45/45 -- there are **no dead phases at all**.
-- The ranking inverts. Best single-cycle rate goes to **2.09 S at 0.781/yr**
-  against **3.00 S at 0.546/yr**; the 66.05 km/s cycle at 2.88 S gives 0.595/yr,
-  also beating 3S.
+- The best *single-cycle* rate inverts, to **2.09 S at 0.781/yr** against
+  **3.00 S at 0.546/yr**. **This does not survive the chain**, and the
+  distinction matters -- see "the clock survives the accounting change" below.
 
 Sweeping the departure exhaust speed rather than switching between two values
 shows this is a **continuum, and the interesting variable is launch-window
@@ -210,9 +210,38 @@ departure burn's surviving mass fraction contributes x3.14 (0.236 -> 0.741).
 "the departure burn stops eating four fifths of the payload". Note also that the
 impulse law is *linear* in closing speed, not quadratic in it.
 
-So "the growth loop wants a 3S clock and a 50-60 km/s stream" is a statement
-about a methalox-departure architecture. Under the architecture ADR 0009/0012
-actually propose, the fast hot cycles win. **This is not resolved here**, and it
+### The clock survives the accounting change; only the growth rate moves
+
+The single-cycle inversion above is a trap, and this ADR fell into it before
+catching it. Running the *actual* 30-year chain with the departure charged at
+Isp 2214 rather than methalox:
+
+| | cycle lengths (synodic periods) | 30-yr mass |
+|---|---|---:|
+| Isp 380 | 3.00 x8, 2.20 | x235.5 |
+| Isp 2214 | 2.97, 3.01, 5.03, 2.97, 3.00, 2.98, 2.98, 3.74 | **x2,504,273** |
+
+**Both hold ~3.00 S, and both hold phase** -- the Isp 2214 chain's departure
+phase after each cycle runs 0.97, 0.98, 0.01, 0.98, 0.98, 0.96, 0.94, never
+drifting. A 2.09 S cycle has the better instantaneous rate and a worse successor;
+the chain optimizes compounded mass, so it declines it. Where the hot returns do
+appear they are *long* excursions (5.03 S and 3.74 S, `v_b` 68.8 and 68.1 -- the
+perfect-retrograde arrivals) that land back on phase.
+
+So the exhaust speed does **not** buy a shorter clock. It buys growth per cycle,
+1.83 -> ~6.3, and the launch-window coverage above. Quote it that way.
+
+**Open, not settled: is there a true 2S fixed point?** Cycles within 1% of
+exactly 2.00 S exist (20 of 3,483 enumerated), reaching growth 6.021 at 15 of 73
+phases. An exactly-2.00 S cycle returns to its own departure phase, so if one
+could be *held* it would compound at 0.810/yr against 3S's 0.576 -- about 1000x
+over 30 years. The chain search never finds one it can sustain, and reaches only
+x2.5e6, below even the x3.2e7 a repeatable 3.00 S cycle would give. Whether the
+fixed point does not exist, or the beam cannot hold it, is unresolved.
+
+So "the growth loop wants a 3S clock and a 50-60 km/s stream" is right about the
+**clock** under either accounting, and wrong about the **stream and the rate**
+under the architecture ADR 0009/0012 propose. **This is not resolved here**, and it
 should not be quoted either way until one model prices both legs consistently.
 The nozzle figures above are a single-point estimate (`beta` at burn start,
 `k` = 3, `eta` = 0.8), not the integrated ledger `circular_resonance_impulse.py`

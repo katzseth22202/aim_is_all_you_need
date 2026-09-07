@@ -505,10 +505,13 @@ The unresolved disagreement between two models of the same machine (ADR 0030).
 `circular_resonance_impulse.py` drive that same burn with the returning stream
 through the **head-on nozzle** (`v_e` = 19–22 km/s at `k` = 3). Swap the exhaust
 and the chain's conclusions reverse: the **phase-viability window** disappears
-(38/38, 45/45 growing branches at every phase) and the best single-cycle rate
-moves from 3.00 S / 0.546 per yr to **2.09 S / 0.781**, with the 66.05 km/s
-cycle at 2.88 S also beating 3S. Which model is right decides whether the loop
-wants a 3S clock at 50–60 km/s or a ~2.1S clock at 62–69.
+(38/38, 45/45 growing branches at every phase) and the best *single-cycle* rate
+moves from 3.00 S / 0.546 per yr to **2.09 S / 0.781**. **That inversion does not
+survive the chain**: run the real 30-yr search at Isp 2214 and it still picks
+~3.00 S cycles and still holds phase (0.97, 0.98, 0.01, 0.98, 0.98, 0.96, 0.94),
+because a 2.09 S cycle has the better instantaneous rate and a worse successor.
+The clock is 3S under **either** accounting. What the exhaust speed moves is
+growth per cycle (1.83 → ~6.3, 30-yr ×235 → ×2.5e6) and the launch window.
 The seam is a **continuum in departure Isp**, and what it buys is launch-window
 coverage. Across 73 departure phases spanning one synodic period, the fraction
 admitting *any* growing cycle runs 18% at methalox (380 s), 49% at 1000 s, 60%
