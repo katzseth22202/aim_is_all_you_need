@@ -264,6 +264,79 @@ the printed 1.3 stands through the volume change as well.
 
 ---
 
+# Fly-and-park batch, answered 2026-09-08
+
+The paper's `docs/fly_and_park_asks_for_aim_repo.md` (items **S5-S8** of its
+register) is answered in full. The handback written to be copied over is
+`docs/paper_corrections_synodic_lock_2026-09-08.md`; the backing decision is
+`docs/adr/0031-the-synodic-lock-is-the-resonance-we-already-had.md`. Reproduce
+with `make fly-park` and `make two-wave`.
+
+## P7. The 2S synodic lock needs the coast, and then it is the resonance (S5)
+
+**The nine-day park is inadmissible**, and the paper asked the question that
+settles it. The park *is* the bound near-escape orbit's period, lengthened: the
+returning wave pushes the payload up at periapsis and the departure burn lights
+at the next, which is the aim reversal. One orbit of a 20-day orbit is not
+optional, and `optimize_jovian_cycle_chain()` already encodes it.
+
+**Our constant was wrong and the paper's construction found it.** `MINIMUM_PARK`
+was 0.02 S, about eight days, 2.5x under the coast; it is now `COAST_SYNODICS`.
+
+**Charge the coast and the 2.00 S lock is ADR 0011's two-synodic resonance** --
+phase 0.8082, flight 1.9497 S, park 20.06 d, `dv` 8.613, `v_b` 63.35 -- which
+this repository and the paper's own N4 already publish. Its park is the coast
+plus ninety minutes, so fly-and-park has nothing to add to it. The quotable
+doubling is **0.873 yr** at Isp 2214 and **1.082** at 1200, +3.5% and +8.1% on
+the held figures, over 26 and 11 of 73 phases rather than 28 and 13.
+
+**The chain check is run** (`sustainable_chain_optimum()`), in a new chain,
+because the beam search pins departure to arrival plus a fixed coast and so
+structurally cannot park. The best repeating policy is a single self-looping
+cycle at every exhaust speed -- 3.00 S at methalox (3.641 yr), 2.00 S at Isp 1200
+and 2214 (1.082 and 0.873) -- so ADR 0030's N4.2 lookahead caveat is discharged
+for this result. The methalox branch dedup was audited and changes nothing.
+
+## P8. The doubling ladder's rungs are not at matched efficiency (S6)
+
+**A different measurement of a different thing, not a refinement.** The paper's
+"1.74 yr at `f` = 0.6 and 1.45 at `f` = 0.8" quotes the **nozzle impulse
+recovery** `e`, which derates the whole impulse from outside the momentum debit.
+The elasticity `f` is `STD_FUDGE_FACTOR` and is 0.8 in *both* rows. Fly-and-park
+is at `f` = 0.8 and no `e` at all. `sec:mass_interest`'s "nozzle geometric
+efficiency of 0.6" is the same `e` under a third name.
+
+Scope and accounting differ too: circular against real ephemeris, one padded
+cycle against eleven flown ones, and -- the load-bearing one -- fly-and-park
+**does not charge the projectile stream** the two-wave ledger sources by
+splitting 19% of the batch onto the nozzle bend. So the new rungs are
+systematically optimistic against 1.45 yr. `doubling_ladder()` emits every rung
+carrying its scorer, model, scope and efficiencies.
+
+## P9. The launch window is one arc, and it is pinned (S7)
+
+Reproduced exactly and moved inside `fly_and_park.py`
+(`usable_phase_windows()`), so the paper cites `make fly-park`: one contiguous
+arc at every exhaust speed, 13/26/36/44/56/69/73 of 73 usable phases and
+71/142/197/240/306/377/399 days wide. Measured cyclically, or the Isp 1800 row
+wraps through phase 0 and reports two.
+
+## P10. The flown 2S cycles are already exact locks (S8)
+
+**Yes, and more strongly than asked.** The adaptive cadence builds every return
+on an exact synodic multiple, so all eleven flown cycles drift under 1e-4 S --
+there is no remainder to pad. `TwoWaveCycle` now reports `period_synodics` and
+`phase_drift`, and `make two-wave` prints the column. The circular lock's 63.35
+km/s arrival lands inside the flown family's 61.83-65.13, and its 8.613 km/s burn
+sits about 20% above the dearest of 6.84-7.17. So "lock a cycle we already fly"
+is correct.
+
+**But it retires the wrong problem.** What forces the four 3S fallbacks is not
+phase drift, it is ADR 0011's perijove floor -- 45 of 91 windows over 200 years.
+The honest cadence claim stays 2S with a 3S fallback about half the time.
+
+---
+
 ## Worklist status
 
 All three items the paper deferred are now answered. **S1** (P5b): the far-node
@@ -276,6 +349,12 @@ error. **S3** (P2): the second arrival is uncharged and worth under 1.2 percent.
 `deferred_to_companion_repos.md`'s "What landed" section still reads "Nothing
 yet" and can now be filled in from P2 to P5b.
 
+**Fly-and-park batch (S5-S8), 2026-09-08.** All four answered; see P7-P10 above.
+Three of the paper's holds lift, one with a corrected number: the 2S lock quotes
+**0.873 yr** rather than 0.84, the launch-window layout is pinned, and S8's
+"lock a cycle we already fly" is confirmed. The S6 hold lifts only into a
+*labelled* ladder -- the new rungs must not sit unlabelled beside 1.45 yr.
+
 ## Still open
 
 - The **partial split's pad ledger** is deliberately not reported. Now that its
@@ -283,6 +362,13 @@ yet" and can now be filled in from P2 to P5b.
   (P5b) already settles the architecture, and a pad number would only restate it.
 - The Jovian placement route of P2 has had **no real-ephemeris audit** (the ADR
   0011 treatment); it is a longitude and epoch match in a circular coplanar model.
+- **The mapping between the two-wave chain's recovery `e` and fly-and-park's
+  departure Isp is unworked**, so the doubling ladder's rungs can be named but
+  not reconciled. Pricing the fly-and-park locks through the two-wave nozzle
+  ledger would need a split geometry the circular phased model does not have.
+- **The parking orbit's period is treated as fixed at 20 days.** A shorter cycle
+  orbit would make a shorter park legal, but it moves `v_rf`, the mass ratio,
+  the aim reversal and the split gap together, and nothing prices that.
 - **The feeder closure of P5b is unsolved.** Its beam ray must pass through the
   far node at the right epoch: two conditions on at least two knobs, so discrete
   solutions are expected, but none has been found. This is the single item on

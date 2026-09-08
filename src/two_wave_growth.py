@@ -139,6 +139,33 @@ class TwoWaveCycle:
     growth_wave_v_b: float
     growth_wave_burn: float
 
+    @property
+    def period_synodics(self) -> float:
+        """Departure-to-departure length in Earth-Jupiter synodic periods.
+
+        The cadence builds its returns on exact synodic multiples of the
+        *circular* synodic period, so this comes out on a whole number to a few
+        parts in ten thousand rather than approximately.  That is what makes
+        each flown cycle a **synodic lock** already: it returns to its own
+        departure phase without any padding, and the fly-and-park construction
+        of :mod:`src.fly_and_park` has nothing left to add to it (ADR 0031).
+        """
+        return float(
+            self.period_years * _DAYS_PER_YEAR / (_FIXED_TWO_SYNODIC_DAYS / 2.0)
+        )
+
+    @property
+    def phase_drift(self) -> float:
+        """Departure-phase slip per repetition, in synodic periods.
+
+        Zero would mean the next departure falls on exactly this one's
+        Earth-Jupiter geometry.  What the cadence does *not* guarantee is that
+        the next window is flyable -- the 2S return is taken only when its
+        deep-space-maneuver proxy stays inside the policy threshold -- so a
+        small drift here is not what forces the 3S fallbacks.
+        """
+        return self.period_synodics - round(self.period_synodics)
+
 
 def adaptive_two_wave_cycles(
     start: str = _DEFAULT_START,
@@ -706,6 +733,7 @@ def analyze_two_wave_growth(
                 "return_tdb": Time(cycle.return_jd, format="jd", scale="tdb").isot[:10],
                 "synodic": cycle.synodic_multiple,
                 "period_years": cycle.period_years,
+                "period_synodics": cycle.period_synodics,
                 "departure_burn_km_s": cycle.departure_burn,
                 "growth_wave_v_b_km_s": cycle.growth_wave_v_b,
                 "growth_wave_burn_km_s": cycle.growth_wave_burn,
@@ -798,6 +826,7 @@ def main() -> None:
             analysis.cycles,
             {
                 "period_years": ".4f",
+                "period_synodics": ".4f",
                 "departure_burn_km_s": ".4f",
                 "growth_wave_v_b_km_s": ".3f",
                 "growth_wave_burn_km_s": ".4f",

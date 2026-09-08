@@ -19,13 +19,26 @@ Vocabulary, defined once here because the rest of the module leans on it:
   *grows* the payload (``net_growth > 1``) at a given departure exhaust speed. A
   phase can be perfectly reachable and still be unusable, if every trajectory
   leaving it costs more mass than the arriving impactor mints.
-* **Fly-and-park** -- flying a trajectory *shorter* than the 3S window and
+* **Fly-and-park** -- flying a trajectory *shorter* than the target window and
   parking in the existing bound near-escape orbit for the remainder, so that
-  flight + park is exactly 3.00 synodic periods and the next departure lands back
-  on the same phase. Nothing drifts; the clock is preserved exactly.
+  flight + park is exactly a whole number of synodic periods and the next
+  departure lands back on the same phase. Nothing drifts; the clock is preserved
+  exactly.
+* **Synodic lock** -- the property fly-and-park buys: a cycle whose flight plus
+  park sums to an exact whole number of synodic periods, so it is a departure
+  phase *fixed point* and repeats unsteered. The operating points are the **2S
+  lock** and the **3S lock** (:func:`synodic_lock`).
 
-The point of padding every candidate to a common 3.00 S is that **cycle time
-cancels from the comparison**. What is left is a single exchange rate: how much
+**The park is the coast, lengthened -- so it can never be shorter than it.**
+Every cycle already ends with one full period of the bound near-escape orbit
+(``PUFFSAT_CYCLE_ORBIT_PERIOD``, 20 days): the returning wave pushes the payload
+up at periapsis and the departure burn lights at the *next* periapsis, which is
+the aim reversal. Parking lengthens that coast; it cannot shorten it. So
+``MINIMUM_PARK`` is the coast itself, and a "lock" whose park comes out below 20
+days is arithmetic, not a trajectory (ADR 0031).
+
+The point of padding every candidate to a common whole number of synodic periods
+is that **cycle time cancels from the comparison**. What is left is a single exchange rate: how much
 extra departure burn a hotter arrival speed is worth before the propellant it
 costs eats the gain (:func:`exchange_rate`). That rate is set by the departure
 stage's exhaust speed, and it decides the architecture:
@@ -39,8 +52,18 @@ stage's exhaust speed, and it decides the architecture:
   catalog rows already assume -- with a zero perijove burn.
 
 The same exhaust speed decides the launch cadence: the fraction of departure
-phases that are **usable** runs 18% at Isp 380 and reaches 100% at Isp 1900, so
-one narrow window per 1.09 yr becomes a continuous one.
+phases that are **usable** runs 18% at Isp 380 and reaches 100% at Isp 1900, and
+those phases form **one contiguous arc** at every exhaust speed tested
+(:func:`usable_phase_windows`), widening 71 to 240 to 399 days. So the claim is
+one window 3.4x wider, not a set of windows.
+
+It also decides the **clock**, which is the one thing fly-and-park does *not*
+buy. Charge the coast and the best sustainable policy is a 3.00 S lock on
+methalox and a 2.00 S lock above about Isp 1200
+(:func:`sustainable_chain_optimum`), and that 2S lock turns out to be ADR 0011's
+own two-synodic resonance rather than anything new: its park is the 20-day coast
+plus about an hour. Fly-and-park is what lets a *shorter* flight hold a clock; it
+is not what produces the 2S operating point (ADR 0031).
 
 Search box, recorded per CLAUDE.md's rule after ADR 0007: the phase grid is
 ``PHASE_SAMPLES`` departures spread over one synodic period; each phase is
@@ -62,6 +85,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from astropy import units as u
+from numpy.typing import NDArray
 from tabulate import tabulate
 
 from src import jovian_cycle_phasing as chain
@@ -95,8 +119,23 @@ METHALOX_ISP_SECONDS = float(METHALOX_VACUUM_ISP.to_value(u.s))
 EXCHANGE_BASELINE_SPEED = 53.5
 #: Half-width of the band counted as "exactly 3S", in synodic periods.
 THREE_SYNODIC_TOLERANCE = 0.03
-#: Minimum park, in synodic periods, for a cycle to count as fly-and-park.
-MINIMUM_PARK = 0.02
+#: The mandatory post-collision coast, in synodic periods. Every cycle already
+#: ends with one full period of the bound near-escape orbit -- the aim reversal
+#: pushes the payload up at periapsis and departs it at the next -- so this is
+#: the floor under any park, not a modelling choice.
+COAST_SYNODICS = (
+    float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year)) / _EARTH_JUPITER_SYNODIC_YEARS
+)
+#: One Earth-Jupiter synodic period in days, for reporting launch windows.
+SYNODIC_DAYS = _EARTH_JUPITER_SYNODIC_YEARS * float((1.0 * u.year).to_value(u.day))
+#: Minimum park, in synodic periods, for a cycle to count as fly-and-park. It is
+#: :data:`COAST_SYNODICS` and nothing else: parking lengthens the coast and
+#: cannot shorten it, so a shorter "park" is arithmetic rather than a trajectory
+#: (ADR 0031). This was 0.02 S -- eight days, 2.5x under the coast -- until the
+#: 2S lock was constructed on the difference.
+MINIMUM_PARK = COAST_SYNODICS
+#: Synodic multiples the locks are reported at.
+REPORTED_LOCKS: Tuple[float, ...] = (2.0, 3.0)
 #: How close to an exact integer a cycle must be to count as a fixed point, in
 #: synodic periods. A cycle this close drifts out of a 0.02 S band only after
 #: 0.02/tolerance repetitions, which at 1e-3 is 20 cycles -- longer than the
@@ -350,18 +389,79 @@ def usable_phase_fraction(
 
 
 @dataclass(frozen=True)
+class PhaseWindow:
+    """One contiguous arc of usable departure phases.
+
+    The **usable-phase fraction** says how many phases work; it does not say
+    whether they sit together. A fleet planning departures needs the shape:
+    one wide arc is a launch season, several narrow ones are a set of windows to
+    hit. Measured cyclically, because phase 0 and phase 1 are the same geometry
+    and an arc may wrap through it.
+
+    Attributes:
+        start_phase: Departure phase where the arc opens.
+        phases: How many sampled phases it spans.
+        days: Its width in days, on the Earth-Jupiter synodic period.
+    """
+
+    start_phase: float
+    phases: int
+    days: float
+
+
+def usable_phase_windows(
+    grid: Dict[float, List[Cycle]], exhaust: float, push_target: float
+) -> List[PhaseWindow]:
+    """The usable departure phases, grouped into contiguous arcs.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        exhaust: Departure-stage effective exhaust speed (km/s).
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+
+    Returns:
+        The arcs, widest first. Empty when no phase is usable; a single
+        full-width arc when every phase is.
+    """
+    phases = sorted(grid)
+    count = len(phases)
+    if count == 0:
+        return []
+    live = [
+        any(c.growth(exhaust, push_target) > 1.0 for c in grid[phase])
+        for phase in phases
+    ]
+    if not any(live):
+        return []
+    if all(live):
+        return [PhaseWindow(phases[0], count, SYNODIC_DAYS)]
+    out: List[PhaseWindow] = []
+    for index in range(count):
+        if not live[index] or live[index - 1]:
+            continue  # not the opening cell of an arc (index - 1 wraps)
+        span = 0
+        while live[(index + span) % count]:
+            span += 1
+        out.append(PhaseWindow(phases[index], span, span / count * SYNODIC_DAYS))
+    return sorted(out, key=lambda w: w.phases, reverse=True)
+
+
+@dataclass(frozen=True)
 class ParkComparison:
-    """One departure phase's pure-3S cycle against its fly-and-park alternative.
+    """One departure phase's pure-window cycle against its fly-and-park alternative.
 
     Attributes:
         phase: Departure phase as a fraction of one synodic period.
-        pure: The best cycle whose flight time is already ~3.00 synodic periods.
+        target: Synodic multiple both alternatives are padded to.
+        pure: The best cycle already filling the window -- flight plus the
+            mandatory coast is ``target`` synodic periods.
         parked: The best cycle short enough to leave a park, or None.
         pure_growth: Payload multiplier of ``pure``.
         parked_growth: Payload multiplier of ``parked``, or 0.0.
     """
 
     phase: float
+    target: float
     pure: Cycle
     parked: Optional[Cycle]
     pure_growth: float
@@ -369,10 +469,10 @@ class ParkComparison:
 
     @property
     def park_synodics(self) -> float:
-        """Park needed to pad the fly-and-park cycle to exactly 3.00 S."""
+        """Park needed to pad the fly-and-park cycle to exactly ``target`` S."""
         if self.parked is None:
             return 0.0
-        return 3.0 - self.parked.flight_synodics
+        return self.target - self.parked.flight_synodics
 
     @property
     def gain(self) -> float:
@@ -390,50 +490,57 @@ class ParkComparison:
 
 
 def fly_and_park_comparison(
-    grid: Dict[float, List[Cycle]], exhaust: float, push_target: float
+    grid: Dict[float, List[Cycle]],
+    exhaust: float,
+    push_target: float,
+    target_synodics: float = 3.0,
 ) -> List[ParkComparison]:
-    """Compare, per phase, flying the full 3S window against flying short.
+    """Compare, per phase, flying the full window against flying short.
 
-    Both alternatives occupy exactly 3.00 synodic periods -- one by flying it,
-    the other by flying less and parking the difference -- so cycle time cancels
-    and the comparison is purely per-cycle growth.
+    Both alternatives occupy exactly ``target_synodics`` synodic periods -- one
+    by flying it, the other by flying less and parking the difference -- so cycle
+    time cancels and the comparison is purely per-cycle growth. The parked
+    candidate must still leave at least the mandatory coast
+    (:data:`MINIMUM_PARK`), because parking lengthens that coast rather than
+    replacing it.
 
     Args:
         grid: Output of :func:`enumerate_phase_grid`.
         exhaust: Departure-stage effective exhaust speed (km/s).
         push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        target_synodics: Synodic multiple both alternatives are padded to.
 
     Returns:
-        One :class:`ParkComparison` per phase that has a growing pure-3S cycle,
-        in phase order.
+        One :class:`ParkComparison` per phase that has a growing pure-window
+        cycle, in phase order.
     """
-    coast = (
-        float((PUFFSAT_CYCLE_ORBIT_PERIOD).to_value(u.year))
-        / _EARTH_JUPITER_SYNODIC_YEARS
-    )
     out: List[ParkComparison] = []
     for phase in sorted(grid):
         cycles = grid[phase]
         if not cycles:
             continue
-        three = [
+        full = [
             c
             for c in cycles
-            if abs(c.flight_synodics + coast - 3.0) <= THREE_SYNODIC_TOLERANCE
+            if abs(c.flight_synodics + COAST_SYNODICS - target_synodics)
+            <= THREE_SYNODIC_TOLERANCE
         ]
-        if not three:
+        if not full:
             continue
-        best_pure = max(three, key=lambda c: c.growth(exhaust, push_target))
+        best_pure = max(full, key=lambda c: c.growth(exhaust, push_target))
         pure_growth = best_pure.growth(exhaust, push_target)
         if pure_growth <= 1.0:
             continue
-        short = [c for c in cycles if c.flight_synodics <= 3.0 - MINIMUM_PARK]
+        short = [
+            c for c in cycles if c.flight_synodics <= target_synodics - MINIMUM_PARK
+        ]
         best_parked = (
             max(short, key=lambda c: c.growth(exhaust, push_target)) if short else None
         )
         out.append(
             ParkComparison(
                 phase=phase,
+                target=target_synodics,
                 pure=best_pure,
                 parked=best_parked,
                 pure_growth=pure_growth,
@@ -450,6 +557,7 @@ def phase_reaches(
     phase: float,
     target_speed: float,
     minimum_park: float = MINIMUM_PARK,
+    target_synodics: float = 3.0,
 ) -> bool:
     """Does this phase offer *any* parkable cycle at or above a target speed?
 
@@ -462,13 +570,15 @@ def phase_reaches(
         phase: The departure phase to test.
         target_speed: Arrival speed to reach or exceed (km/s).
         minimum_park: Park required, in synodic periods, to qualify.
+        target_synodics: Synodic multiple the cycle would be padded to.
 
     Returns:
         True if some cycle from that phase is short enough to park and arrives
         at or above ``target_speed``.
     """
     return any(
-        c.collision_speed >= target_speed and c.flight_synodics <= 3.0 - minimum_park
+        c.collision_speed >= target_speed
+        and c.flight_synodics <= target_synodics - minimum_park
         for c in grid.get(phase, [])
     )
 
@@ -501,6 +611,7 @@ def perfect_retrograde_premium(
     push_target: float,
     minimum_speed: float = PERFECT_RETROGRADE_SPEED,
     minimum_park: float = MINIMUM_PARK,
+    target_synodics: float = 3.0,
 ) -> List[RetrogradePremium]:
     """Extra departure burn to buy a perfect-retrograde arrival, per phase.
 
@@ -515,33 +626,39 @@ def perfect_retrograde_premium(
         push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
         minimum_speed: Arrival speed at or above which a cycle qualifies (km/s).
         minimum_park: Park required, in synodic periods, to qualify.
+        target_synodics: Synodic multiple both cycles are padded to.
 
     Returns:
-        One :class:`RetrogradePremium` per phase offering both a growing pure-3S
-        cycle and a qualifying parkable one, in phase order.
+        One :class:`RetrogradePremium` per phase offering both a growing
+        pure-window cycle and a qualifying parkable one, in phase order.
     """
-    coast = (
-        float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year))
-        / _EARTH_JUPITER_SYNODIC_YEARS
-    )
     out: List[RetrogradePremium] = []
     for phase in sorted(grid):
         cycles = grid[phase]
-        three = [
+        full = [
             c
             for c in cycles
-            if abs(c.flight_synodics + coast - 3.0) <= THREE_SYNODIC_TOLERANCE
+            if abs(c.flight_synodics + COAST_SYNODICS - target_synodics)
+            <= THREE_SYNODIC_TOLERANCE
         ]
+        if not full:
+            continue
+        best_pure = max(full, key=lambda c: c.growth(exhaust, push_target))
+        if best_pure.growth(exhaust, push_target) <= 1.0:
+            continue
+        # A premium has to buy something. Charging the coast as the minimum park
+        # shrinks the parkable set enough that a phase's hottest survivor can be
+        # *colder* than the cycle it is measured against (phase 0.452: 67.16
+        # against 69.03), and calling that difference a premium would price a
+        # downgrade. Such a phase has no premium to report, not a negative one.
         hot = [
             c
             for c in cycles
             if c.collision_speed >= minimum_speed
-            and c.flight_synodics <= 3.0 - minimum_park
+            and c.collision_speed >= best_pure.collision_speed
+            and c.flight_synodics <= target_synodics - minimum_park
         ]
-        if not three or not hot:
-            continue
-        best_pure = max(three, key=lambda c: c.growth(exhaust, push_target))
-        if best_pure.growth(exhaust, push_target) <= 1.0:
+        if not hot:
             continue
         best_hot = max(hot, key=lambda c: c.growth(exhaust, push_target))
         out.append(
@@ -600,14 +717,10 @@ def fixed_points(
     Returns:
         One :class:`FixedPoint` per qualifying cycle, best (least drift) first.
     """
-    coast = (
-        float(PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.year))
-        / _EARTH_JUPITER_SYNODIC_YEARS
-    )
     out: List[FixedPoint] = []
     for phase in sorted(grid):
         for cycle in grid[phase]:
-            synodics = cycle.flight_synodics + coast
+            synodics = cycle.flight_synodics + COAST_SYNODICS
             drift = synodics - multiple
             if abs(drift) > tolerance:
                 continue
@@ -623,6 +736,427 @@ def fixed_points(
                 )
             )
     return sorted(out, key=lambda f: abs(f.drift))
+
+
+@dataclass(frozen=True)
+class SynodicLock:
+    """The best cycle that locks a departure phase to a whole synodic multiple.
+
+    A **synodic lock** is fly-and-park taken to its fixed point: flight plus park
+    sums to exactly ``target`` synodic periods, so the next departure falls on
+    the phase this one left from and the identical trajectory repeats unsteered.
+    It is the mechanism that removes the drift the phased chain refuses to
+    accumulate -- the good short cycles land near 2.09 S, which hands each
+    successor a worse phase (ADR 0030), and padding removes that by construction.
+
+    **The park cannot be shorter than the coast.** Every cycle already ends with
+    one period of the bound near-escape orbit, so a lock is admissible only when
+    ``flight + COAST_SYNODICS <= target``. That constraint is what decides the 2S
+    lock (ADR 0031): the cheapest arithmetic answer needs a nine-day park and
+    cannot be flown.
+
+    Attributes:
+        target: The synodic multiple locked to.
+        cycle: The flown trajectory.
+        park_synodics: ``target`` minus the flight, the coast as lengthened.
+        growth: Payload multiplier for one repetition.
+        rate: E-foldings per year at that growth on a ``target``-synodic clock.
+        phases_offering_one: How many sampled departure phases admit a growing
+            lock at this target and exhaust speed.
+        phases_sampled: How many phases were sampled.
+    """
+
+    target: float
+    cycle: Cycle
+    park_synodics: float
+    growth: float
+    rate: float
+    phases_offering_one: int
+    phases_sampled: int
+
+    @property
+    def park_days(self) -> float:
+        """The park in days."""
+        return self.park_synodics * SYNODIC_DAYS
+
+    @property
+    def doubling_years(self) -> float:
+        """Years to double the launched mass at this rate."""
+        return float("inf") if self.rate <= 0.0 else float(np.log(2.0)) / self.rate
+
+
+def synodic_lock(
+    grid: Dict[float, List[Cycle]],
+    target: float,
+    exhaust: float,
+    push_target: float,
+    minimum_park: float = MINIMUM_PARK,
+) -> Optional[SynodicLock]:
+    """The best growing cycle that pads to exactly ``target`` synodic periods.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        target: Synodic multiple to lock to, typically 2.0 or 3.0.
+        exhaust: Departure-stage effective exhaust speed (km/s).
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        minimum_park: Park the cycle must leave, in synodic periods. The default
+            is the mandatory coast; passing anything smaller admits cycles that
+            cannot be flown, and is only useful for showing what that costs.
+
+    Returns:
+        The best :class:`SynodicLock`, or None when no phase offers a growing
+        cycle short enough to pad to ``target``.
+    """
+    best: Optional[Cycle] = None
+    best_growth = 0.0
+    offering = 0
+    for phase in sorted(grid):
+        winner: Optional[Cycle] = None
+        winner_growth = 0.0
+        for cycle in grid[phase]:
+            if cycle.flight_synodics > target - minimum_park:
+                continue
+            growth = cycle.growth(exhaust, push_target)
+            if growth > 1.0 and growth > winner_growth:
+                winner, winner_growth = cycle, growth
+        if winner is None:
+            continue
+        offering += 1
+        if winner_growth > best_growth:
+            best, best_growth = winner, winner_growth
+    if best is None:
+        return None
+    return SynodicLock(
+        target=target,
+        cycle=best,
+        park_synodics=target - best.flight_synodics,
+        growth=best_growth,
+        rate=float(np.log(best_growth)) / (target * _EARTH_JUPITER_SYNODIC_YEARS),
+        phases_offering_one=offering,
+        phases_sampled=len(grid),
+    )
+
+
+@dataclass(frozen=True)
+class ChainStep:
+    """One cycle of a repeating chain policy.
+
+    Attributes:
+        phase: The departure phase this step leaves from.
+        cycle: The trajectory flown.
+        total_synodics: Flight plus park for this step.
+    """
+
+    phase: float
+    cycle: Cycle
+    total_synodics: float
+
+    @property
+    def park_synodics(self) -> float:
+        """The park this step holds, in synodic periods."""
+        return self.total_synodics - self.cycle.flight_synodics
+
+
+@dataclass(frozen=True)
+class ChainOptimum:
+    """The best *sustainable* growth rate a parking chain can hold.
+
+    ADR 0030's N4.2 warns that a single-cycle optimum need not survive a chain
+    lookahead, so a lock has to be run rather than argued. This runs it. Where
+    :func:`src.jovian_cycle_phasing.optimize_jovian_cycle_chain` pins each
+    departure to the arrival plus a fixed 20-day coast -- and so structurally
+    *cannot* park -- this searches the same enumerated branches over a chain that
+    may park freely, and reports the best rate any repeating policy can hold.
+
+    The search is a maximum-ratio-cycle over the phase graph: nodes are departure
+    phases, an edge is a trajectory plus the shortest park that lands on the
+    successor phase, and the objective is ``sum(log growth) / sum(time)``. That
+    ratio is the long-run e-folding rate, so the winning policy is the chain a
+    grower would actually fly forever.
+
+    Attributes:
+        rate: E-foldings per year of the optimal repeating policy.
+        policy: The cycles it repeats, in flight order.
+        phases_sampled: How many departure phases were searched.
+    """
+
+    rate: float
+    policy: Tuple[ChainStep, ...]
+    phases_sampled: int
+
+    @property
+    def doubling_years(self) -> float:
+        """Years to double the launched mass under this policy."""
+        return float("inf") if self.rate <= 0.0 else float(np.log(2.0)) / self.rate
+
+    @property
+    def total_synodics(self) -> float:
+        """Length of one repetition of the policy, in synodic periods."""
+        return sum(step.total_synodics for step in self.policy)
+
+    @property
+    def is_synodic_lock(self) -> bool:
+        """Whether the policy is a single cycle returning to its own phase."""
+        return len(self.policy) == 1
+
+
+def _chain_edges(
+    grid: Dict[float, List[Cycle]],
+    exhaust: float,
+    push_target: float,
+    minimum_park: float,
+) -> Tuple[List[Sequence[Cycle]], List[NDArray[np.float64]], List[NDArray[np.float64]]]:
+    """Per-phase cycles with their log growth and their time to each successor.
+
+    From a phase, a cycle may be padded to land on *any* sampled successor phase:
+    the park is whatever makes the total come out on that phase, and the shortest
+    such park is taken because waiting an extra whole synodic period costs time
+    and buys nothing.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        exhaust: Departure-stage effective exhaust speed (km/s).
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        minimum_park: Park every edge must leave, in synodic periods.
+
+    Returns:
+        ``(cycles, log_growth, totals)`` indexed by phase; ``totals[i][k, d]`` is
+        the cycle length in synodic periods for phase ``i``'s cycle ``k`` landing
+        ``d`` sampled phases further round the circle.
+    """
+    phases = sorted(grid)
+    count = len(phases)
+    offsets = np.arange(count, dtype=np.float64) / float(count)
+    cycles: List[Sequence[Cycle]] = []
+    log_growth: List[NDArray[np.float64]] = []
+    totals: List[NDArray[np.float64]] = []
+    for phase in phases:
+        live = [c for c in grid[phase] if c.growth(exhaust, push_target) > 0.0]
+        cycles.append(live)
+        if not live:
+            log_growth.append(np.zeros(0))
+            totals.append(np.zeros((0, count)))
+            continue
+        growth = np.array([c.growth(exhaust, push_target) for c in live])
+        floor = np.array([c.flight_synodics + minimum_park for c in live])
+        log_growth.append(np.log(growth))
+        totals.append(floor[:, None] + np.mod(offsets[None, :] - floor[:, None], 1.0))
+    return cycles, log_growth, totals
+
+
+def _best_edge_weights(
+    log_growth: List[NDArray[np.float64]],
+    totals: List[NDArray[np.float64]],
+    rate: float,
+) -> Tuple[NDArray[np.float64], NDArray[np.int64]]:
+    """Edge weights ``log growth - rate * time``, best cycle per phase pair.
+
+    Args:
+        log_growth: Per-phase log growth, from :func:`_chain_edges`.
+        totals: Per-phase cycle lengths, from :func:`_chain_edges`.
+        rate: The trial rate, in e-foldings per synodic period.
+
+    Returns:
+        ``(weights, argmax)``, both indexed ``[from_phase, to_phase]``.
+    """
+    count = len(log_growth)
+    weights = np.full((count, count), -np.inf)
+    argmax = np.zeros((count, count), dtype=np.int64)
+    for index in range(count):
+        if log_growth[index].size == 0:
+            continue
+        scored = log_growth[index][:, None] - rate * totals[index]
+        best = np.argmax(scored, axis=0)
+        landing = (index + np.arange(count)) % count
+        weights[index, landing] = scored[best, np.arange(count)]
+        argmax[index, landing] = best
+    return weights, argmax
+
+
+def _has_positive_cycle(weights: NDArray[np.float64]) -> bool:
+    """Whether the weighted phase graph contains a positive-weight cycle.
+
+    Args:
+        weights: Edge weights indexed ``[from_phase, to_phase]``.
+
+    Returns:
+        True if some closed walk has strictly positive total weight, which means
+        the trial rate is beatable.
+    """
+    count = weights.shape[0]
+    value = np.zeros(count)
+    for _ in range(count + 1):
+        value = np.max(weights + value[:, None], axis=0)
+        if not np.any(np.isfinite(value)):
+            return False
+    return bool(np.max(np.max(weights + value[:, None], axis=0) - value) > 1e-12)
+
+
+def sustainable_chain_optimum(
+    grid: Dict[float, List[Cycle]],
+    exhaust: float,
+    push_target: float,
+    minimum_park: float = MINIMUM_PARK,
+    rate_ceiling: float = 3.0,
+    bisections: int = 60,
+) -> Optional[ChainOptimum]:
+    """The best repeating chain policy, with the park free to be any length.
+
+    Binary-searches the maximum ratio cycle: a trial rate is beatable exactly
+    when the graph reweighted by ``log growth - rate * time`` holds a positive
+    cycle, which is the standard reduction and is detected by value iteration.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        exhaust: Departure-stage effective exhaust speed (km/s).
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        minimum_park: Park every cycle must leave, in synodic periods.
+        rate_ceiling: Upper bracket on the rate, in e-foldings per synodic
+            period. Growth per cycle is bounded by the mass ratio (~8), so
+            ln(8)/1 ~ 2.1 sits under this.
+        bisections: Bisection steps; 60 puts the rate well inside float noise.
+
+    Returns:
+        The :class:`ChainOptimum`, or None when no phase can grow at all.
+    """
+    cycles, log_growth, totals = _chain_edges(grid, exhaust, push_target, minimum_park)
+    if not any(g.size for g in log_growth):
+        return None
+    low, high = 0.0, rate_ceiling
+    if not _has_positive_cycle(_best_edge_weights(log_growth, totals, low)[0]):
+        return None
+    for _ in range(bisections):
+        middle = 0.5 * (low + high)
+        if _has_positive_cycle(_best_edge_weights(log_growth, totals, middle)[0]):
+            low = middle
+        else:
+            high = middle
+    weights, argmax = _best_edge_weights(log_growth, totals, low)
+    count = weights.shape[0]
+    value = np.zeros(count)
+    predecessor = np.zeros(count, dtype=np.int64)
+    for _ in range(4 * count):
+        scored = weights + value[:, None]
+        predecessor = np.argmax(scored, axis=0)
+        value = np.max(scored, axis=0)
+        value -= float(np.max(value))
+    # Walking predecessors always lands inside a cycle of the optimal policy.
+    node = int(np.argmax(value))
+    for _ in range(count):
+        node = int(predecessor[node])
+    loop: List[int] = [node]
+    walker = int(predecessor[node])
+    while walker != node:
+        loop.append(walker)
+        walker = int(predecessor[walker])
+    loop.reverse()  # predecessors run backwards; flight order is the reverse
+    phases = sorted(grid)
+    policy: List[ChainStep] = []
+    for position, source in enumerate(loop):
+        landing = loop[(position + 1) % len(loop)]
+        index = int(argmax[source, landing])
+        policy.append(
+            ChainStep(
+                phase=phases[source],
+                cycle=cycles[source][index],
+                total_synodics=float(totals[source][index, (landing - source) % count]),
+            )
+        )
+    return ChainOptimum(
+        rate=low / _EARTH_JUPITER_SYNODIC_YEARS,
+        policy=tuple(policy),
+        phases_sampled=count,
+    )
+
+
+#: What every rung this module emits is scored on. Named on the rung itself
+#: because `sec:jupiter_only_growth` carries doubling times from three different
+#: devices, and two of them are not this one (ADR 0031).
+LADDER_SCORER = "M(v_b) * exp(-dv/v_e), best single locking cycle at its best phase"
+#: The model those rungs are computed in.
+LADDER_MODEL = "circular coplanar, phase grid, relative epoch"
+#: The efficiencies charged, and -- as important -- the ones that are not.
+LADDER_EFFICIENCY = (
+    "f = 0.8 elasticity; departure at the stated Isp; "
+    "no nozzle impulse recovery and no projectile-stream cost"
+)
+
+
+@dataclass(frozen=True)
+class LadderRung:
+    """One rung of the doubling ladder, carrying what produced it.
+
+    `sec:jupiter_only_growth` already publishes doubling times from a chemical
+    single cycle, a one-wave nozzle cycle and an eleven-cycle real-ephemeris
+    chain. Adding a rung without its scorer attached puts four numbers side by
+    side that appear to disagree at matched efficiency and do not measure the
+    same thing (ADR 0031). So the label travels with the number.
+
+    Attributes:
+        label: What the rung is.
+        doubling_years: Years to double the launched mass.
+        rate: E-foldings per year.
+        scorer: The objective the number maximizes.
+        model: The dynamical model it was computed in.
+        scope: Single cycle or chain, and over what horizon.
+        efficiency: Every efficiency charged, and the ones that are not.
+    """
+
+    label: str
+    doubling_years: float
+    rate: float
+    scorer: str
+    model: str
+    scope: str
+    efficiency: str
+
+
+def doubling_ladder(
+    grid: Dict[float, List[Cycle]],
+    push_target: float,
+    specific_impulses: Sequence[float] = (METHALOX_ISP_SECONDS, 1200.0, 2214.0),
+    targets: Sequence[float] = REPORTED_LOCKS,
+) -> List[LadderRung]:
+    """This module's rungs of the doubling ladder, each carrying its scorer.
+
+    Only the rungs *this* module computes. The chemical and two-wave rungs the
+    paper already publishes come from `make run` and `make two-wave`, in
+    different models on different scorers, and are deliberately not restated
+    here: a number copied out of another module's ledger drifts.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        push_target: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+        specific_impulses: Departure specific impulses to report, in seconds.
+        targets: Synodic multiples to lock to.
+
+    Returns:
+        The rungs, fastest doubling first.
+    """
+    out: List[LadderRung] = []
+    for isp in specific_impulses:
+        exhaust = exhaust_speed_from_isp(isp)
+        for target in targets:
+            lock = synodic_lock(grid, target, exhaust, push_target)
+            if lock is None:
+                continue
+            out.append(
+                LadderRung(
+                    label=f"{target:.2f} S lock, departure Isp {isp:.0f} s",
+                    doubling_years=lock.doubling_years,
+                    rate=lock.rate,
+                    scorer=LADDER_SCORER,
+                    model=LADDER_MODEL,
+                    scope=(
+                        f"one cycle repeated on its own {target:.2f} S clock, "
+                        f"phase {lock.cycle.departure_phase:.4f}"
+                    ),
+                    efficiency=LADDER_EFFICIENCY.replace(
+                        "the stated Isp", f"Isp {isp:.0f} s"
+                    ),
+                )
+            )
+    return sorted(out, key=lambda rung: rung.doubling_years)
 
 
 def growth_rate(cycle: Cycle, exhaust: float, push_target: float) -> float:
@@ -646,13 +1180,16 @@ def growth_rate(cycle: Cycle, exhaust: float, push_target: float) -> float:
 
 
 def hottest_reachable(
-    grid: Dict[float, List[Cycle]], minimum_park: float = MINIMUM_PARK
+    grid: Dict[float, List[Cycle]],
+    minimum_park: float = MINIMUM_PARK,
+    target_synodics: float = 3.0,
 ) -> float:
     """Highest arrival speed available on any cycle short enough to park.
 
     Args:
         grid: Output of :func:`enumerate_phase_grid`.
         minimum_park: Park required, in synodic periods, to qualify.
+        target_synodics: Synodic multiple the cycle would be padded to.
 
     Returns:
         The maximum ``v_b`` in km/s, or 0.0 if none qualifies.
@@ -661,7 +1198,7 @@ def hottest_reachable(
         c.collision_speed
         for cycles in grid.values()
         for c in cycles
-        if c.flight_synodics <= 3.0 - minimum_park
+        if c.flight_synodics <= target_synodics - minimum_park
     ]
     return max(speeds) if speeds else 0.0
 
@@ -861,6 +1398,180 @@ def _report(grid: Dict[float, List[Cycle]], params: _AssistChainParams) -> None:
         print("  Real orbits: ADR 0011 audits this resonance against ephemerides and")
         print("  finds only 45/91 windows clear the perijove floor over 200 years,")
         print("  which is why real_orbit_resonance.py carries a fall-back to 3S.")
+
+    _report_windows(grid, push)
+    _report_locks(grid, push)
+
+
+def _report_windows(grid: Dict[float, List[Cycle]], push: float) -> None:
+    """Print the launch-window layout the usable-phase fraction does not show.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        push: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+    """
+    print("\nLAUNCH-WINDOW LAYOUT -- is the usable set one window or several?")
+    rows = []
+    for isp in REPORTED_ISP:
+        windows = usable_phase_windows(grid, exhaust_speed_from_isp(isp), push)
+        widest = windows[0] if windows else None
+        rows.append(
+            [
+                f"{isp}",
+                f"{sum(w.phases for w in windows)}/{len(grid)}",
+                f"{len(windows)}",
+                f"{widest.phases if widest else 0}",
+                f"{widest.days if widest else 0.0:.0f}",
+            ]
+        )
+    print(
+        tabulate(
+            rows,
+            headers=[
+                "Isp (s)",
+                "usable phases",
+                "windows",
+                "widest (phases)",
+                "widest (days)",
+            ],
+            tablefmt="grid",
+        )
+    )
+    print(
+        f"  one synodic period is {SYNODIC_DAYS:.0f} days. The arcs are measured "
+        "cyclically:"
+    )
+    print(
+        "  a window may wrap through phase 0, and counting it as two would "
+        "understate it."
+    )
+
+
+def _report_locks(grid: Dict[float, List[Cycle]], push: float) -> None:
+    """Print the synodic locks, the chain check on them, and the ladder.
+
+    Args:
+        grid: Output of :func:`enumerate_phase_grid`.
+        push: Cycle-orbit periapsis speed ``v_rf`` (km/s).
+    """
+    print("\nSYNODIC LOCKS -- flight + park on an exact whole number of synodics,")
+    print(
+        f"so the cycle returns to its own departure phase. The park cannot go "
+        f"below the {PUFFSAT_CYCLE_ORBIT_PERIOD.to_value(u.day):.0f}-day coast"
+    )
+    print(
+        "(MINIMUM_PARK), because parking lengthens that coast rather than "
+        "replacing it."
+    )
+    rows = []
+    for isp in (380, 1200, 2214):
+        exhaust = exhaust_speed_from_isp(isp)
+        for target in REPORTED_LOCKS:
+            lock = synodic_lock(grid, target, exhaust, push)
+            if lock is None:
+                rows.append(
+                    [f"{isp}", f"{target:.2f}", "-- none admissible --"] + [""] * 6
+                )
+                continue
+            rows.append(
+                [
+                    f"{isp}",
+                    f"{target:.2f}",
+                    f"{lock.cycle.departure_phase:.4f}",
+                    f"{lock.cycle.flight_synodics:.3f}",
+                    f"{lock.park_days:.0f}",
+                    f"{lock.cycle.departure_burn:.2f}",
+                    f"{lock.cycle.collision_speed:.2f}",
+                    f"{lock.growth:.3f}",
+                    f"{lock.doubling_years:.3f}",
+                ]
+            )
+    print(
+        tabulate(
+            rows,
+            headers=[
+                "Isp (s)",
+                "target S",
+                "phase",
+                "flight S",
+                "park d",
+                "dv",
+                "v_b",
+                "growth",
+                "doubling yr",
+            ],
+            tablefmt="grid",
+        )
+    )
+    inadmissible = synodic_lock(
+        grid, 2.0, exhaust_speed_from_isp(2214), push, minimum_park=0.02
+    )
+    admissible = synodic_lock(grid, 2.0, exhaust_speed_from_isp(2214), push)
+    if inadmissible is not None and admissible is not None:
+        print(
+            f"  the 2S lock priced with an 0.02 S park instead of the coast sits at "
+            f"phase {inadmissible.cycle.departure_phase:.3f}, park "
+            f"{inadmissible.park_days:.1f} d, doubling "
+            f"{inadmissible.doubling_years:.3f} yr -- but a park under the coast "
+            f"is not a trajectory."
+        )
+        print(
+            f"  charging the coast moves it to phase "
+            f"{admissible.cycle.departure_phase:.3f}, doubling "
+            f"{admissible.doubling_years:.3f} yr, "
+            f"{admissible.doubling_years / inadmissible.doubling_years - 1.0:+.1%} "
+            f"(ADR 0031)."
+        )
+
+    print("\nCHAIN CHECK -- the best rate any *repeating* policy can hold, with")
+    print("the park free to be any length at all (maximum ratio cycle)")
+    rows = []
+    for isp in (380, 1200, 2214):
+        optimum = sustainable_chain_optimum(grid, exhaust_speed_from_isp(isp), push)
+        if optimum is None:
+            rows.append([f"{isp}", "no growing policy", "", "", ""])
+            continue
+        steps = optimum.policy
+        rows.append(
+            [
+                f"{isp}",
+                f"{len(steps)}",
+                f"{optimum.total_synodics:.4f}",
+                f"{steps[0].phase:.4f}" if optimum.is_synodic_lock else "varies",
+                f"{optimum.doubling_years:.3f}",
+            ]
+        )
+    print(
+        tabulate(
+            rows,
+            headers=["Isp (s)", "cycles/loop", "loop length S", "phase", "doubling yr"],
+            tablefmt="grid",
+        )
+    )
+    print("  a one-cycle loop IS a synodic lock: the chain's own optimum is the")
+    print("  fixed point, so the single-cycle answer survives the lookahead here.")
+    print("  Note the chain this searches is not optimize_jovian_cycle_chain(),")
+    print("  which pins departure to arrival + a fixed coast and so cannot park.")
+
+    print("\nDOUBLING LADDER -- every rung with its scorer, because")
+    print("sec:jupiter_only_growth already carries rungs from other devices")
+    print(f"  scorer:     {LADDER_SCORER}")
+    print(f"  model:      {LADDER_MODEL}")
+    print(f"  efficiency: {LADDER_EFFICIENCY}")
+    print(
+        tabulate(
+            [
+                [rung.label, f"{rung.doubling_years:.3f}", f"{rung.rate:.4f}"]
+                for rung in doubling_ladder(grid, push)
+            ],
+            headers=["rung", "doubling yr", "e-fold/yr"],
+            tablefmt="grid",
+        )
+    )
+    print("  The paper's other rungs are NOT restated here: 4.038 and 2.990 yr")
+    print("  (make nozzle, single cycles) and 1.737 / 1.450 yr (make two-wave, an")
+    print("  11-cycle real-ephemeris chain at nozzle recovery e = 0.6 / 0.8).")
+    print("  That e is not this f, and neither charges what the other does.")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

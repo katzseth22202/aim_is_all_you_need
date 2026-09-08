@@ -243,3 +243,80 @@ def test_the_plate_column_reproduces_at_the_measured_elasticity() -> None:
     for eta_geom, growth in published.items():
         chain = price_chain(cycles, 1.0, 0.818, geometric_efficiency=eta_geom)
         assert np.isclose(chain.total_growth, growth, rtol=1e-3)
+
+
+def test_a_flown_cycle_reports_its_length_in_synodic_periods() -> None:
+    """The cadence's own clock, read off the fixed 2S period it is built on."""
+    assert CYCLE.period_synodics == pytest.approx(2.0, abs=1e-3)
+    assert CYCLE.phase_drift == pytest.approx(0.0, abs=1e-3)
+    stretched = replace(CYCLE, period_years=CYCLE.period_years * 1.05)
+    assert stretched.period_synodics == pytest.approx(2.1, abs=1e-3)
+    assert stretched.phase_drift == pytest.approx(0.1, abs=1e-3)
+
+
+@pytest.mark.slow
+def test_every_flown_cycle_is_already_an_exact_synodic_lock() -> None:
+    """S8 for the paper: the 2S cycles it flies need no padding to lock.
+
+    The **synodic lock** ``src/fly_and_park.py`` constructs -- flight plus park
+    summing to a whole number of synodic periods, so the cycle returns to its
+    own departure phase -- is not a new cycle here.  The adaptive cadence builds
+    every return on an exact synodic multiple, so each flown cycle is already a
+    fixed point and fly-and-park has nothing to add to it.  What the cadence
+    does *not* guarantee is that the next window is flyable, which is why the
+    chain still takes four 3S fallbacks (ADR 0011, ADR 0031).
+    """
+    cycles = adaptive_two_wave_cycles()
+    assert cycles
+    for cycle in cycles:
+        assert cycle.period_synodics == pytest.approx(
+            float(cycle.synodic_multiple), abs=1e-4
+        ), cycle.index
+        assert abs(cycle.phase_drift) < 1e-4
+    twos = [c for c in cycles if c.synodic_multiple == 2]
+    threes = [c for c in cycles if c.synodic_multiple == 3]
+    assert len(twos) == 7 and len(threes) == 4
+
+
+@pytest.mark.slow
+def test_the_flown_two_synodic_cycles_bracket_the_circular_lock() -> None:
+    """The circular 2S lock sits inside the family the chain already flies.
+
+    ``src/fly_and_park.py``'s admissible 2.00 S lock comes out at a 8.61 km/s
+    departure burn and a 63.35 km/s arrival, in a circular coplanar model.  The
+    real-ephemeris chain's own 2S cycles run 6.84-7.17 km/s and 61.8-65.1 km/s,
+    so the arrival lands inside the family and the burn sits about 20 percent
+    above the dearest of them.  Different models, so this is a family
+    resemblance and not an identity -- which is exactly why the paper is told to
+    quote it as one (ADR 0031).
+    """
+    twos = [c for c in adaptive_two_wave_cycles() if c.synodic_multiple == 2]
+    burns = [c.departure_burn for c in twos]
+    arrivals = [c.growth_wave_v_b for c in twos]
+    assert min(burns) == pytest.approx(6.84, abs=0.05)
+    assert max(burns) == pytest.approx(7.17, abs=0.05)
+    assert min(arrivals) == pytest.approx(61.83, abs=0.2)
+    assert max(arrivals) == pytest.approx(65.13, abs=0.2)
+    assert min(arrivals) < 63.35 < max(arrivals)
+    assert max(burns) < 8.613
+
+
+@pytest.mark.slow
+def test_the_flown_chain_diverts_a_fifth_of_each_batch_to_projectiles() -> None:
+    """What the fly-and-park scorer omits, sized so the ladder can say it.
+
+    ``src/fly_and_park.py`` mints ``M(v_b)`` from the whole arriving wave and
+    charges only the slug, so it never pays for delivering the head-on stream
+    (CONTEXT.md, "departure-burn accounting seam").  This ledger does pay: the
+    batch splits at Jupiter and the unpowered nozzle bend carries mass that
+    mints no payload.  That gap is why the fly-and-park doubling times are
+    systematically optimistic against this chain's, and ADR 0031 quotes these
+    ranges rather than asserting a direction.
+    """
+    cycles = adaptive_two_wave_cycles()
+    for recovery, low, high in ((0.8, 0.195, 0.236), (0.6, 0.242, 0.290)):
+        bends = [
+            1.0 - price_cycle(cycle, recovery, 0.8).wave_to_growth for cycle in cycles
+        ]
+        assert min(bends) == pytest.approx(low, abs=0.005), recovery
+        assert max(bends) == pytest.approx(high, abs=0.005), recovery

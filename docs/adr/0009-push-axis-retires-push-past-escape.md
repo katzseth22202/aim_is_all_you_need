@@ -52,7 +52,7 @@ would then set the departure time, is that viable?
    | | doubling | new machinery |
    |---|---|---|
    | incumbent, corrected | 4.038 yr | — |
-   | one-wave parked nozzle (derated f=0.8) | 2.990 yr | nozzle only |
+   | one-wave parked nozzle (derated e=0.8) | 2.990 yr | nozzle only |
    | two-wave powered split (derated) | 1.69-1.80 yr | nozzle + 0.33-0.90 km/s perijove burn stage |
 
    Mass fractions at the derated optima (`make nozzle` prints all of them):
@@ -95,3 +95,12 @@ would then set the departure time, is that viable?
   and the 0.326 km/s dt = 10 d split). The original scratch derivations remain
   in `todos/aim_direction_check.py`, `todos/nozzle_reprice.py`,
   `todos/two_wave_split.py` (gitignored) and the note's resolution section.
+
+## Label correction, 2026-09-08
+
+The derated row above and `nozzle_analysis.py`'s matching print read
+`derated f=0.8`. The knob is `recovery=0.8` -- the **nozzle impulse recovery
+`e`**, which derates from outside the momentum debit -- not the elasticity `f`,
+which is `STD_FUDGE_FACTOR` and sits at 0.8 as well. Both now read `e`. ADR 0031
+records why the collision matters: the same two names, at the same value, in the
+same subsection, are what makes the doubling ladder unreadable.

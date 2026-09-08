@@ -545,9 +545,15 @@ clear the 4,000 km perijove floor over 200 years, and the failure is the perijov
 rather than the clock (period varies 2.28%, speeds 8–9%, but the required turn
 maps nonlinearly into perijove radius), which is why `real_orbit_resonance.py`
 carries a 2S-with-3S-fallback cadence.
+It is also the **2S lock**: charge the mandatory coast as the minimum park and
+the best 2.00 S fly-and-park cycle is this trajectory, not a nearby one (ADR
+0031). And in real orbits the *flown* chain's 2S cycles are exact locks already —
+every one of the eleven drifts under 1e-4 S (`TwoWaveCycle.period_synodics`), so
+nothing needs padding and the perijove floor is the only thing that binds.
 _Avoid_: reading the chain's refusal of 2S as a search limitation (it is a
 correct rejection at methalox Isp); quoting a clean 2S loop for real orbits — it
-is 2S with a 3S fallback about half the time.
+is 2S with a 3S fallback about half the time; reading the drift as what forces
+those fallbacks — there is none.
 
 **Fly hot, park to rephase**:
 The constructive form of the parking result (ADR 0030). Parking does *not* pay at
@@ -559,13 +565,81 @@ buys. Against a 53.5 km/s baseline, reaching 60 km/s is worth 0.48 km/s of burn
 at Isp 380, **1.51 at 1200**, 2.78 at 2214; reaching 68 is worth 0.99 / 3.13 /
 5.77. Availability is never the limit — every phase with a viable 3S cycle also
 offers a sub-3S cycle at `v_b` ≥ 60 — but it only *pays* at 1 of 11 phases on
-methalox against 17 of 30 at Isp 1200 and 25 of 30 at 2214. The gain runs 5% at
+methalox against 16 of 30 at Isp 1200 and 25 of 30 at 2214. The gain runs 5% at
 the sweet phase to 27% well off it, so it is a **robustness** mechanism that
 flattens the off-phase penalty, and the winning cycles sit at `v_b` 67–69 —
 the **perfect-retrograde boundary**, reached with the clock untouched.
 _Avoid_: quoting it as a headline growth win (it is worth 5% where the loop
-already runs well); using it at methalox Isp (it loses); forgetting it is a
-single-cycle comparison, not yet a chain run.
+already runs well); using it at methalox Isp (it loses); crediting it with the 2S
+operating point — see **Synodic lock**, where the park turns out to be the coast
+and the construction adds nothing. It is no longer "not yet a chain run":
+`sustainable_chain_optimum()` runs it (ADR 0031).
+
+**Synodic lock**:
+The property fly-and-park buys, and the vocabulary the paper settled: a cycle
+whose **flight plus park** is an exact whole number of synodic periods, so it
+returns to its own **departure phase** and repeats unsteered (`synodic_lock()`,
+`src/fly_and_park.py`, ADR 0031). The operating points are the **2S lock** and
+the **3S lock**. Note "2S" now means three things in this project and they do not
+interchange: the *Jovian solar dive*'s bend closure (2S is short 6.84°), the
+*Jupiter-only chain*'s 2S-vs-3S return cadence, and this.
+**The park is the coast, lengthened, so it can never be shorter than it.** Every
+cycle already ends with one period of the 20-day bound near-escape orbit — the
+push lands at periapsis and the departure burn lights at the next, which is the
+aim reversal — so a lock is admissible only when `flight + 0.05013 S <= target`.
+`MINIMUM_PARK` was 0.02 S (eight days, 2.5× under the coast) until a proposed 2S
+lock was constructed on exactly that difference.
+**Charge the coast and the 2.00 S lock *is* the two-synodic fixed point**: phase
+0.8082, flight 1.9497 S, park 20.06 d, `dv` 8.613, `v_b` 63.35 — the same
+trajectory, not a similar one. So fly-and-park does not *produce* the 2S point.
+Quotable clocks: **0.873 yr** at Isp 2214 and **1.082** at 1200 (26 and 11 of 73
+phases), against 1.189 and 1.377 for the 3S lock (73 and 44 of 73). Methalox
+admits **no** 2S lock at all.
+_Avoid_: quoting 0.843 yr, which needs a nine-day park; reading the 2S lock as a
+new cycle; reading "2S" in one section as the "2S" of another.
+
+**Sustainable chain optimum**:
+The chain check under a free park (`sustainable_chain_optimum()`, ADR 0031),
+built because `optimize_jovian_cycle_chain()` pins departure to arrival plus a
+fixed coast and so *structurally cannot park* — asking it about fly-and-park asks
+a model with no park. It is a maximum-ratio cycle over the departure-phase graph:
+nodes are phases, an edge is a trajectory plus the shortest park landing on the
+successor, and the objective is `sum(log growth)/sum(time)`, the long-run rate.
+At every exhaust speed the winner is a **single self-looping cycle** — i.e. a
+**synodic lock** — 3.00 S at methalox (3.641 yr) and 2.00 S at Isp 1200 and 2214
+(1.082 and 0.873). So ADR 0030's N4.2 lookahead caveat is discharged here rather
+than restated. The branch dedup's methalox scoring was audited against an Isp
+2214 rescoring and moves nothing to four digits.
+_Avoid_: reading it as a real-orbit result (it is the circular phased grid, and
+S8 shows availability rather than phase is what binds); reading a one-cycle loop
+as a degenerate answer — it is the fixed-point argument confirmed.
+
+**Doubling ladder**:
+`sec:jupiter_only_growth` carries doubling times from three different devices, so
+every rung has to name its scorer or the list reads as disagreeing with itself
+(ADR 0031, `doubling_ladder()`). The trap is a term collision: the paper's
+**1.74 / 1.45 yr "at f = 0.6 / 0.8"** are the **nozzle impulse recovery `e`** of
+`two_wave_growth.price_chain`, which derates from *outside* the momentum debit;
+the elasticity `f` = `STD_FUDGE_FACTOR` is 0.8 in both. `sec:mass_interest`'s
+"nozzle geometric efficiency of 0.6" is that same `e` under a third name, and
+`eta_geom` is a fourth sweep again. Fly-and-park's rungs are at `f` = 0.8 with
+**no `e` at all** — and, decisively, they **do not charge the projectile stream**
+that the two-wave ledger sources by splitting 20–29% of the batch onto the nozzle
+bend (the **departure-burn accounting seam**). So 0.873 yr is systematically
+optimistic against 1.45 and is *not* a refinement of it.
+_Avoid_: quoting a fly-and-park rung beside a two-wave rung unlabelled; treating
+`e` and the departure Isp as the same efficiency — the mapping is unworked, the
+same caution `sec:depth_cost` already states for the dive family.
+
+**Launch-window layout**:
+The shape the **usable-phase** fraction does not show (`usable_phase_windows()`,
+ADR 0031). The usable phases form **one contiguous arc** at every exhaust speed
+tested, widening about the **sweet phase**: 13/26/36/44/56/69/73 of 73 phases at
+Isp 380/700/1000/1200/1500/1800/1900, spanning 71/142/197/240/306/377/399 days of
+the 399-day synodic period. So the operational claim is **one window, 3.4× wider
+at Isp 1200**, not a set of windows.
+_Avoid_: measuring the arc linearly — the Isp 1800 row wraps through phase 0 and
+a non-cyclic run-length reports two windows and understates the widest.
 
 **Departure-burn accounting seam**:
 The unresolved disagreement between two models of the same machine (ADR 0030).

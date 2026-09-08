@@ -73,7 +73,7 @@ bag-converge:  ## Iterate the bag loop to a fixed point and report the gap (rule
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse
 
-fly-park:  ## Fly a shorter, hotter cycle and park to hold the 3S clock; the sweet phase and the launch-cadence tables (ADR 0030)
+fly-park:  ## Fly short and park to hold the clock; sweet phase, launch windows, the 2S/3S synodic locks and the chain check on them (ADR 0030/0031)
 	python -m src.fly_and_park
 
 jovian-dive:  ## Close Earth->Jupiter->4 Rsun->Earth on a synodic clock; 3S works, 2S does not (ADR 0019)

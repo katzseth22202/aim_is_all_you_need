@@ -919,7 +919,7 @@ def main() -> None:
         f"  incumbent (methalox, reversal charged): growth {growth_inc:.4f}  "
         f"doubling {doubling_inc:.4f} yr"
     )
-    for recovery, tag in ((1.0, "ideal"), (0.8, "derated f=0.8")):
+    for recovery, tag in ((1.0, "ideal"), (0.8, "derated e=0.8")):
         pricing = parked_nozzle(v_b, dv, cycle, ve, recovery=recovery)
         _print_pricing(f"parked one-wave, {tag}:", pricing, "arriving wave")
     print()
@@ -946,7 +946,7 @@ def main() -> None:
             f"  dt {dt:.0f} d: perijove burn {burn:.4f} km/s, "
             f"growth-wave v_b {vb1:.4f}"
         )
-        for recovery, tag in ((1.0, "ideal"), (0.8, "derated f=0.8")):
+        for recovery, tag in ((1.0, "ideal"), (0.8, "derated e=0.8")):
             pricing = same_cycle_nozzle(
                 vb1, burn, v_b, dv, cycle, ve, recovery=recovery
             )
