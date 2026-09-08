@@ -148,15 +148,39 @@ def test_the_perijove_burn_converges_to_zero_and_buys_nothing() -> None:
     # optimizer drives every cycle's burn to exactly zero and reproduces the
     # unpowered chain. The "+20% from a second steering knob" was an artifact of
     # the old 26-sample / 48-wide search box; at converged settings the two runs
-    # are identical. Run at 12 yr, not 30 -- the powered branch set is 5x the
-    # unpowered one, and the equality is a structural claim, not a horizon one.
-    unpowered = optimize_jovian_cycle_chain(years=12.0, powered=False)
-    powered = optimize_jovian_cycle_chain(years=12.0, powered=True)
+    # are identical.
+    #
+    # Horizon is 8 yr, not 30 or 12. The powered branch set is ~5x the unpowered
+    # one, so this test is dominated by the powered run, and the claim it makes
+    # is *structural* -- every burn is zero, and the two chains coincide -- not a
+    # statement about any horizon. Cost and cycle count by horizon, measured as
+    # one sequential sweep so the ratios are comparable (every row gave
+    # max|burn| = 0 and exact powered/unpowered equality):
+    #
+    #     6 yr    1 cycle    0.27x   <- too few: cannot show the chain chains
+    #     7 yr    2 cycles   0.40x
+    #     8 yr    2 cycles   0.52x   <- chosen; keeps a cycle of margin over 7
+    #    10 yr    3 cycles   0.74x
+    #    12 yr    3 cycles   1.00x   <- previous setting
+    #
+    # Cost is given relative to the old 12 yr setting rather than in seconds:
+    # absolute timings on the machine that measured this varied by up to 2x
+    # between otherwise identical runs, so only the ratios are meaningful.
+    #
+    # 8 yr keeps two cycles, so the equality is exercised across a chained
+    # relaunch rather than a single solve, and roughly halves the slow suite's
+    # largest single contribution. CLAUDE.md, "The slow split": bracket the
+    # search around the answer you already know rather than dropping coverage.
+    unpowered = optimize_jovian_cycle_chain(years=8.0, powered=False)
+    powered = optimize_jovian_cycle_chain(years=8.0, powered=True)
     assert unpowered.all_growth_positive
     assert powered.all_growth_positive
+    # Two cycles, so "the chain keeps closing" is actually under test. Without
+    # this a future change that quietly drops to one cycle would still pass.
+    assert len(unpowered.cycles) >= 2
     # mass_multiple_30yr is the compounded total over whatever horizon was run,
-    # so at years=12 it is the 12-year figure (~6.85 across 3 cycles), not 233.
-    assert unpowered.mass_multiple_30yr > 5.0
+    # so at years=8 it is the 8-year figure (~3.64 across 2 cycles), not 233.
+    assert unpowered.mass_multiple_30yr > 3.0
 
     # Every perijove burn on the powered chain is zero...
     for cycle in powered.cycles:
