@@ -926,7 +926,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         return
     three_only = adaptive_two_wave_cycles(threshold_m_s=0.0)
     print(
-        f"Growth ledger: {LAUNCH_UNIT:g} launch unit, water plate at 400 km, departure "
+        f"Growth ledger: {LAUNCH_UNIT:g} launch unit, plate push at 400 km, departure "
         f"from 600 km after a {APOAPSIS_REVERSAL:.0f} methalox apoapsis reversal, over "
         f"the flown chain ({len(cycles)} cycles)."
     )
