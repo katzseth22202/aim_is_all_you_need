@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -51,6 +51,9 @@ sep-split-10d:  ## The same at the 10-day gap the paper flies, the figures tab:c
 
 two-wave:  ## Price the real-orbit adaptive 2S/3S cadence on the two-wave nozzle ledger
 	python -m src.two_wave_growth
+
+chamber-departure:  ## Price the walled chamber's departure over the flown chain, tanks, chambers and loss charged
+	python -m src.chamber_departure
 
 two-leg:  ## Compare a magnetic nozzle on both legs against the pusher plate (ADR 0014)
 	python -m src.two_leg_nozzle_sweep

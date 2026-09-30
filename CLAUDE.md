@@ -19,6 +19,22 @@ git clone https://github.com/katzseth22202/Balloon-Pulse-Propulsion /tmp/bpp
 grep -rn "300 m/s to 600 m/s" /tmp/bpp --include="*.tex"
 ```
 
+### Repo family: parent and child
+
+This repo (`aim_is_all_you_need`) sits in a three-repo citation chain:
+
+- [`puffsats_for_datacenters`](https://github.com/katzseth22202/puffsats_for_datacenters)
+  (**child**) cites `Balloon-Pulse-Propulsion`. The parent paper has grown too long to
+  reasonably expect people to read end-to-end, so the child exists to write up a more
+  focused, near-term scenario concisely, rather than adding more length to the parent.
+- [`Balloon-Pulse-Propulsion`](https://github.com/katzseth22202/Balloon-Pulse-Propulsion)
+  (**parent**, the paper repo above) cites this repo (`aim_is_all_you_need`) for the
+  underlying computations.
+
+When work here is described as feeding "upstream," it means the parent paper repo, not
+the child. Scratch planning for cross-repo work (e.g. `todos/growth_ledger_parent.md`)
+tracks which repo each step belongs to — check it before assuming a change belongs here.
+
 The published PDF is on Zenodo at the DOI above if the rendered version is needed.
 
 **Caveat on stale pointers:** older scratch notes (e.g. `todos/citation_audit_findings.md`)
@@ -126,6 +142,22 @@ shallow_dive_burn_trade.py   ← bielliptic_dive_split + solar_dive_depth_trade:
 nozzle_geometry.py           ← leaf (numpy only): the snowplow sweep that decides
                                 what slug ratio the projectile's arrival radius
                                 actually delivers (ADR 0016 addendum, ledger item 11)
+
+chamber_isp.py               ← leaf (numpy + astropy): the parent's eq:eta_isp for the
+                                walled head-on chamber, with the port gate and methane
+                                pitch charged, and the per-pulse slug ratio that holds
+                                chamber temperature as closing speed changes; integrates
+                                the head-on departure burn with I_eff(w) per pulse
+
+finite_burn_loss.py          ← leaf (boinor + scipy): integrates a burn centred on the
+                                600 km periapsis of the 20-day orbit, steered or held in
+                                one direction, and prices its loss against an impulse;
+                                reproduces the parent's 22/226/486 and 27/101 m/s
+
+chamber_departure.py         ← chamber_isp + finite_burn_loss + two_wave_growth: the chamber's departure
+                                over the flown chain with tanks, chamber wall + nozzle
+                                and the integrated fixed-direction loss charged; picks the chamber
+                                count and prices growth per cycle (make chamber-departure)
 
 bag_state.py                 ← plume_thermal only: the waste-heat cascade behind
                                 tab:bag_state, and the field-leak bracket that
