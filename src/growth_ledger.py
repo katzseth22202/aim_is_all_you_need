@@ -101,7 +101,9 @@ def departure_at_altitude(
 
 
 #: The fixed launch unit, as it reaches the 400 km intercept: plate, chambers,
-#: spray water and its tank, departure propellant and tanks, and payload.
+#: spray slug and its tank, departure propellant and tanks, and payload.  Every
+#: unit brings its own chambers and tanks, which are expended with the departure
+#: (:mod:`src.chamber_departure`).
 LAUNCH_UNIT = 1500.0 * u.t
 #: The pusher plate, about a tenth of the craft at a few hertz and a few metres
 #: of stroke (``sec:plate_reuse``).  Dropped before the departure, probably to be

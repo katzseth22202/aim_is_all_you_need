@@ -6,9 +6,14 @@ themselves, wall plus nozzle extension.  The tanks cost ``tank_fraction`` of
 the gas charge only; the plug and the pitch ride without tanks, as in the
 parent's ``tab:wall_pairing_doubling``.
 
-The chambers are retrieved after the burn, and the retrieval is not priced,
-but their mass still rides the burn and is not payload, so it is charged here.
-The parent's ``tab:h2_breakdown`` charged tanks only.
+The departure wave's dry mass -- chambers, nozzle extensions and tanks -- is
+expended every cycle (user, 2026-09-30): it rides the burn, leaves with the
+stack on its escape trajectory, and a fresh set flies in the next launch unit.
+It is charged here as mass that is never payload.  Retrieving the chambers for
+reuse (``sec:steel_chamber_service``: PuffSats brake them back into the parking
+orbit) would free that mass at the cost of the braking PuffSats, and is not
+modelled.  The parent's ``tab:h2_breakdown`` charged tanks only, taking the
+chamber back for free.
 
 The departure wave arrives along one fixed line, so the chamber cannot steer
 the burn along the velocity as it turns.  It pays the fixed-direction loss of

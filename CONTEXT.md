@@ -1480,6 +1480,38 @@ clock.
 _Avoid_: quoting the Delta-v saving as the result; time-normalising the pad side
 and calling 0.301 against 0.288 kg per launched-slug kg per year a reversal.
 
+**Chemistry ceiling**:
+The most of a pulse a walled chamber could ever turn into directed exhaust: one
+minus the energy held in bonds at peak that the A/A* = 300 nozzle never returns,
+even in equilibrium. Methane 0.669 (69% in bonds, 52% returned; carbon never
+re-bonds), hydrogen 0.978 (36%, 94%). **Chamber efficiencies are quoted as a
+share of it**, so the solved chambers sit at 80% (CH4 0.538) and 88% (H2 0.858)
+(ADR 0032). The plate's efficiency is likewise net of chemistry, with
+`eq:eta_chem` charged pulse by pulse (ADR 0033).
+_Avoid_: sweeping chambers in absolute eta -- "50%" is then 0.50 for methane,
+which is 75% of what its chemistry allows, and hydrogen's real advantage (its
+ceiling) disappears from the comparison.
+
+**Expended departure hardware**:
+The departure wave's dry mass -- chambers, nozzle extensions, tanks, and the
+incumbent's Raptors -- rides the burn and leaves with the stack; each 1500 t
+launch unit brings a fresh set, charged as mass that is never payload (ADR 0032).
+**Chamber retrieval** (PuffSats braking the chamber back into the parking orbit
+for reuse) would free that mass at the cost of the braking PuffSats, so it is
+upside, not a hidden cost.
+_Avoid_: calling retrieval an unpriced risk to the chamber's lead in a ledger
+that already expends the chamber.
+
+**Plate loading schedule**:
+The overtake plate's slug per kilogram of PuffSat, chosen pulse by pulse. By
+Pontryagin's principle each pulse takes the `k` minimising `(1 + c k) / beta(k, w)`
+at a slug price `c` that rises through the push, so `k` falls pulse by pulse and
+one starting price fixes the schedule. Capped at k = 10, the parent's validated
+range (ADR 0033). The default slug is **argon on ice PuffSats**; water pays
+`eq:eta_chem`'s 50.9 MJ/kg on every kilogram and runs 8-11% slower in doubling.
+_Avoid_: a constant loading; charging argon's ionisation as frozen at plate
+pressures (it is gone by 10 000-16 000 K).
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
