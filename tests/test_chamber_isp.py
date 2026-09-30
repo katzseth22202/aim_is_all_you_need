@@ -18,6 +18,7 @@ from src.chamber_isp import (
     PLUG_RATIO,
     ROD_MASS,
     ChamberPairing,
+    absolute_efficiency,
     chamber_departure_burn,
     effective_isp,
     momentum_debit_share,
@@ -188,3 +189,29 @@ def test_a_burn_that_loses_speed_is_refused() -> None:
         chamber_departure_burn(
             16.0 * KM_S, 10.9 * KM_S, 64.1 * KM_S, HYDROGEN_5500K, 0.858
         )
+
+
+@pytest.mark.parametrize(
+    "pairing, bond_share, recovered",
+    [(HYDROGEN_5500K, 0.36, 0.94), (METHANE_7000K, 0.69, 0.52)],
+)
+def test_the_chemistry_ceiling_is_the_pulse_net_of_bonds_that_never_return(
+    pairing: ChamberPairing, bond_share: float, recovered: float
+) -> None:
+    """``tab:wall_pairings`` and ``tab:nozzle_area_ratio`` at the A/A* = 300 design:
+    the share of the pulse held in bonds at peak, and the share of that the nozzle
+    returns at equilibrium (methane's carbon never re-bonds).  The rest is out of
+    reach of any chamber."""
+    assert pairing.chemistry_ceiling == pytest.approx(1.0 - bond_share * (1.0 - recovered))
+
+
+@pytest.mark.parametrize(
+    "pairing, solved, share", [(HYDROGEN_5500K, 0.858, 0.877), (METHANE_7000K, 0.538, 0.804)]
+)
+def test_efficiency_is_quoted_as_a_share_of_that_ceiling(
+    pairing: ChamberPairing, solved: float, share: float
+) -> None:
+    """The simulation's solved chambers reach about 88% (H2) and 80% (CH4) of their
+    ceilings, and a sweep's 50% means half the ceiling, not half the pulse."""
+    assert solved / pairing.chemistry_ceiling == pytest.approx(share, abs=1e-3)
+    assert absolute_efficiency(pairing, 0.5) == pytest.approx(0.5 * pairing.chemistry_ceiling)

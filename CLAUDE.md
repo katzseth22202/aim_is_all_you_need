@@ -159,6 +159,17 @@ chamber_departure.py         ← chamber_isp + finite_burn_loss + two_wave_growt
                                 and the integrated fixed-direction loss charged; picks the chamber
                                 count and prices growth per cycle (make chamber-departure)
 
+water_plate.py               ← plume_thermal only: the overtake plate's push, water or
+                                argon slug (argon is the default; the name predates it),
+                                eq:eta_chem charged per pulse, and the Pontryagin-optimal
+                                per-pulse loading (k falls through the push, capped at 10)
+
+growth_ledger.py             ← chamber_departure + water_plate: the 1500 t launch unit
+                                pushed at 400 km, reversed at apoapsis, departed from
+                                600 km, over the flown chain; chamber efficiency as a
+                                share of its chemistry ceiling; the methalox incumbent
+                                (make growth-ledger, make plate-slug)
+
 bag_state.py                 ← plume_thermal only: the waste-heat cascade behind
                                 tab:bag_state, and the field-leak bracket that
                                 sizes the slug bag (ledger items 5-8 and 10).

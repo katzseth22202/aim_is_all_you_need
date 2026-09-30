@@ -37,6 +37,7 @@ from src.chamber_isp import (
     ROD_MASS,
     ChamberBurn,
     ChamberPairing,
+    absolute_efficiency,
     chamber_departure_burn,
 )
 from src.finite_burn_loss import fixed_direction_loss
@@ -354,13 +355,11 @@ def price_chain_departures(
 #: (next stage): the parent's ``tab:h2_breakdown`` value.  A placeholder.
 _PLACEHOLDER_PUSH_RATIO = 8.43
 _DEFAULT_STACK = 1000.0
-#: Report rows: each pairing at the ledger's 0.50 and 0.70, the solved chamber
-#: at A/A* = 300 (H2 0.858, CH4 0.538 carbon in equilibrium), and 1.0 as a
-#: theoretical ceiling.  Methane spans its 1.4-5.6 kg of pitch per pulse.
-_REPORT_EFFICIENCIES = {
-    HYDROGEN_5500K.name: (0.50, 0.70, 0.858, 1.00),
-    METHANE_7000K.name: (0.50, 0.538, 0.70, 1.00),
-}
+#: Report rows: each pairing at 50/70/90/100% of its chemistry ceiling, plus
+#: the solved chamber at A/A* = 300 (H2 0.858, CH4 0.538 carbon in
+#: equilibrium).  Methane spans its 1.4-5.6 kg of pitch per pulse.
+_CEILING_SHARES = (0.50, 0.70, 0.90, 1.00)
+_SOLVED = {HYDROGEN_5500K.name: 0.858, METHANE_7000K.name: 0.538}
 _PITCH_PER_PULSE = {
     HYDROGEN_5500K.name: (0.0 * u.kg,),
     METHANE_7000K.name: (1.4 * u.kg, 5.6 * u.kg),
@@ -372,7 +371,11 @@ def _report(cycles: Sequence[TwoWaveCycle], stack: u.Quantity, push: float) -> s
     years = sum(c.period_years for c in cycles)
     rows = []
     for pairing in (HYDROGEN_5500K, METHANE_7000K):
-        for eta in _REPORT_EFFICIENCIES[pairing.name]:
+        etas = sorted(
+            [absolute_efficiency(pairing, share) for share in _CEILING_SHARES]
+            + [_SOLVED[pairing.name]]
+        )
+        for eta in etas:
             for pitch in _PITCH_PER_PULSE[pairing.name]:
                 pitch_ratio = float((pitch / ROD_MASS).to_value(u.one))
                 ledgers = price_chain_departures(
@@ -385,6 +388,7 @@ def _report(cycles: Sequence[TwoWaveCycle], stack: u.Quantity, push: float) -> s
                 total = float(np.prod(growth))
                 row = {
                     "chamber": pairing.name,
+                    "share": f"{eta / pairing.chemistry_ceiling:.0%}",
                     "eta": eta,
                     "pitch kg": pitch.to_value(u.kg),
                 }
@@ -447,7 +451,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     )
     print(
         "n = chambers (best count per cycle); hw = tanks + chambers per kg of stack; "
-        "net = stack delivered net of hardware.  eta 1.0 is a theoretical ceiling."
+        "net = stack delivered net of hardware.  share = efficiency as a share of the chemistry ceiling; eta = absolute."
     )
     print(_report(cycles, args.stack_t * u.t, args.push_ratio))
 

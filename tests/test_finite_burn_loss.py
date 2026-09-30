@@ -10,7 +10,7 @@ import pytest
 from astropy import units as u
 from astropy.constants import g0
 
-from src.finite_burn_loss import finite_burn_loss, fixed_direction_loss
+from src.finite_burn_loss import finite_burn_loss, fixed_direction_loss, steered_loss
 
 REACTOR_BURN = 5.39 * u.km / u.s
 REACTOR_EXHAUST = (906.0 * u.s * g0).to(u.km / u.s)
@@ -69,3 +69,17 @@ def test_the_tabulated_loss_matches_direct_integration(
 def test_the_table_refuses_a_burn_it_does_not_cover() -> None:
     with pytest.raises(ValueError):
         fixed_direction_loss(5.4 * u.km / u.s, 5000.0 * u.s)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("burn_km_s, seconds", [(5.45, 130.0), (5.6, 470.0)])
+def test_the_steered_table_matches_direct_integration(
+    burn_km_s: float, seconds: float
+) -> None:
+    burn, t = burn_km_s * u.km / u.s, seconds * u.s
+    direct = finite_burn_loss(burn, 11.0 * u.km / u.s, t, steered=True).to_value(
+        u.m / u.s
+    )
+    assert steered_loss(burn, t).to_value(u.m / u.s) == pytest.approx(
+        direct, rel=0.01, abs=0.05
+    )

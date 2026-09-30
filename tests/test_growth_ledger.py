@@ -1,0 +1,247 @@
+"""Tests for src/growth_ledger.py: the 1500 t launch unit through one cycle."""
+
+import dataclasses
+
+import numpy as np
+import pytest
+from astropy import units as u
+from boinor.bodies import Earth
+
+from src.chamber_departure import best_departure, growth_per_cycle, square_law_loss
+from src.chamber_isp import GATE_THRUST_COST, HYDROGEN_5500K, METHANE_7000K, PLUG_RATIO
+from src.growth_ledger import (
+    LAUNCH_UNIT,
+    METHALOX_TANK_FRACTION,
+    PLATE_MASS,
+    RAPTOR3_MASS,
+    best_cycle_growth,
+    chain_growth,
+    departure_at_altitude,
+    methalox_departure,
+    price_cycle_growth,
+    price_methalox_cycle,
+    summarize_chain,
+)
+from src.jovian_flyby import puffsat_cycle_periapsis_speed
+from src.nozzle_analysis import apoapsis_reversal_dv
+from src.two_wave_growth import VE_METHALOX, TwoWaveCycle, adaptive_two_wave_cycles
+from src.water_plate import ARGON_SLUG, WATER_SLUG, optimal_plate_push
+
+KM_S = u.km / u.s
+
+
+@pytest.mark.parametrize("burn_200, premium_m_s", [(5.32, 107.0), (5.54, 110.0)])
+def test_departing_from_600_km_costs_the_parents_premium(
+    burn_200: float, premium_m_s: float
+) -> None:
+    """``sec:jovian_meeting_altitudes``: for the same excess speed, the three-synodic
+    departures need 107-110 m/s more at 600 km than at 200 km (less Oberth)."""
+    burn = departure_at_altitude(burn_200 * KM_S, 600.0 * u.km).burn
+    assert (burn.to_value(u.m / u.s) - 1e3 * burn_200) == pytest.approx(
+        premium_m_s, abs=1.0
+    )
+
+
+def _cycle(
+    multiple: int, burn: float, nozzle_v_b: float, growth_v_b: float
+) -> TwoWaveCycle:
+    period = {2: 2.184, 3: 3.276}[multiple]
+    return TwoWaveCycle(
+        index=0, departure_jd=0.0, return_jd=0.0, synodic_multiple=multiple,
+        period_years=period, departure_burn=burn, nozzle_wave_v_b=nozzle_v_b,
+        nozzle_wave_dsm=0.0, split_days=10.0, growth_wave_arrival_jd=0.0,
+        growth_wave_v_b=growth_v_b, growth_wave_burn=0.0,
+    )  # fmt: skip
+
+
+def _at(speed_200: float, altitude_km: float) -> float:
+    """A wave's speed at another altitude, by energy conservation."""
+    mu = float(Earth.k.to_value(u.km**3 / u.s**2))
+    r200, r = (float((Earth.R + h * u.km).to_value(u.km)) for h in (200.0, altitude_km))
+    return float(np.sqrt(speed_200**2 + 2.0 * mu * (1.0 / r - 1.0 / r200)))
+
+
+def test_the_launch_unit_is_pushed_at_400_km_and_departs_from_600_km() -> None:
+    """1500 t is pushed from rest to the 400 km cycle-orbit speed by the growth wave.
+    At the 613 000 km apoapsis it raises periapsis to 600 km (1.7 m/s) and reverses
+    the ellipse so the departure is prograde (ADR 0009, 234 m/s), both in methalox.
+    It drops the 150 t plate and the
+    empty water tank, and departs the rest into the nozzle wave at 600 km through
+    the gated chamber.  The plate sprays argon onto ice PuffSats by default."""
+    cycle = _cycle(3, 5.33, 55.4, 57.4)
+    grown = price_cycle_growth(
+        cycle, 0.7, METHANE_7000K, 0.7, initial_water_price=0.05,
+        loss_model=square_law_loss,
+    )  # fmt: skip
+    push = optimal_plate_push(
+        _at(57.4, 400.0) * KM_S, puffsat_cycle_periapsis_speed(altitude=400.0 * u.km),
+        0.7, 0.05, slug=ARGON_SLUG,
+    )  # fmt: skip
+    unit = LAUNCH_UNIT.to_value(u.t)
+    assert grown.puffsats.to_value(u.t) == pytest.approx(
+        push.puffsat_fraction * unit, rel=1e-9
+    )
+    methalox = 1.7e-3 + apoapsis_reversal_dv().to_value(u.km / u.s)
+    raised = push.delivered_fraction * unit * np.exp(-methalox / VE_METHALOX)
+    stack = (
+        raised
+        - PLATE_MASS.to_value(u.t)
+        - ARGON_SLUG.tank_fraction * push.slug_fraction * unit
+    )
+    assert grown.departing_stack.to_value(u.t) == pytest.approx(stack, rel=1e-9)
+    departure = departure_at_altitude(5.33 * KM_S, 600.0 * u.km)
+    alone = best_departure(
+        grown.departing_stack, departure.start_speed, departure.burn,
+        _at(55.4, 600.0) * KM_S, METHANE_7000K, 0.7,
+        gate_thrust_cost=GATE_THRUST_COST, loss_model=square_law_loss,
+    )  # fmt: skip
+    assert grown.departure == alone
+    expected = growth_per_cycle(
+        stack / grown.puffsats.to_value(u.t),
+        alone.rod_mass_fraction,
+        alone.delivered_net,
+    )
+    assert grown.growth == pytest.approx(expected, rel=1e-12)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "cycle", [_cycle(3, 5.33, 55.4, 57.4), _cycle(2, 7.17, 61.4, 63.6)]
+)
+def test_each_cycle_flies_the_water_schedule_that_grows_it_most(
+    cycle: TwoWaveCycle,
+) -> None:
+    """One number, the starting water price, fixes the plate's whole schedule, so the
+    search is one-dimensional; no nearby price grows the cycle more."""
+    best = best_cycle_growth(cycle, 0.7, METHANE_7000K, 0.7, loss_model=square_law_loss)
+    start = best.initial_water_price
+    for other in np.geomspace(start / 3.0, start * 3.0, 25):
+        rival = price_cycle_growth(
+            cycle, 0.7, METHANE_7000K, 0.7, float(other), loss_model=square_law_loss
+        )
+        assert rival.growth <= best.growth + 1e-9
+    assert best.push.slug_ratio_start > best.push.slug_ratio_end
+
+
+def test_the_chain_summary_reports_ten_years_both_ways() -> None:
+    """Three cycles of 3.0, 2.0 and 6.0 yr growing 4x, 2x and 3x: 24x over 11 yr.
+    Stepwise, only the first two finish inside ten years (8x); the continuous rate
+    projects exp(10 ln 24 / 11)."""
+    summary = summarize_chain([3.0, 2.0, 6.0], [4.0, 2.0, 3.0])
+    rate = np.log(24.0) / 11.0
+    assert summary.rate_per_year == pytest.approx(rate, rel=1e-12)
+    assert summary.doubling_years == pytest.approx(np.log(2.0) / rate, rel=1e-12)
+    assert summary.annual_growth == pytest.approx(np.expm1(rate), rel=1e-12)
+    assert summary.ten_year_stepwise == pytest.approx(8.0, rel=1e-12)
+    assert summary.ten_year_continuous == pytest.approx(np.exp(10.0 * rate), rel=1e-12)
+
+
+@pytest.mark.slow
+def test_the_flown_chain_grows_every_cycle() -> None:
+    """Methane at eta 0.7 behind a 0.7 plate grows the fleet on all eleven cycles."""
+    cycles = adaptive_two_wave_cycles()
+    grown = chain_growth(cycles, 0.7, METHANE_7000K, 0.7)
+    assert len(grown) == 11 and all(g.growth > 1.0 for g in grown)
+
+
+@pytest.mark.slow
+def test_the_plate_is_held_to_k_10_and_freeing_it_is_the_sensitivity() -> None:
+    cycle = _cycle(2, 7.17, 61.4, 63.6)
+    capped = best_cycle_growth(
+        cycle, 0.7, METHANE_7000K, 0.7, loss_model=square_law_loss
+    )
+    assert capped.push.slug_ratio_start <= 10.0
+    free = best_cycle_growth(
+        cycle, 0.7, METHANE_7000K, 0.7, loss_model=square_law_loss, max_slug_ratio=None
+    )
+    assert free.push.slug_ratio_start > 10.0
+    assert free.growth >= capped.growth
+
+
+def test_each_wave_pays_its_own_correction_burn_in_methalox() -> None:
+    """The growth wave burns methalox to arrive early and the nozzle wave to correct
+    its return (the chain's DSM proxy), so the batch that left Jupiter was larger
+    than what arrives: growth-wave PuffSats by ``exp(burn / v_e)``, rods by
+    ``exp(dsm / v_e)``."""
+    base = _cycle(3, 5.33, 55.4, 57.4)
+    corrected = dataclasses.replace(base, growth_wave_burn=0.30, nozzle_wave_dsm=0.04)
+    args = (0.7, METHANE_7000K, 0.7)
+    free = price_cycle_growth(base, *args, 0.05, loss_model=square_law_loss)
+    paid = price_cycle_growth(corrected, *args, 0.05, loss_model=square_law_loss)
+    d_growth, d_rods = np.exp(-0.30 / VE_METHALOX), np.exp(-0.04 / VE_METHALOX)
+    stack = paid.departing_stack.to_value(u.t)
+    arrived = paid.puffsats.to_value(u.t)
+    rods = paid.departure.rod_mass_fraction * stack
+    expected = (
+        paid.departure.delivered_net * stack / (arrived / d_growth + rods / d_rods)
+    )
+    assert paid.growth == pytest.approx(expected, rel=1e-12)
+    assert paid.growth < free.growth
+
+
+def test_hydrogen_pays_its_cryostats_and_boil_off_before_it_departs() -> None:
+    """The hydrogen is launched in cryostats and held through the parking orbit,
+    losing ``b`` of itself; the cryostats (``c`` per kilogram launched) drop with
+    the plate.  Neither departs, so they come out of the stack, and the hydrogen
+    launched is what the departure burns over ``1 - b``."""
+    cycle = _cycle(3, 5.33, 55.4, 57.4)
+    args = (cycle, 0.7, HYDROGEN_5500K, 0.858, 0.05)
+    bare = price_cycle_growth(*args, loss_model=square_law_loss)
+    held = price_cycle_growth(
+        *args, loss_model=square_law_loss, cryostat_fraction=0.03, boil_off=0.03
+    )
+    dep = held.departure
+    stack = held.departing_stack.to_value(u.t)
+    burned = (1.0 - dep.delivered_fraction - PLUG_RATIO * dep.rod_mass_fraction) * stack
+    launched = burned / (1.0 - 0.03)
+    assert held.cryostats.to_value(u.t) == pytest.approx(0.03 * launched, rel=1e-6)
+    assert held.boiled_off.to_value(u.t) == pytest.approx(0.03 * launched, rel=1e-6)
+    before = stack + held.cryostats.to_value(u.t) + held.boiled_off.to_value(u.t)
+    assert before == pytest.approx(bare.departing_stack.to_value(u.t), rel=1e-6)
+    assert held.growth < bare.growth
+
+
+def test_the_methalox_incumbent_pushes_with_the_whole_batch() -> None:
+    """No departure wave, so the whole returning batch pushes (at the full return's
+    speed, paying only its DSM proxy), and Raptor 3s depart the stack on a steered
+    burn.  The engine count delivers more than one fewer or one more."""
+    cycle = dataclasses.replace(_cycle(3, 5.33, 55.4, 57.4), nozzle_wave_dsm=0.04)
+    flown = price_methalox_cycle(cycle, 0.7, 0.05, loss_model=square_law_loss)
+    stack = flown.departing_stack.to_value(u.t)
+    batch = flown.puffsats.to_value(u.t) / np.exp(-0.04 / VE_METHALOX)
+    assert flown.growth == pytest.approx(flown.delivered_net * stack / batch, rel=1e-12)
+    burn = departure_at_altitude(5.33 * KM_S, 600.0 * u.km).burn
+    for engines in (flown.engines - 1, flown.engines + 1):
+        rival = methalox_departure(
+            flown.departing_stack, burn, engines, square_law_loss
+        )
+        assert rival.delivered_net < flown.delivered_net
+    spent = 1.0 - np.exp(
+        -(burn + flown.finite_burn_loss).to_value(u.km / u.s) / VE_METHALOX
+    )
+    hardware = (
+        METHALOX_TANK_FRACTION * spent
+        + flown.engines * RAPTOR3_MASS.to_value(u.t) / stack
+    )
+    assert flown.delivered_net == pytest.approx(1.0 - spent - hardware, rel=1e-9)
+
+
+def test_an_argon_plate_pays_argons_tank_and_no_slug_bonds() -> None:
+    cycle = _cycle(3, 5.33, 55.4, 57.4)
+    grown = price_cycle_growth(
+        cycle, 0.7, METHANE_7000K, 0.7, 0.05, loss_model=square_law_loss,
+        slug=ARGON_SLUG,
+    )  # fmt: skip
+    push = optimal_plate_push(
+        _at(57.4, 400.0) * KM_S, puffsat_cycle_periapsis_speed(altitude=400.0 * u.km),
+        0.7, 0.05, slug=ARGON_SLUG,
+    )  # fmt: skip
+    assert grown.push == push
+    unit = LAUNCH_UNIT.to_value(u.t)
+    methalox = 1.7e-3 + apoapsis_reversal_dv().to_value(u.km / u.s)
+    stack = (
+        push.delivered_fraction * unit * np.exp(-methalox / VE_METHALOX)
+        - PLATE_MASS.to_value(u.t)
+        - 14.6 / 1395.0 * push.slug_fraction * unit
+    )
+    assert grown.departing_stack.to_value(u.t) == pytest.approx(stack, rel=1e-9)

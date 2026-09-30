@@ -67,6 +67,10 @@ class ChamberPairing:
             rod, sized to the pairing's peak pressure (``sec:steel_chamber_service``).
         tank_fraction: Tank mass per kilogram of gas charge, scaled from
             NASA's Mars reference drop tank by density (``sec:ntr_departure``).
+        chemistry_ceiling: The most of the pulse any chamber of this pairing
+            could turn into directed exhaust: one minus the energy held in
+            bonds at peak that the A/A* = 300 nozzle never returns, even in
+            equilibrium.  Efficiencies are quoted as a share of it.
     """
 
     name: str
@@ -74,6 +78,7 @@ class ChamberPairing:
     reference_slug_ratio: float
     wall_mass: u.Quantity
     tank_fraction: float
+    chemistry_ceiling: float
 
 
 #: Closing speed ``tab:wall_pairings`` sizes the charges at: the 2.5 kg rod's.
@@ -81,12 +86,38 @@ REFERENCE_CLOSING_SPEED = 75.0 * u.km / u.s
 
 
 #: Hydrogen at 5500 K on a bare copper liner (``tab:wall_pairings``): 818 bar
-#: peak, about a 32 t wall; 0.205 kg of tank per kg of liquid hydrogen.
-HYDROGEN_5500K = ChamberPairing("H2 5500 K", 5500.0 * u.K, 24.0, 32.0 * u.t, 0.205)
+#: peak, about a 32 t wall; 0.205 kg of tank per kg of liquid hydrogen.  36% of
+#: the pulse is in bonds at peak and the A/A* = 300 nozzle returns 94% of them
+#: (``tab:nozzle_area_ratio``), so the ceiling is 1 - 0.36 x 0.06 = 0.978.
+HYDROGEN_5500K = ChamberPairing(
+    "H2 5500 K", 5500.0 * u.K, 24.0, 32.0 * u.t, 0.205, 1.0 - 0.36 * (1.0 - 0.94)
+)
 #: Methane at 7000 K on Cr-Mo steel lined with 0.2 mm of pitch
 #: (``tab:wall_pairings``): 496 bar peak, about a 19 t wall; 0.034 kg of tank
-#: per kg of liquid methane.
-METHANE_7000K = ChamberPairing("CH4 7000 K", 7000.0 * u.K, 27.5, 19.0 * u.t, 0.034)
+#: per kg of liquid methane.  69% of the pulse is in bonds at peak and even with
+#: carbon in equilibrium the A/A* = 300 nozzle returns only 52% of them; the
+#: carbon never re-bonds.  The ceiling is 1 - 0.69 x 0.48 = 0.669 (0.683 at the
+#: A/A* = 1000 stretch nozzle, 54% returned).
+METHANE_7000K = ChamberPairing(
+    "CH4 7000 K", 7000.0 * u.K, 27.5, 19.0 * u.t, 0.034, 1.0 - 0.69 * (1.0 - 0.52)
+)
+
+
+def absolute_efficiency(pairing: ChamberPairing, share_of_ceiling: float) -> float:
+    """Convert an efficiency quoted against the chemistry ceiling to ``eta``.
+
+    A chamber that is "50% efficient" turns half of what its chemistry allows
+    into directed exhaust, not half the pulse: 0.33 for methane, 0.49 for
+    hydrogen.
+
+    Args:
+        pairing: Gas and wall pairing.
+        share_of_ceiling: Efficiency as a share of the pairing's ceiling.
+
+    Returns:
+        The energy efficiency ``eta`` of ``eq:eta_isp``.
+    """
+    return share_of_ceiling * pairing.chemistry_ceiling
 
 
 def slug_ratio_at(closing_speed: u.Quantity, pairing: ChamberPairing) -> float:

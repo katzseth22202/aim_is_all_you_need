@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger plate-slug all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -54,6 +54,12 @@ two-wave:  ## Price the real-orbit adaptive 2S/3S cadence on the two-wave nozzle
 
 chamber-departure:  ## Price the walled chamber's departure over the flown chain, tanks, chambers and loss charged
 	python -m src.chamber_departure
+
+growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
+	python -m src.growth_ledger
+
+plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
+	python -m src.growth_ledger --slugs
 
 two-leg:  ## Compare a magnetic nozzle on both legs against the pusher plate (ADR 0014)
 	python -m src.two_leg_nozzle_sweep

@@ -146,16 +146,28 @@ TABLE_TIMES = np.arange(0.0, 3600.01, 200.0)
 TABLE_EXHAUST = 11.0 * u.km / u.s
 
 
-@lru_cache(maxsize=1)
-def _loss_table() -> RegularGridInterpolator:
-    """Fixed-direction loss (m/s) over :data:`TABLE_BURNS` x :data:`TABLE_TIMES`."""
+@lru_cache(maxsize=2)
+def _loss_table(steered: bool) -> RegularGridInterpolator:
+    """Loss (m/s) over :data:`TABLE_BURNS` x :data:`TABLE_TIMES`."""
     values = np.zeros((TABLE_BURNS.size, TABLE_TIMES.size))
     for i, burn in enumerate(TABLE_BURNS):
         for j, seconds in enumerate(TABLE_TIMES[1:], start=1):
             values[i, j] = finite_burn_loss(
-                burn * u.km / u.s, TABLE_EXHAUST, seconds * u.s
+                burn * u.km / u.s, TABLE_EXHAUST, seconds * u.s, steered=steered
             ).to_value(u.m / u.s)
     return RegularGridInterpolator((TABLE_BURNS, TABLE_TIMES), values, method="cubic")
+
+
+def _tabulated(
+    impulsive_dv: u.Quantity, burn_time: u.Quantity, steered: bool
+) -> u.Quantity:
+    burn = float(impulsive_dv.to_value(u.km / u.s))
+    seconds = float(burn_time.to_value(u.s))
+    if not (TABLE_BURNS[0] <= burn <= TABLE_BURNS[-1]):
+        raise ValueError(f"burn {impulsive_dv} is outside the loss table")
+    if not (0.0 <= seconds <= TABLE_TIMES[-1]):
+        raise ValueError(f"burn time {burn_time} is outside the loss table")
+    return float(_loss_table(steered)([[burn, seconds]])[0]) * u.m / u.s
 
 
 def fixed_direction_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
@@ -173,10 +185,21 @@ def fixed_direction_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Q
     Raises:
         ValueError: If the burn or its length lies outside the table.
     """
-    burn = float(impulsive_dv.to_value(u.km / u.s))
-    seconds = float(burn_time.to_value(u.s))
-    if not (TABLE_BURNS[0] <= burn <= TABLE_BURNS[-1]):
-        raise ValueError(f"burn {impulsive_dv} is outside the loss table")
-    if not (0.0 <= seconds <= TABLE_TIMES[-1]):
-        raise ValueError(f"burn time {burn_time} is outside the loss table")
-    return float(_loss_table()([[burn, seconds]])[0]) * u.m / u.s
+    return _tabulated(impulsive_dv, burn_time, steered=False)
+
+
+def steered_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
+    """Steered-burn loss, for engines free to follow the velocity; as
+    :func:`fixed_direction_loss` otherwise.
+
+    Args:
+        impulsive_dv: Burn an instantaneous impulse at periapsis would need.
+        burn_time: Burn length, centred on periapsis.
+
+    Returns:
+        The loss (m/s).
+
+    Raises:
+        ValueError: If the burn or its length lies outside the table.
+    """
+    return _tabulated(impulsive_dv, burn_time, steered=True)
