@@ -10,6 +10,7 @@ from boinor.bodies import Earth
 from src.chamber_departure import best_departure, growth_per_cycle, square_law_loss
 from src.chamber_isp import GATE_THRUST_COST, HYDROGEN_5500K, METHANE_7000K, PLUG_RATIO
 from src.growth_ledger import (
+    DEFAULT_PARKING_DAYS,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
     PLATE_MASS,
@@ -18,6 +19,7 @@ from src.growth_ledger import (
     chain_growth,
     departure_at_altitude,
     methalox_departure,
+    periapsis_raise,
     price_cycle_growth,
     price_methalox_cycle,
     summarize_chain,
@@ -49,7 +51,7 @@ def _cycle(
     return TwoWaveCycle(
         index=0, departure_jd=0.0, return_jd=0.0, synodic_multiple=multiple,
         period_years=period, departure_burn=burn, nozzle_wave_v_b=nozzle_v_b,
-        nozzle_wave_dsm=0.0, split_days=10.0, growth_wave_arrival_jd=0.0,
+        nozzle_wave_dsm=0.0, split_days=20.0, growth_wave_arrival_jd=0.0,
         growth_wave_v_b=growth_v_b, growth_wave_burn=0.0,
     )  # fmt: skip
 
@@ -81,7 +83,9 @@ def test_the_launch_unit_is_pushed_at_400_km_and_departs_from_600_km() -> None:
     assert grown.puffsats.to_value(u.t) == pytest.approx(
         push.puffsat_fraction * unit, rel=1e-9
     )
-    methalox = 1.7e-3 + apoapsis_reversal_dv().to_value(u.km / u.s)
+    methalox = (periapsis_raise(20.0 * u.day) + apoapsis_reversal_dv()).to_value(
+        u.km / u.s
+    )
     raised = push.delivered_fraction * unit * np.exp(-methalox / VE_METHALOX)
     stack = (
         raised
@@ -139,7 +143,7 @@ def test_the_chain_summary_reports_ten_years_both_ways() -> None:
 @pytest.mark.slow
 def test_the_flown_chain_grows_every_cycle() -> None:
     """Methane at eta 0.7 behind a 0.7 plate grows the fleet on all eleven cycles."""
-    cycles = adaptive_two_wave_cycles()
+    cycles = adaptive_two_wave_cycles(split_days=DEFAULT_PARKING_DAYS)
     grown = chain_growth(cycles, 0.7, METHANE_7000K, 0.7)
     assert len(grown) == 11 and all(g.growth > 1.0 for g in grown)
 
@@ -238,10 +242,57 @@ def test_an_argon_plate_pays_argons_tank_and_no_slug_bonds() -> None:
     )  # fmt: skip
     assert grown.push == push
     unit = LAUNCH_UNIT.to_value(u.t)
-    methalox = 1.7e-3 + apoapsis_reversal_dv().to_value(u.km / u.s)
+    methalox = (periapsis_raise(20.0 * u.day) + apoapsis_reversal_dv()).to_value(
+        u.km / u.s
+    )
     stack = (
         push.delivered_fraction * unit * np.exp(-methalox / VE_METHALOX)
         - PLATE_MASS.to_value(u.t)
         - 14.6 / 1395.0 * push.slug_fraction * unit
     )
     assert grown.departing_stack.to_value(u.t) == pytest.approx(stack, rel=1e-9)
+
+
+def test_raising_periapsis_at_apoapsis_costs_the_parents_1_7_m_s_on_the_20_day_orbit() -> (
+    None
+):
+    """``sec:jovian_meeting_altitudes``: 400 km -> 600 km at the 613 000 km apoapsis of
+    the 20-day orbit costs 1.7 m/s.  A 10-day orbit's apoapsis is lower and faster, so
+    the same raise costs more there."""
+    assert periapsis_raise(20.0 * u.day).to_value(u.m / u.s) == pytest.approx(
+        1.7, abs=0.05
+    )
+    assert periapsis_raise(10.0 * u.day) > periapsis_raise(20.0 * u.day)
+
+
+@pytest.mark.parametrize("split", [10.0, 20.0])
+def test_the_parking_orbit_is_the_cycles_own_split(split: float) -> None:
+    """CONTEXT.md: the split gap *is* the parking-orbit period -- the payload is pushed
+    at periapsis, coasts one orbit while the departure wave catches up, and departs at
+    the next periapsis.  So the push target, the raise, the reversal and the departure's
+    start all come from the cycle's own ``split_days``, not from a fixed 20 days."""
+    cycle = dataclasses.replace(_cycle(3, 5.33, 55.4, 57.4), split_days=split)
+    period = split * u.day
+    grown = price_cycle_growth(
+        cycle, 0.7, METHANE_7000K, 0.7, 0.05, loss_model=square_law_loss
+    )
+    push = optimal_plate_push(
+        _at(57.4, 400.0) * KM_S,
+        puffsat_cycle_periapsis_speed(period=period, altitude=400.0 * u.km),
+        0.7, 0.05, slug=ARGON_SLUG,
+    )  # fmt: skip
+    assert grown.push == push
+    methalox = (periapsis_raise(period) + apoapsis_reversal_dv(period)).to_value(
+        u.km / u.s
+    )
+    unit = LAUNCH_UNIT.to_value(u.t)
+    stack = (
+        push.delivered_fraction * unit * np.exp(-methalox / VE_METHALOX)
+        - PLATE_MASS.to_value(u.t)
+        - ARGON_SLUG.tank_fraction * push.slug_fraction * unit
+    )
+    assert grown.departing_stack.to_value(u.t) == pytest.approx(stack, rel=1e-9)
+    departure = departure_at_altitude(5.33 * KM_S, 600.0 * u.km, period)
+    assert departure.start_speed == puffsat_cycle_periapsis_speed(
+        period=period, altitude=600.0 * u.km
+    ).to(u.km / u.s)

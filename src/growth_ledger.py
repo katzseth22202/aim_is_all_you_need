@@ -19,7 +19,7 @@ from boinor.bodies import Earth
 from scipy.optimize import minimize_scalar
 from tabulate import tabulate
 
-from src.astro_constants import LEO_ALTITUDE
+from src.astro_constants import LEO_ALTITUDE, PUFFSAT_CYCLE_ORBIT_PERIOD
 from src.chamber_departure import (
     DepartureLedger,
     LossModel,
@@ -74,7 +74,9 @@ class Departure:
 
 
 def departure_at_altitude(
-    burn_at_200_km: u.Quantity, altitude: u.Quantity
+    burn_at_200_km: u.Quantity,
+    altitude: u.Quantity,
+    period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
 ) -> Departure:
     """Move a chain departure burn from the 200 km periapsis to ``altitude``.
 
@@ -84,9 +86,14 @@ def departure_at_altitude(
     from that altitude's own cycle-orbit periapsis speed.  A higher burn gets
     less from the Oberth effect, so it costs more.
 
+    The chain defines its burn from the 20-day orbit's 200 km periapsis speed
+    (``two_wave_growth._cycle_periapsis_speed``), so the excess speed is taken
+    from there; the departure then starts from the parking orbit actually flown.
+
     Args:
         burn_at_200_km: The chain's ``departure_burn``.
         altitude: Periapsis altitude to depart from.
+        period: Period of the parking orbit the departure starts from.
 
     Returns:
         The burn's start speed and size at ``altitude``.
@@ -95,7 +102,9 @@ def departure_at_altitude(
     start_200 = float(puffsat_cycle_periapsis_speed().to_value(u.km / u.s))
     final_200 = start_200 + float(burn_at_200_km.to_value(u.km / u.s))
     excess_sq = final_200**2 - 2.0 * mu / _radius(LEO_ALTITUDE)
-    start = puffsat_cycle_periapsis_speed(altitude=altitude).to(u.km / u.s)
+    start = puffsat_cycle_periapsis_speed(period=period, altitude=altitude).to(
+        u.km / u.s
+    )
     final = np.sqrt(excess_sq + 2.0 * mu / _radius(altitude)) * u.km / u.s
     return Departure(start_speed=start, burn=final - start)
 
@@ -112,19 +121,67 @@ PLATE_MASS = 150.0 * u.t
 #: The plate sprays argon onto ice PuffSats (user, 2026-09-30): argon has no
 #: bonds to strand, and it beats water by 8-11% in doubling (make plate-slug).
 DEFAULT_PLATE_SLUG = ARGON_SLUG
+#: The report's split gap, which is also the parking orbit (CONTEXT.md): 20
+#: days, the orbit the parent's 600 km figures are quoted on (user, 2026-09-30).
+#: Flown consistently it beats 10 days: the reversal falls from 372.5 to
+#: 233.9 m/s while the growth wave's early-arrival burn rises from 179 to
+#: 464 m/s, a wash for the chambers (0-2%) and 9% for methalox (ADR 0033).
+#: ``two_wave_growth.DEFAULT_SPLIT_DAYS`` stays 10 for that module's reports.
+DEFAULT_PARKING_DAYS = 20.0
 #: Altitudes of the two collisions (``sec:jovian_meeting_altitudes``).
 PUSH_ALTITUDE = 400.0 * u.km
 DEPARTURE_ALTITUDE = 600.0 * u.km
 _HOLD_ITERATIONS = 100
 _HOLD_TOLERANCE_T = 1.0e-9
-#: Periapsis raise from 400 km to 600 km at the 613 000 km apoapsis, in methalox.
-PERIAPSIS_RAISE = 1.7 * u.m / u.s
-#: The apoapsis reversal every design pays (ADR 0009): the push leaves the craft
-#: moving along the wave's axis, and the departure must be prograde, so the
-#: ellipse is reversed where the craft crawls.  Sized on the 20-day orbit the
-#: burns are priced on (234 m/s).  The chain's own nozzle ledger sizes it on the
-#: 10-day split orbit instead (372 m/s), a known inconsistency in the chain.
-APOAPSIS_REVERSAL = apoapsis_reversal_dv().to(u.m / u.s)
+
+#: The chain's burns are defined on this orbit; the ledger flies each cycle's
+#: own parking orbit, which is its split gap (CONTEXT.md, "Split gap").
+REFERENCE_PERIOD = PUFFSAT_CYCLE_ORBIT_PERIOD
+
+
+def _orbit_loss(
+    table: Callable[[u.Quantity, u.Quantity, u.Quantity], u.Quantity],
+    period: u.Quantity,
+) -> LossModel:
+    """A tabulated finite-burn loss bound to one parking orbit."""
+    return lambda burn, burn_time: table(burn, burn_time, period)
+
+
+def parking_period(cycle: TwoWaveCycle) -> u.Quantity:
+    """The orbit the pushed payload coasts through: the cycle's own split gap.
+
+    The growth wave pushes the payload at periapsis, it coasts one full orbit
+    while the departure wave catches up, and it departs at the next periapsis,
+    so the split gap and the parking period are one number (CONTEXT.md).
+
+    Args:
+        cycle: The flown cycle.
+
+    Returns:
+        The parking-orbit period.
+    """
+    return (cycle.split_days * u.day).to(u.day)
+
+
+def periapsis_raise(period: u.Quantity) -> u.Quantity:
+    """Methalox to raise periapsis from the push's 400 km to the departure's 600 km.
+
+    Burned at apoapsis, where the craft crawls: the parent's 1.7 m/s at the
+    20-day orbit's 613 000 km apoapsis (``sec:jovian_meeting_altitudes``).
+
+    Args:
+        period: Period of the parking orbit after the push.
+
+    Returns:
+        The burn (m/s).
+    """
+    mu = _mu()
+    low, high = _radius(PUSH_ALTITUDE), _radius(DEPARTURE_ALTITUDE)
+    a = (mu * (float(period.to_value(u.s)) / (2.0 * np.pi)) ** 2) ** (1.0 / 3.0)
+    apoapsis = 2.0 * a - low
+    before = np.sqrt(mu * (2.0 / apoapsis - 1.0 / a))
+    after = np.sqrt(mu * (2.0 / apoapsis - 2.0 / (apoapsis + high)))
+    return float(after - before) * 1.0e3 * u.m / u.s
 
 
 def wave_speed_at_altitude(
@@ -177,11 +234,12 @@ def _launch_and_push(
     max_slug_ratio: Optional[float],
     slug: PlateSlug,
     impactor_bond_energy: u.Quantity,
+    period: u.Quantity,
 ) -> Tuple[OptimalPlatePush, u.Quantity]:
     """Push the launch unit at 400 km and park it, ready to depart from 600 km.
 
-    The wave pushes it from rest to the 400 km cycle-orbit speed.  At the
-    613 000 km apoapsis it raises periapsis to 600 km and reverses the ellipse,
+    The wave pushes it from rest to the parking orbit's 400 km periapsis speed.
+    At apoapsis it raises periapsis to 600 km and reverses the ellipse (ADR 0009),
     both in methalox, and it drops the plate and the slug's empty drop tank.
 
     Returns:
@@ -190,14 +248,16 @@ def _launch_and_push(
     unit = LAUNCH_UNIT.to(u.t)
     push = optimal_plate_push(
         wave_speed_at_altitude(wave_speed_at_200_km * u.km / u.s, PUSH_ALTITUDE),
-        puffsat_cycle_periapsis_speed(altitude=PUSH_ALTITUDE),
+        puffsat_cycle_periapsis_speed(period=period, altitude=PUSH_ALTITUDE),
         plate_efficiency,
         initial_water_price,
         max_slug_ratio=max_slug_ratio,
         slug=slug,
         impactor_bond_energy=impactor_bond_energy,
     )
-    methalox = (PERIAPSIS_RAISE + APOAPSIS_REVERSAL).to_value(u.km / u.s)
+    methalox = (periapsis_raise(period) + apoapsis_reversal_dv(period)).to_value(
+        u.km / u.s
+    )
     available = (
         push.delivered_fraction * unit * float(np.exp(-methalox / VE_METHALOX))
         - PLATE_MASS
@@ -214,7 +274,7 @@ def price_cycle_growth(
     initial_water_price: float,
     gate_thrust_cost: float = GATE_THRUST_COST,
     pitch_ratio: float = 0.0,
-    loss_model: LossModel = fixed_direction_loss,
+    loss_model: Optional[LossModel] = None,
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
@@ -231,7 +291,8 @@ def price_cycle_growth(
         initial_water_price: Starting water price of the plate's schedule.
         gate_thrust_cost: As in :func:`src.chamber_isp.effective_isp`.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: As in :func:`src.chamber_departure.price_departure`.
+        loss_model: Finite-burn loss; None uses the fixed-direction table on
+            the cycle's own parking orbit.
         max_slug_ratio: Cap on the plate's water loading; None leaves it free.
         slug: What the plate sprays; argon by default.
         impactor_bond_energy: The PuffSat's bond energy per kilogram.
@@ -249,10 +310,12 @@ def price_cycle_growth(
         max_slug_ratio,
         slug,
         impactor_bond_energy,
+        parking_period(cycle),
     )
     departure_burn = departure_at_altitude(
-        cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE
+        cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
     )
+    model = loss_model or _orbit_loss(fixed_direction_loss, parking_period(cycle))
 
     def depart(stack: u.Quantity) -> DepartureLedger:
         return best_departure(
@@ -266,7 +329,7 @@ def price_cycle_growth(
             departure_efficiency,
             gate_thrust_cost=gate_thrust_cost,
             pitch_ratio=pitch_ratio,
-            loss_model=loss_model,
+            loss_model=model,
         )
 
     # The gas launched is what the burn spends over (1 - boil-off), and its
@@ -345,7 +408,7 @@ def best_cycle_growth(
     departure_efficiency: float,
     gate_thrust_cost: float = GATE_THRUST_COST,
     pitch_ratio: float = 0.0,
-    loss_model: LossModel = fixed_direction_loss,
+    loss_model: Optional[LossModel] = None,
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
@@ -366,7 +429,8 @@ def best_cycle_growth(
         departure_efficiency: The chamber's energy efficiency.
         gate_thrust_cost: As in :func:`src.chamber_isp.effective_isp`.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: As in :func:`src.chamber_departure.price_departure`.
+        loss_model: Finite-burn loss; None uses the fixed-direction table on
+            the cycle's own parking orbit.
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.
@@ -446,7 +510,7 @@ def chain_growth(
     pairing: ChamberPairing,
     departure_efficiency: float,
     pitch_ratio: float = 0.0,
-    loss_model: LossModel = fixed_direction_loss,
+    loss_model: Optional[LossModel] = None,
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
@@ -461,7 +525,8 @@ def chain_growth(
         pairing: The departure chamber.
         departure_efficiency: The chamber's energy efficiency.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: As in :func:`src.chamber_departure.price_departure`.
+        loss_model: Finite-burn loss; None uses the fixed-direction table on
+            the cycle's own parking orbit.
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.
@@ -589,7 +654,7 @@ def price_methalox_cycle(
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
-    loss_model: LossModel = steered_loss,
+    loss_model: Optional[LossModel] = None,
 ) -> MethaloxCycle:
     """Carry the launch unit through a cycle with Raptor 3s departing.
 
@@ -604,7 +669,8 @@ def price_methalox_cycle(
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.
-        loss_model: As in :func:`methalox_departure`.
+        loss_model: Finite-burn loss; None uses the steered table on the
+            cycle's own parking orbit.
 
     Returns:
         The cycle's ledger.
@@ -616,13 +682,17 @@ def price_methalox_cycle(
         max_slug_ratio,
         slug,
         impactor_bond_energy,
+        parking_period(cycle),
     )
-    burn = departure_at_altitude(cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE)
+    burn = departure_at_altitude(
+        cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
+    )
+    model = loss_model or _orbit_loss(steered_loss, parking_period(cycle))
     best: Optional[MethaloxDeparture] = None
     falls = 0
     for engines in range(1, _MAX_ENGINES + 1):
         try:
-            flown = methalox_departure(stack, burn.burn, engines, loss_model)
+            flown = methalox_departure(stack, burn.burn, engines, model)
         except ValueError:
             continue
         if best is None or flown.delivered_net > best.delivered_net:
@@ -695,12 +765,17 @@ def _mean(values: Sequence[float]) -> float:
     return float(np.mean(values))
 
 
-#: Hydrogen's cryostat mass and boil-off over the hold, per kilogram launched.
-#: No flight-scale source exists; passive-MLI large tanks lose 0.1-0.5%/day, so
-#: 1-5% over the hold, and cryostat mass is swept over the same 1-5%.  The
-#: matrix carries the middle of both; :func:`_hold_sweep` shows the range.
+#: Hydrogen's cryostat mass and boil-off, per kilogram launched.  No
+#: flight-scale source exists; passive-MLI large tanks lose 0.1-0.5%/day, held
+#: for one parking orbit, and cryostat mass is swept over 1-5%.  The matrix
+#: carries the middle of both; :func:`_hold_sweep` shows the range.
 HYDROGEN_CRYOSTAT = 0.03
-HYDROGEN_BOIL_OFF = 0.03
+HYDROGEN_BOIL_OFF_PER_DAY = 0.003
+
+
+def hydrogen_boil_off(cycles: Sequence[TwoWaveCycle], per_day: float) -> float:
+    """Hydrogen lost over the hold: one parking orbit, the chain's split gap."""
+    return per_day * float(parking_period(cycles[0]).to_value(u.day))
 
 
 def _chamber_row(
@@ -715,7 +790,7 @@ def _chamber_row(
     hydrogen = pairing is HYDROGEN_5500K
     pitch = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
     cryostat = HYDROGEN_CRYOSTAT if hydrogen else 0.0
-    boil_off = HYDROGEN_BOIL_OFF if hydrogen else 0.0
+    boil_off = hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
     grown = chain_growth(
         cycles, plate_eta, pairing, eta, pitch,
         cryostat_fraction=cryostat, boil_off=boil_off,
@@ -793,12 +868,12 @@ def _hold_sweep(cycles: Sequence[TwoWaveCycle]) -> str:
     rows = []
     for cryostat in (0.0, 0.01, 0.03, 0.05):
         row: Dict[str, object] = {"cryostat": cryostat}
-        for boil in (0.0, 0.01, 0.03, 0.05):
+        for per_day in (0.0, 0.001, 0.003, 0.005):
             grown = chain_growth(
-                cycles, 0.7, HYDROGEN_5500K, 0.858,
-                cryostat_fraction=cryostat, boil_off=boil,
+                cycles, 0.7, HYDROGEN_5500K, 0.858, cryostat_fraction=cryostat,
+                boil_off=hydrogen_boil_off(cycles, per_day),
             )  # fmt: skip
-            row[f"boil-off {boil:g}"] = summarize_chain(
+            row[f"{100 * per_day:g}%/day"] = summarize_chain(
                 periods, [g.growth for g in grown]
             ).doubling_years
         rows.append(row)
@@ -826,8 +901,8 @@ def _report(cycles: Sequence[TwoWaveCycle], three_only: Sequence[TwoWaveCycle]) 
         + "\n\nMethalox incumbent, three-synodic cycles only "
         + f"({len(three_only)} cycles), whole batch pushes:\n"
         + tabulate(incumbent, headers="keys", floatfmt=".3g")
-        + "\n\nSolved hydrogen (0.858) behind a 0.7 plate: doubling (yr) across cryostat mass "
-        + "and boil-off, per kilogram launched:\n"
+        + "\n\nSolved hydrogen (0.858) behind a 0.7 plate: doubling (yr) across cryostat "
+        + "mass (per kilogram launched) and boil-off rate over the hold:\n"
         + _hold_sweep(cycles)
     )
 
@@ -852,7 +927,11 @@ def _slug_comparison(cycles: Sequence[TwoWaveCycle]) -> str:
                 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
             )
             held = HYDROGEN_CRYOSTAT if hydrogen else 0.0
-            boil = HYDROGEN_BOIL_OFF if hydrogen else 0.0
+            boil = (
+                hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY)
+                if hydrogen
+                else 0.0
+            )
             for label, slug, impactor in PLATE_OPTIONS:
                 runs = {
                     cap: chain_growth(
@@ -912,8 +991,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="compare water and argon on the plate instead of the full matrix",
     )
+    parser.add_argument(
+        "--split-days",
+        type=float,
+        default=DEFAULT_PARKING_DAYS,
+        help="split gap, which is also the parking orbit (default "
+        f"{DEFAULT_PARKING_DAYS:g})",
+    )
     args = parser.parse_args(argv)
-    cycles = adaptive_two_wave_cycles()
+    cycles = adaptive_two_wave_cycles(split_days=args.split_days)
     if args.slugs:
         print(
             f"Plate slug comparison over the flown chain ({len(cycles)} cycles).  "
@@ -926,10 +1012,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         )
         print(_slug_comparison(cycles))
         return
-    three_only = adaptive_two_wave_cycles(threshold_m_s=0.0)
+    three_only = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)
     print(
         f"Growth ledger: {LAUNCH_UNIT:g} launch unit, plate push at 400 km, departure "
-        f"from 600 km after a {APOAPSIS_REVERSAL:.0f} methalox apoapsis reversal, over "
+        f"from 600 km after the methalox apoapsis reversal (ADR 0009) on each "
+        f"cycle's {cycles[0].split_days:g}-day parking orbit, over "
         f"the flown chain ({len(cycles)} cycles)."
     )
     print(
@@ -940,8 +1027,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         f"held to {PLATE_MAX_SLUG_RATIO:g}; 'uncapped yr' frees it (sensitivity).  "
         "push = departing stack per growth PuffSat; net = stack delivered net of "
         "tanks and chambers.  Chambers gated; methane at 5.6 kg pitch/pulse; "
-        f"hydrogen with {HYDROGEN_CRYOSTAT:g} cryostats and {HYDROGEN_BOIL_OFF:g} "
-        "boil-off.  Efficiency 1.0 is a theoretical ceiling."
+        f"hydrogen with {HYDROGEN_CRYOSTAT:g} cryostats and "
+        f"{100 * HYDROGEN_BOIL_OFF_PER_DAY:g}%/day boil-off over the hold.  "
+        "Efficiency 1.0 is a theoretical ceiling."
     )
     print(_report(cycles, three_only))
 

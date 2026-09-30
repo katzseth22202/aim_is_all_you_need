@@ -371,9 +371,13 @@ the payload is pushed at periapsis, coasts one full orbit, and departs at the
 next periapsis. So the same number also sizes the **apoapsis reversal** (372.5
 m/s at 10 d, 233.9 at 20 d, 112.1 at 60 d) — a longer gap buys a cheaper
 reversal and pays for it in the burn needed to pull the growth wave further
-ahead. 10 d and 20 d land within 0.7% of each other. _Avoid_: choosing the gap
+ahead. 10 d and 20 d land within 0.7% of each other. The growth ledger takes
+its parking orbit from each cycle's own split and flies **20 d** (ADR 0034): the
+reversal saving beats the dearer early-arrival burn by 0-2% for the walled
+chambers and 9% for methalox, and 20 d is the orbit the parent's 600 km figures
+are quoted on. _Avoid_: choosing the gap
 and the parking period independently (ADR 0009 priced a 10 d split against a
-20-day reversal); assuming the split must be bought at all — in **real orbits**
+20-day reversal, and ADR 0033's first figures did the same); assuming the split must be bought at all — in **real orbits**
 the Lambert pair's free encounter time makes it nearly free (8 of 11 flown
 cycles under 1 m/s, ADR 0013), whereas the circular-coplanar model had only
 the bend and found its Earth-hit roots ~1 yr apart.

@@ -146,20 +146,27 @@ TABLE_TIMES = np.arange(0.0, 3600.01, 200.0)
 TABLE_EXHAUST = 11.0 * u.km / u.s
 
 
-@lru_cache(maxsize=2)
-def _loss_table(steered: bool) -> RegularGridInterpolator:
-    """Loss (m/s) over :data:`TABLE_BURNS` x :data:`TABLE_TIMES`."""
+@lru_cache(maxsize=8)
+def _loss_table(steered: bool, period_days: float) -> RegularGridInterpolator:
+    """Loss (m/s) over :data:`TABLE_BURNS` x :data:`TABLE_TIMES` on one orbit."""
     values = np.zeros((TABLE_BURNS.size, TABLE_TIMES.size))
     for i, burn in enumerate(TABLE_BURNS):
         for j, seconds in enumerate(TABLE_TIMES[1:], start=1):
             values[i, j] = finite_burn_loss(
-                burn * u.km / u.s, TABLE_EXHAUST, seconds * u.s, steered=steered
+                burn * u.km / u.s,
+                TABLE_EXHAUST,
+                seconds * u.s,
+                steered=steered,
+                period=period_days * u.day,
             ).to_value(u.m / u.s)
     return RegularGridInterpolator((TABLE_BURNS, TABLE_TIMES), values, method="cubic")
 
 
 def _tabulated(
-    impulsive_dv: u.Quantity, burn_time: u.Quantity, steered: bool
+    impulsive_dv: u.Quantity,
+    burn_time: u.Quantity,
+    steered: bool,
+    period: u.Quantity,
 ) -> u.Quantity:
     burn = float(impulsive_dv.to_value(u.km / u.s))
     seconds = float(burn_time.to_value(u.s))
@@ -167,17 +174,23 @@ def _tabulated(
         raise ValueError(f"burn {impulsive_dv} is outside the loss table")
     if not (0.0 <= seconds <= TABLE_TIMES[-1]):
         raise ValueError(f"burn time {burn_time} is outside the loss table")
-    return float(_loss_table(steered)([[burn, seconds]])[0]) * u.m / u.s
+    table = _loss_table(steered, float(period.to_value(u.day)))
+    return float(table([[burn, seconds]])[0]) * u.m / u.s
 
 
-def fixed_direction_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
+def fixed_direction_loss(
+    impulsive_dv: u.Quantity,
+    burn_time: u.Quantity,
+    period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+) -> u.Quantity:
     """Fixed-direction loss read off a cached table of :func:`finite_burn_loss`.
 
-    The table is built on first use, at 600 km on the 20-day orbit.
+    Each orbit's table is built on first use, at 600 km.
 
     Args:
         impulsive_dv: Burn an instantaneous impulse at periapsis would need.
         burn_time: Burn length, centred on periapsis.
+        period: Period of the parking orbit the burn departs from.
 
     Returns:
         The loss (m/s).
@@ -185,16 +198,21 @@ def fixed_direction_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Q
     Raises:
         ValueError: If the burn or its length lies outside the table.
     """
-    return _tabulated(impulsive_dv, burn_time, steered=False)
+    return _tabulated(impulsive_dv, burn_time, steered=False, period=period)
 
 
-def steered_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
+def steered_loss(
+    impulsive_dv: u.Quantity,
+    burn_time: u.Quantity,
+    period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+) -> u.Quantity:
     """Steered-burn loss, for engines free to follow the velocity; as
     :func:`fixed_direction_loss` otherwise.
 
     Args:
         impulsive_dv: Burn an instantaneous impulse at periapsis would need.
         burn_time: Burn length, centred on periapsis.
+        period: Period of the parking orbit the burn departs from.
 
     Returns:
         The loss (m/s).
@@ -202,4 +220,4 @@ def steered_loss(impulsive_dv: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
     Raises:
         ValueError: If the burn or its length lies outside the table.
     """
-    return _tabulated(impulsive_dv, burn_time, steered=True)
+    return _tabulated(impulsive_dv, burn_time, steered=True, period=period)

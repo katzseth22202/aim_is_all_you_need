@@ -1,6 +1,8 @@
 # The launch unit grows on an argon plate, and both chambers beat methalox
 
-Status: accepted
+Status: accepted; amended by ADR 0034 (the parking orbit is the split, flown at
+20 days). **Its figures below mix a 10-day split with 20-day burns and are 3-8%
+optimistic for the chambers; quote ADR 0034's instead.** Its decisions stand.
 
 Builds on: ADR 0032 (the chamber departure), ADR 0009 (the apoapsis reversal),
 ADR 0013 (the two-wave split in real orbits).
@@ -156,7 +158,7 @@ chemistry, argon on ice PuffSats.
   capped and uncapped, plus the incumbent and the hold sweep) and
   `make plate-slug` (about 20 minutes).
 - The plate's module keeps the name `water_plate.py`; argon is now its default.
-- **A known conflict with CONTEXT.md is left open for the user.** CONTEXT.md says
+- **A known conflict with CONTEXT.md, since resolved by ADR 0034.** CONTEXT.md says
   to avoid choosing the split gap and the parking period independently. The chain
   flies a 10-day split, while this ledger prices its burns and reversal on the
   20-day orbit, to match the parent's 600 km figures (10.785 km/s, 1.7 m/s,
