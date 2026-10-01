@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest plate-slug all export-env
+.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -63,6 +63,9 @@ seed-cost:  ## The expended seed ship's $/kg and tab:seed_amortization, stripped
 
 seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1, liquidation, steady state, IRR, break-even price (ADR 0036)
 	python -m src.harvest
+
+growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1, stepped rate (ADR 0037)
+	python -m src.growth_cost_report
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
 	python -m src.growth_ledger --slugs

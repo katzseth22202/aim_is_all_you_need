@@ -71,6 +71,7 @@ make sep-split-10d  # the same at the 10-day gap the paper flies (ADR 0026 adden
 make dsm-bound      # free the split's correction burn in time and place (ADR 0028)
 make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
+make growth-cost    # every growth launch unit charged, stepped cost of capital (ADR 0037)
 
 # Conda environment
 conda env create -f environment.yml
@@ -200,6 +201,20 @@ harvest.py                   ← seed_cost + growth_ledger + water_plate: the se
                                 valued as cargo at L1, k optimised for dollars
                                 under the k <= 10 cap; liquidation, steady state,
                                 IRR and break-even price (ADR 0036)
+
+learning_curve.py            ← leaf: Wright's law with a floor and an anchor,
+                                integrated at the unit midpoint (ADR 0037)
+      ↓
+growth_cost.py               ← learning_curve only: PURE arithmetic over a
+                                DesignInputs record (floats, kg and $). Charges
+                                every growth launch unit, the stepped 30%→10%
+                                rate, break-even p_L1 and steady $/kg by line.
+                                Tested on hand-built chains in the fast suite
+      ↓
+growth_cost_inputs.py        ← growth_cost + seed_cost + harvest: builds the
+                                DesignInputs from the flown chain (slow, cached)
+      ↓
+growth_cost_report.py        ← the report behind `make growth-cost`
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

@@ -27,7 +27,7 @@ this one was rebuilt from the parent's ``sec:mass_interest`` and reproduces its
 import argparse
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from astropy import units as u
@@ -51,6 +51,8 @@ from src.growth_ledger import (
     RAPTOR3_THRUST,
     SOLVED_EFFICIENCY,
     ChainSummary,
+    CycleGrowth,
+    MethaloxCycle,
     best_methalox_cycle,
     chain_growth,
     hydrogen_boil_off,
@@ -355,6 +357,9 @@ class DesignChain:
         seed: PuffSat mass one launch unit consumes on the first cycle, both
             waves counted as they leave Earth.
         summary: The chain's growth summary.
+        ledgers: Each cycle's launch unit, as the growth ledger flew it:
+            :class:`MethaloxCycle` for methalox, :class:`CycleGrowth`
+            otherwise.  The growth cost model (ADR 0037) prices them.
     """
 
     design: Design
@@ -363,6 +368,7 @@ class DesignChain:
     units: Tuple[int, ...]
     seed: u.Quantity
     summary: ChainSummary
+    ledgers: Tuple[Union[CycleGrowth, MethaloxCycle], ...] = ()
 
     @property
     def periods_years(self) -> List[float]:
@@ -426,6 +432,7 @@ def design_chain(
             tuple(m.engines for m in ledgers),
             seed,
             summarize_chain([c.period_years for c in three], growths),
+            tuple(ledgers),
         )
     hydrogen = design.pairing is HYDROGEN_5500K
     pitch = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
@@ -455,6 +462,7 @@ def design_chain(
         tuple(g.departure.chambers for g in grown),
         seed,
         summarize_chain([c.period_years for c in flown], growths),
+        tuple(grown),
     )
 
 

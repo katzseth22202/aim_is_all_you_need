@@ -1537,6 +1537,43 @@ of that rule. A fleet kilogram is worth `P (p_L1 - c_delivery)`, not a seed
 kilogram's cost (ADR 0036). _Avoid_: ADR 0035's `M10 / (1+r)^10` as a dollar
 value (it is fleet mass); Starship-to-L1 prices as the sale price.
 
+**Growth charge**:
+What every launch unit lofted for growth costs, charged at the return that lofts it:
+its lob, its expended plate, absorber and spray system, the film, its argon, its
+departure hardware and sprayers, tanks, propellant, cryostats, plugs and pitch, and
+the PuffSats and rods it sends onward, built new. The steady state's reinvested
+`1/G_n` pays it too. ADR 0036 charged none of it; ADR 0037 charges all of it. In the
+steady state it adds about `C_g / (G - 1)` per delivered launch unit, which is why a
+slow-growing design (methalox, `G` near 2) carries about one reinvested unit per
+delivered one. _Avoid_: calling the delivery ledger's $/kg the cost to L1 without the
+growth charge.
+
+**Lifting rocket**:
+The booster that lobs the 1500 t launch unit straight up to the 400 km intercept.
+Super Heavy as flown lofts 1250-1430 t with its braking reserve (parent
+`sec:vertical_lob`), so the growth ledger **assumes a booster 10-20% bigger**,
+big enough for 1500 t (author's judgment, ADR 0037). Lofted mass scales with the
+vehicle at fixed thrust-to-weight. The lob stays at $25 per kilogram lofted.
+_Avoid_: claiming today's booster lofts 1500 t with its brake; a vacuum second
+stage as the fix (the lob's loss is gravity loss, set by liftoff thrust).
+
+**Stepped cost of capital**:
+30% a year (Gompers et al.'s venture target) until the design's **first growth
+return** (`times[1]`: 5.46 yr for the chambers, 6.55 yr for methalox), then a late
+rate: 10% headline (the author's judgment, unsourced), 15% and 20% swept, because one
+measured cycle is a thin proof (ADR 0037). Reported as break-even `p_L1` and value
+per seed dollar, not IRR: growth costs give the cash flows several sign changes.
+_Avoid_: a flat 30% for life (counts the success-case haircut twice once the
+half-ceiling rows carry efficiency risk); quoting the 10% as sourced.
+
+**Steering package**:
+The avionics a PuffSat or rod carries: a phone-class board, cameras, gyro, radio,
+propane cold-gas valves, tank and battery, shielded by the PuffSat's own ice and
+argon. Two per 60 kg growth PuffSat, three per 2.5 kg departure rod, all expended.
+Priced per package, not per kilogram: $100 to 100 000 built, then 80% per doubling to
+a $10 floor (ASKS H6, unsourced). This makes rods about 20 times dearer per kilogram
+than growth PuffSats. _Avoid_: the paper's flat $20/kg for rods.
+
 **Delivery loading**:
 The plate schedule for a cargo push is the growth ledger's capped (k <= 10)
 Pontryagin schedule. Its starting price is chosen to maximise
