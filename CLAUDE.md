@@ -69,6 +69,8 @@ make shallow-dive   # what a shallow dive costs the direct route (ADR 0025)
 make sep-split      # can argon SEP buy the 20-day split's corrections? (ADR 0026)
 make sep-split-10d  # the same at the 10-day gap the paper flies (ADR 0026 addendum)
 make dsm-bound      # free the split's correction burn in time and place (ADR 0028)
+make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
+make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
 
 # Conda environment
 conda env create -f environment.yml
@@ -188,6 +190,16 @@ plume_state.py               ← bag_state + plume_thermal: the burn envelope an
 bag_converge.py              ← plume_state + bag_state: iterates the bag loop to
                                 a fixed point and reports the gap against the
                                 published tables (the ledger's rule 2)
+
+seed_cost.py                 ← growth_ledger + finite_burn_loss: the expended,
+                                refuelled seed ship (stripped baseline, stock
+                                comparison) and tab:seed_amortization; rebuilt
+                                from the parent's prose (ADR 0035/0036)
+      ↓
+harvest.py                   ← seed_cost + growth_ledger + water_plate: the seed
+                                valued as cargo at L1, k optimised for dollars
+                                under the k <= 10 cap; liquidation, steady state,
+                                IRR and break-even price (ADR 0036)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

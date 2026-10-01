@@ -1516,6 +1516,34 @@ range (ADR 0033). The default slug is **argon on ice PuffSats**; water pays
 _Avoid_: a constant loading; charging argon's ionisation as frozen at plate
 pressures (it is gone by 10 000-16 000 K).
 
+**Seed**:
+The first batch of PuffSats, the one that must reach Jupiter before any wave can
+come back. It flies the chain's first cycle (v_inf 11.99 km/s) on a Starship
+refuelled by twelve tankers in low orbit and **expended**. The baseline ship is
+**stripped** (no heat shield, flaps or landing propellant; three vacuum Raptors;
+40-60 t dry) and sends 72-92 t. The stock 85 t ship's 50.5 t is a comparison
+(ADR 0035, ADR 0036). Under the bank flight prices the tankers are about 90% of
+the bill, so the ship's payload moves $/kg far more than its hull price does.
+_Avoid_: quoting the stock ship's $910-14 840/kg as the seed's price; reusing the
+six-engine 31 m/s loss for a three-engine burn (117 m/s).
+
+**Harvest** / **liquidation** / **steady state**:
+Ways to turn the fleet into cargo at L1 instead of growth. **Liquidation**
+delivers the whole batch returning at the last return within ten years,
+`M10 / G_last` per seed kilogram. The **steady state** reinvests `1/G` of each
+return and delivers the rest from then on. It beats liquidation exactly when
+`G > (1+r)^T`, the grow-or-harvest rule, and `P` (cargo per PuffSat) cancels out
+of that rule. A fleet kilogram is worth `P (p_L1 - c_delivery)`, not a seed
+kilogram's cost (ADR 0036). _Avoid_: ADR 0035's `M10 / (1+r)^10` as a dollar
+value (it is fleet mass); Starship-to-L1 prices as the sale price.
+
+**Delivery loading**:
+The plate schedule for a cargo push is the growth ledger's capped (k <= 10)
+Pontryagin schedule. Its starting price is chosen to maximise
+`P (p_L1 - c_delivery)` per returning PuffSat, so it depends on the sale price.
+It opens at the cap and tapers to k of about 1-4, and beats a constant k = 10 on
+both cargo per lob and `P` (ADR 0036). _Avoid_: a constant k = 10 delivery.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.
