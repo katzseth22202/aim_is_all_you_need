@@ -21,7 +21,7 @@ unsourced.
 """
 
 import enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from scipy.optimize import brentq
@@ -123,6 +123,9 @@ class DesignInputs:
         arrivals: Each return's surviving share of a harvested batch.
         harvest: Index of the last return within ten years.
         deliveries: Each return's delivery schedules to choose from.
+        start_years: When the chain's first cycle departs, in years from the
+            seed's purchase: zero, unless the seed flew a slower route
+            (:func:`delayed`).
     """
 
     label: str
@@ -135,6 +138,7 @@ class DesignInputs:
     arrivals: Tuple[float, ...]
     harvest: int
     deliveries: Tuple[Tuple[DeliveryOption, ...], ...]
+    start_years: float = 0.0
 
     @property
     def seed(self) -> float:
@@ -144,7 +148,7 @@ class DesignInputs:
     @property
     def chain_years(self) -> float:
         """One lap of the chain, after which it repeats."""
-        return self.times[-1]
+        return self.times[-1] - self.start_years
 
     @property
     def proof_years(self) -> float:
@@ -661,3 +665,23 @@ def break_even_price(
     if worth(cap) < 0.0:
         return None
     return float(brentq(worth, 0.0, cap, xtol=1.0e-3))
+
+
+def delayed(inputs: DesignInputs, years: float) -> DesignInputs:
+    """The same program, every return ``years`` later; the seed still paid now.
+
+    A seed flown on a slower route (ADR 0039) comes home later, and everything
+    after it slides: growth, deliveries and the proof that steps the rate.
+
+    Args:
+        inputs: The design's chain.
+        years: The delay.
+
+    Returns:
+        The delayed chain.
+    """
+    return replace(
+        inputs,
+        times=tuple(t + years for t in inputs.times),
+        start_years=inputs.start_years + years,
+    )

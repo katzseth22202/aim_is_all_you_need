@@ -9,6 +9,8 @@ nu = pi, where boinor's tan(nu/2) forms overflow), so these are cross-checks,
 not a dependency.
 """
 
+import math
+
 import numpy as np
 import pytest
 from astropy import units as u
@@ -306,3 +308,45 @@ def test_bend_limit_matches_boinor_flyby() -> None:
         # it -- the Tisserand invariant the whole assist chain rests on.
         excess_out = np.linalg.norm((v_out - v_body).to_value(u.km / u.s))
         assert excess_out == pytest.approx(excess, abs=1e-9)
+
+
+def test_kepler_propagation_carries_a_circular_orbit_round() -> None:
+    mu, r = 1.32712440018e11, 1.495978707e8
+    v = math.sqrt(mu / r)
+    period = 2.0 * math.pi * math.sqrt(r**3 / mu)
+    for fraction, expected in (
+        (0.25, (0.0, 1.0)),
+        (0.5, (-1.0, 0.0)),
+        (1.0, (1.0, 0.0)),
+    ):
+        position, _ = conic_kernel.kepler_propagate(
+            np.array([r, 0.0, 0.0]), np.array([0.0, v, 0.0]), fraction * period, mu
+        )
+        assert position[:2] / r == pytest.approx(expected, abs=1e-9)
+
+
+def test_kepler_propagation_conserves_energy_and_momentum_on_a_hyperbola() -> None:
+    mu = 3.986004418e5
+    r0, v0 = np.array([7000.0, 0.0, 0.0]), np.array([0.0, 12.0, 1.0])
+    r1, v1 = conic_kernel.kepler_propagate(r0, v0, 86400.0, mu)
+
+    def energy(r: np.ndarray, v: np.ndarray) -> float:
+        return float(v @ v / 2.0 - mu / np.linalg.norm(r))
+
+    assert energy(r1, v1) == pytest.approx(energy(r0, v0), rel=1e-9)
+    assert np.cross(r1, v1) == pytest.approx(np.cross(r0, v0), rel=1e-9)
+
+
+def test_kepler_propagation_survives_a_very_eccentric_ellipse() -> None:
+    # A seed-route arc leaving Venus's distance at 41.7 km/s (e near 0.9) for
+    # 1.12 yr: Newton from the textbook first guess diverged here.
+    mu = 1.32712440018e11
+    r0 = np.array([70764396.82235315, -81856801.971229, 0.0])
+    v0 = np.array([33.41901032985644, -25.02937898868666, 0.0])
+    for tof in np.linspace(0.0, 35292689.33135213, 16):
+        r1, v1 = conic_kernel.kepler_propagate(r0, v0, tof, mu)
+        back, _ = conic_kernel.kepler_propagate(r1, v1, -tof, mu)
+        assert back == pytest.approx(r0, rel=1e-8)
+        assert float(v1 @ v1 / 2 - mu / np.linalg.norm(r1)) == pytest.approx(
+            float(v0 @ v0 / 2 - mu / np.linalg.norm(r0)), rel=1e-8
+        )

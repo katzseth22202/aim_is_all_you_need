@@ -407,9 +407,76 @@ Not in the draft, deliberately: lunar-sourced tanker propellant (`sec:isru`).
 The tankers are most of the bill, so it would matter, but nothing in either repo
 prices it.
 
-**Queued companion work (after ADR 0038):** a seed-route option in
-`src/seed_cost.py`. It prices each route's actual burns from low orbit (direct,
-E-V-E-J, VVEJGA, VEEGA, each with and without SEP), carries the SEP hardware's
-mass and dollars as above, takes each route's return speed, re-flies the chain
-from the later start, and reruns the cheap- and dear-seed break-evens with the
-proof date moved. A 15-year harvest is swept separately.
+**Companion work in progress (2026-10-02, ADR 0039 not yet written).**
+`src/seed_route.py` prices each route's burns from low orbit and scores it on
+the seed it returns per dollar, discounted at 30% to its return. Its model:
+
+- Patched conics: circular, coplanar planet orbits phased at their real
+  ecliptic longitudes (astropy's ephemeris), Lambert legs between flybys, the
+  Jupiter perijove solved inside each evaluation so the return lands on Earth
+  exactly.
+- The return must reach the cycle's collision speed (`RETURN_FLOOR`,
+  51.13 km/s).
+- Launch anywhere in a six-year window opening 2026-11-09.
+- Sequences: EJ (direct), EEJ, EVEJ, EVVEJ, EVEEJ. Node burns are flown by
+  methalox at periapsis, or by an SEP stage at 0.5, 1, 2 or 4 W/kg (ADR 0026's
+  masses, argon at 2000 s, efficiency 0.5) in deep space.
+- Each route is searched by pygmo's self-adaptive differential evolution (8
+  independent islands per flyby-bend side, 3 seeds), and its champion is
+  re-priced with the real finite-burn loss.
+- Two seed ships: the dear one (13 flights at the bank prices plus a $20M hull,
+  $670M) and the cheap one ($31M).
+
+`growth_cost.delayed()` slides the whole program by a route's delay, to rerun
+the break-evens with the proof date moved. It is tested but not yet wired into
+`make growth-cost`. **Still to do:** finish the route study, wire in the
+delay, write ADR 0039, then replace §6's route paragraphs. The 15-year harvest
+sweep is still owed too.
+
+**Preliminary results, dear ship ($670M), stripped 60 t ship, 3 seeds each.**
+The study is still running, so these are partial:
+
+| Route | Propulsion | Trip (yr) | Returns (yr after window opens) | Seed (t) | Cost ($M) | Seed per $M, discounted (kg) |
+|---|---|---|---|---|---|---|
+| EJ | methalox | 3.33 | 3.33 | 93.9 | 670 | 58.45 |
+| EEJ | methalox | 5.19 | 5.52 | 153.7 | 670 | 53.93 |
+| EEJ | SEP 0.5 W/kg | 6.17 | 6.61 | 119.3 | 682 | 30.86 |
+| EEJ | SEP 1 W/kg | 6.19 | 6.61 | 150.8 | 703 | 37.88 |
+
+So far the pattern matches the waiting test in the draft. An Earth loop sends
+1.64 times the seed but returns 2.19 years later. At 30% that needs 1.78
+times, so it loses by 8%. Low-power SEP flies too little of the maneuvering to pay
+for its array.
+
+An earlier exploratory run scored routes on **seed mass alone** (no dollars,
+no discounting) and is superseded. It showed the mass gain exists: EEJ with SEP
+at 4 W/kg sent 322 t against 110 t direct, but it returned 5.5 years later. With no
+discounting it had no reason to launch early, so its dates and its rows
+should not be quoted.
+
+---
+
+## 7. Status (2026-10-02)
+
+**Answered in the companion:**
+- Asks G1-G4: ADR 0037, with ADR 0038 fixing the off-by-one that G3 exposed.
+- All ten requested outputs: `make growth-cost`.
+- All eight pushback items in §4: accepted by the author on 2026-10-01.
+- Validation against `tab:seed_return`: §1.
+- The full suite passed (792 tests) at the ADR 0038 commit, `37c19f3`.
+
+**Open:**
+1. **Seed routes (§6):** in progress, as above. This is the only modelling
+   question left in the growth cost model.
+2. **Nothing is written into the parent's `.tex`.** §5 lists the 13 changes.
+   The author's plan is to bring everything back together once the route
+   study lands.
+3. **Citations owed:** the 10% late rate, the argon price, and analogues for
+   the chamber, plate, sprayers, cryostats and package. Until then, each is a
+   labeled hypothesis.
+4. **Argon supply** against about 30 000 t per cycle (§4 item 8). This is for
+   the paper to check; the companion does not model it.
+5. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a
+   falling lob or sale price over time, demand capping the fleet, a seed
+   larger than one launch unit, and the trade between rod size and package
+   count (G4).

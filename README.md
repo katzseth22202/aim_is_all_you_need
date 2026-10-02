@@ -93,6 +93,53 @@ conda activate puffsat_math_env
 
 The conda environment includes all necessary dependencies including development tools.
 
+### Optional: trajectory-optimisation tools (seed routes)
+
+The seed-route analysis (gravity assists plus solar-electric propulsion, ADR
+0039) uses [pygmo](https://esa.github.io/pygmo2/) for global optimisation and
+[pykep](https://esa.github.io/pykep/) 3 for low-thrust legs and planetary
+ephemerides. Nothing else in the repository needs them, and their tests skip
+when they are missing.
+
+With conda, `environment.yml` already lists both (conda-forge).
+
+With pip or uv (how the 2026-10 environment was built: CPython 3.13 on
+aarch64 Linux, a uv-managed venv with no pip):
+
+```bash
+uv pip install --python "$(which python)" -e ".[trajopt]"   # pygmo 2.19.8, pykep 3.0.1
+```
+
+**Known packaging bug.** The PyPI wheel for pykep 3.0.1 omits the JSON data of
+its benchmark "gym", so `import pykep` fails with `FileNotFoundError: ...
+pykep/trajopt/gym/tops/_tops_cr3bp.json`. Nothing here uses the gym, so empty
+stand-ins are enough:
+
+```bash
+D="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/pykep/trajopt/gym/tops"
+mkdir -p "$D"
+for f in _tops_cr3bp _tops_twobody _tops_ss _tops_mee; do
+  [ -f "$D/$f.json" ] || echo '{}' > "$D/$f.json"
+done
+python -c "import pygmo, pykep; print(pygmo.__version__, pykep.__version__)"
+```
+
+pykep 3.0.0 has no CPython 3.13 wheel (cp311 only), so 3.0.1 is the version to
+use on 3.13.
+
+**Known crash at exit (pykep 3.0.1 + pygmo 2.19.8, aarch64).** A process that
+imports pykep can abort at interpreter shutdown with `corrupted double-linked
+list` (exit code 134), after its work has finished correctly. Importing pygmo
+first avoided it in some import orders and not others, so the repository does
+not rely on pykep: the impulsive seed-route search (`src/seed_route.py`) uses
+only pygmo, which exits cleanly, and propagates arcs with
+`conic_kernel.kepler_propagate`.
+
+**pygmo archipelagos and `__main__`.** pygmo's multiprocessing islands re-import
+the calling script in each worker. A script that starts an archipelago must keep
+its work behind `if __name__ == "__main__":`, or every worker re-runs the whole
+script.
+
 ### Run Calculations
 
 ```bash

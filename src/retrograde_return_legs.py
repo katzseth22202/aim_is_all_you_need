@@ -705,6 +705,9 @@ class _LadderPricing:
         arrival_excess_vector: That excess as a heliocentric 3-vector (km/s).
         arrival_time: Seconds from the longitudes0 reference at the final body.
         arrival_longitude: Heliocentric longitude of the final body then (rad).
+        legs: Each leg's Lambert arc as ``(position km, velocity km/s, tof s)``
+            at its start, so a caller can sample the arc (ADR 0039 integrates
+            sunlight along it).
     """
 
     departure_burn: float
@@ -714,6 +717,9 @@ class _LadderPricing:
     arrival_excess_vector: npt.NDArray[np.float64]
     arrival_time: float
     arrival_longitude: float
+    legs: Tuple[
+        Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float], ...
+    ] = ()
 
 
 def _phased_ladder_burn(
@@ -752,6 +758,7 @@ def _phased_ladder_burn(
     mu = params.flyby.mu_sun
     times = [float(t) for t in leg_times]
     node_burns: List[float] = []
+    legs: List[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], float]] = []
     excess_in: Optional[npt.NDArray[np.float64]] = None
     departure_burn = 0.0
     clock = epoch
@@ -774,6 +781,7 @@ def _phased_ladder_burn(
         except (ValueError, RuntimeError):
             return None
         excess_out = v_depart - v_body
+        legs.append((r0, v_depart, tof))
         if excess_in is None:
             # Departure: no flyby to turn anything, so the whole excess is
             # bought with the Oberth burn at 200 km, starting from whatever the
@@ -800,6 +808,7 @@ def _phased_ladder_burn(
         arrival_excess_vector=excess_in,
         arrival_time=clock,
         arrival_longitude=lon_there,
+        legs=tuple(legs),
     )
 
 

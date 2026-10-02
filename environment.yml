@@ -11,6 +11,11 @@ dependencies:
   - mypy
   - nbdime
   - pandas
+  # Seed-route trajectory optimisation (ADR 0039): global optimisers and
+  # low-thrust legs on real ephemerides. The PyPI pykep 3.0.1 wheel omits
+  # pykep/trajopt/gym/tops/*.json and fails on import; conda-forge does not.
+  - pygmo
+  - pykep>=3
   - pytest
   - python=3.13
   - tabulate

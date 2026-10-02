@@ -57,10 +57,12 @@ def test_wheel_contains_code_dependencies_and_importable_entry_point(
             name for name in names if name.endswith(".dist-info/METADATA")
         )
         metadata = Parser().parsestr(archive.read(metadata_name).decode())
-        dependencies = {
-            Requirement(value).name.lower()
-            for value in metadata.get_all("Requires-Dist", [])
-        }
+        requirements = [
+            Requirement(value) for value in metadata.get_all("Requires-Dist", [])
+        ]
+        dependencies = {r.name.lower() for r in requirements if r.marker is None}
+        optional = {r.name.lower() for r in requirements if r.marker is not None}
+        assert optional == {"pygmo", "pykep"}  # the trajopt extra (ADR 0039)
         assert dependencies == {
             "astropy",
             "boinor",

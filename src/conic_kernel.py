@@ -20,7 +20,7 @@ CONTEXT.md calls this module the "conic kernel".
 """
 
 from dataclasses import dataclass
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Callable, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 
@@ -441,3 +441,123 @@ def speed_with_escape_energy(v_infinity: float, v_esc: float) -> float:
         The local speed at that radius (km/s).
     """
     return float(np.hypot(v_infinity, v_esc))
+
+
+def _stumpff(z: float) -> Tuple[float, float]:
+    """Stumpff functions ``(C(z), S(z))`` for the universal variable."""
+    if z > 1e-8:
+        root = float(np.sqrt(z))
+        return (1.0 - float(np.cos(root))) / z, (root - float(np.sin(root))) / root**3
+    if z < -1e-8:
+        root = float(np.sqrt(-z))
+        return (float(np.cosh(root)) - 1.0) / -z, (
+            float(np.sinh(root)) - root
+        ) / root**3
+    return 0.5 - z / 24.0, 1.0 / 6.0 - z / 120.0
+
+
+def kepler_propagate(
+    position: np.ndarray, velocity: np.ndarray, tof: float, mu: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Two-body state after ``tof``, by universal variables (any conic).
+
+    Solves the universal Kepler equation for ``chi`` and applies the Lagrange
+    ``f, g`` coefficients (Curtis, Algorithms 3.3-3.4). An ellipse's time is
+    first reduced modulo its period. Newton's method is tried first; time rises
+    monotonically with ``chi``, so when Newton stalls (very eccentric arcs) the
+    root is bracketed and found by ``brentq`` instead.
+
+    Args:
+        position: Initial position (km, 3-vector).
+        velocity: Initial velocity (km/s, 3-vector).
+        tof: Time of flight (s); negative propagates backward.
+        mu: Gravitational parameter (km^3/s^2).
+
+    Returns:
+        (position km, velocity km/s) after ``tof``.
+    """
+    r0 = np.asarray(position, dtype=float)
+    v0 = np.asarray(velocity, dtype=float)
+    r0_norm = float(np.linalg.norm(r0))
+    radial = float(r0 @ v0) / r0_norm
+    alpha = 2.0 / r0_norm - float(v0 @ v0) / mu
+    sqrt_mu = float(np.sqrt(mu))
+    if alpha > 0.0:
+        period = 2.0 * np.pi / (sqrt_mu * alpha**1.5)
+        tof = float(np.fmod(tof, period))
+
+    def residual(chi: float) -> float:
+        c, s = _stumpff(alpha * chi * chi)
+        return (
+            r0_norm * radial / sqrt_mu * chi * chi * c
+            + (1.0 - alpha * r0_norm) * chi**3 * s
+            + r0_norm * chi
+            - sqrt_mu * tof
+        )
+
+    chi = _newton_chi(residual, alpha, r0_norm, radial, sqrt_mu, tof)
+    if chi is None:
+        chi = _bracketed_chi(residual, alpha, r0_norm, sqrt_mu, tof)
+    z = alpha * chi * chi
+    c, s = _stumpff(z)
+    f = 1.0 - chi * chi / r0_norm * c
+    g = tof - chi**3 / sqrt_mu * s
+    r1 = f * r0 + g * v0
+    r1_norm = float(np.linalg.norm(r1))
+    f_dot = sqrt_mu / (r1_norm * r0_norm) * (alpha * chi**3 * s - chi)
+    g_dot = 1.0 - chi * chi / r1_norm * c
+    return r1, f_dot * r0 + g_dot * v0
+
+
+def _newton_chi(
+    residual: Callable[[float], float],
+    alpha: float,
+    r0_norm: float,
+    radial: float,
+    sqrt_mu: float,
+    tof: float,
+) -> Optional[float]:
+    """Newton on the universal Kepler equation; None if it does not converge."""
+    chi = sqrt_mu * abs(alpha) * tof
+    if alpha <= 0.0 or chi == 0.0:
+        chi = sqrt_mu * tof / r0_norm
+    for _ in range(60):
+        z = alpha * chi * chi
+        c, s = _stumpff(z)
+        slope = (
+            r0_norm * radial / sqrt_mu * chi * (1.0 - z * s)
+            + (1.0 - alpha * r0_norm) * chi * chi * c
+            + r0_norm
+        )
+        if slope <= 0.0 or not np.isfinite(slope):
+            return None
+        step = residual(chi) / slope
+        chi -= step
+        if not np.isfinite(chi):
+            return None
+        if abs(step) < 1e-12 * max(1.0, abs(chi)):
+            return float(chi)
+    return None
+
+
+def _bracketed_chi(
+    residual: Callable[[float], float],
+    alpha: float,
+    r0_norm: float,
+    sqrt_mu: float,
+    tof: float,
+) -> float:
+    """Root of the monotonic universal Kepler equation by bracketing."""
+    from scipy.optimize import brentq
+
+    if tof == 0.0:
+        return 0.0
+    direction = 1.0 if tof > 0.0 else -1.0
+    if alpha > 0.0:
+        # One period spans chi = 2 pi / sqrt(alpha), and tof is reduced to it.
+        limit = direction * 2.0 * np.pi / float(np.sqrt(alpha))
+    else:
+        limit = direction * sqrt_mu * abs(tof) / r0_norm
+        while residual(limit) * direction < 0.0:
+            limit *= 2.0
+    return float(brentq(residual, 0.0, limit, xtol=1e-14, rtol=1e-15, maxiter=500))

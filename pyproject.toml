@@ -26,6 +26,11 @@ dependencies = [
     "tabulate",
 ]
 
+[project.optional-dependencies]
+# Seed-route trajectory optimisation (ADR 0039). With pip/uv, pykep 3.0.1's
+# wheel lacks pykep/trajopt/gym/tops/*.json: create the four files as "{}".
+trajopt = ["pygmo>=2.19", "pykep>=3"]
+
 [project.scripts]
 main = "src.main:main"
 

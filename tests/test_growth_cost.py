@@ -17,6 +17,7 @@ from src.growth_cost import (
     DiscountSchedule,
     PriceBook,
     break_even_price,
+    delayed,
     legacy_prices,
     present_value,
     run_program,
@@ -219,3 +220,38 @@ def test_growth_and_delivery_plates_share_one_learning_tally() -> None:
     growth_units = 1.0 + 2.0  # returns 0 and 1 loft 1 and 2 launch units
     delivery_units = 4.0 * SEED / DELIVERY.puffsats
     assert program.plates == pytest.approx(growth_units + delivery_units)
+
+
+def test_a_slower_seed_delays_every_return_and_the_proof() -> None:
+    # A seed route that comes back 2.5 years later shifts the whole program; the
+    # seed is still paid at t = 0, so the 30% rate runs 2.5 years longer.
+    late = delayed(chain(), 2.5)
+    assert late.times == pytest.approx((5.5, 8.5, 11.5))
+    assert late.proof_years == pytest.approx(8.5)
+    # A lap of the repeating chain is still 9 years long, not 11.5.
+    assert late.chain_years == pytest.approx(chain().chain_years)
+    on_time = run_program(chain(), FLAT, 337.0, 500.0, steady=True).flows
+    slipped = run_program(late, FLAT, 337.0, 500.0, steady=False).flows
+    assert slipped[0] == on_time[0]
+    assert [t for t, _ in slipped[1:]] == pytest.approx([5.5, 8.5, 11.5])
+
+
+def test_a_late_cheap_seed_is_the_on_time_seed_at_its_discounted_price() -> None:
+    # Delaying the program by dt while the rate is still 30% (the proof slides
+    # with it) scales every later flow by 1.3^-dt, so a route k times cheaper
+    # and dt later breaks even where the direct seed would at S / (k 1.3^-dt).
+    # Exact only when the seed's own manufacture, paid at t = 0 and not scaled
+    # by k, is free, so the report applies delayed() rather than this shortcut.
+    k, dt, price = 2.9, 2.3, 9293.0
+    book = replace(FLAT, fleet_flat=0.0)
+    late_chain = delayed(chain(), dt)
+
+    def schedule(inputs: DesignInputs) -> DiscountSchedule:
+        return DiscountSchedule.stepped(0.30, 0.10, inputs.proof_years)
+
+    late = break_even_price(late_chain, book, price / k, schedule(late_chain), True)
+    equivalent = break_even_price(
+        chain(), book, price / (k * 1.3**-dt), schedule(chain()), True
+    )
+    assert late is not None and equivalent is not None
+    assert late == pytest.approx(equivalent, rel=1e-6)
