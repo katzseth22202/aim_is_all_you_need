@@ -24,7 +24,7 @@ part of ``make all``.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -124,6 +124,12 @@ class TwoWaveCycle:
             payload (km/s at 200 km).
         growth_wave_burn: Delta-v the growth wave spends to arrive early
             (km/s), the price of the split.
+        onward_burn: The departure burn the payload these waves push must
+            fly (km/s): the *next* window's ``departure_burn``, since the
+            waves arrive at this cycle's return, which is the next departure.
+            Pricing that departure with this cycle's own ``departure_burn``
+            was an off-by-one: a 3S return feeding a 2S departure was
+            undercharged by up to 1.8 km/s (ADR 0038).
     """
 
     index: int
@@ -138,6 +144,7 @@ class TwoWaveCycle:
     growth_wave_arrival_jd: float
     growth_wave_v_b: float
     growth_wave_burn: float
+    onward_burn: float
 
     @property
     def period_synodics(self) -> float:
@@ -206,16 +213,9 @@ def adaptive_two_wave_cycles(
     one_synodic_days = _FIXED_TWO_SYNODIC_DAYS / 2.0
     cycles: List[TwoWaveCycle] = []
     while departure_jd + 2.0 * one_synodic_days <= horizon_end_jd:
-        two_return_jd = departure_jd + 2.0 * one_synodic_days
-        selected = _cheapest_return(departure_jd, two_return_jd)
-        multiple = 2
-        return_jd = two_return_jd
-        if 1000.0 * selected.dsm > threshold_m_s:
-            multiple = 3
-            return_jd = departure_jd + 3.0 * one_synodic_days
-            if return_jd > horizon_end_jd:
-                break
-            selected = _cheapest_return(departure_jd, return_jd)
+        multiple, return_jd, selected = _fly_window(departure_jd, threshold_m_s)
+        if return_jd > horizon_end_jd:
+            break
         growth_arrival_jd = return_jd - split_days
         growth = _cheapest_return(departure_jd, growth_arrival_jd)
         cycles.append(
@@ -234,12 +234,69 @@ def adaptive_two_wave_cycles(
                 growth_wave_arrival_jd=growth_arrival_jd,
                 growth_wave_v_b=growth.earth_return_collision_speed,
                 growth_wave_burn=growth.total_dv,
+                onward_burn=float("nan"),
             )
         )
         departure_jd = return_jd
     if not cycles:
         raise RuntimeError("study horizon contains no complete cycle")
-    return cycles
+    after_last = departure_burn_after(cycles[-1].return_jd, threshold_m_s)
+    return link_onward_burns(cycles, after_last)
+
+
+def _fly_window(
+    departure_jd: float, threshold_m_s: float
+) -> Tuple[int, float, _ManeuverSolution]:
+    """The adaptive policy's return for one departure: 2S unless its DSM is too dear.
+
+    Args:
+        departure_jd: TDB Julian date of the departure.
+        threshold_m_s: Two-synodic maneuver proxy above which the window falls
+            back to a three-synodic return.
+
+    Returns:
+        ``(synodic multiple, return date, selected return)``.
+    """
+    one_synodic_days = _FIXED_TWO_SYNODIC_DAYS / 2.0
+    return_jd = departure_jd + 2.0 * one_synodic_days
+    selected = _cheapest_return(departure_jd, return_jd)
+    if 1000.0 * selected.dsm <= threshold_m_s:
+        return 2, return_jd, selected
+    return_jd = departure_jd + 3.0 * one_synodic_days
+    return 3, return_jd, _cheapest_return(departure_jd, return_jd)
+
+
+def departure_burn_after(
+    return_jd: float, threshold_m_s: float = _DEFAULT_THRESHOLD_M_S
+) -> float:
+    """The departure burn of the window that opens at ``return_jd`` (km/s).
+
+    Args:
+        return_jd: TDB Julian date a cycle returns, which is the next departure.
+        threshold_m_s: As in :func:`adaptive_two_wave_cycles`.
+
+    Returns:
+        That window's periapsis speed increment above the closed-cycle speed.
+    """
+    selected = _fly_window(return_jd, threshold_m_s)[2]
+    return float(selected.earth_departure_periapsis_speed - _cycle_periapsis_speed())
+
+
+def link_onward_burns(
+    cycles: Sequence[TwoWaveCycle], after_last: float
+) -> List[TwoWaveCycle]:
+    """Give each cycle the departure burn its waves' payload will fly.
+
+    Args:
+        cycles: Consecutive flown cycles.
+        after_last: The departure burn of the window after the last cycle.
+
+    Returns:
+        The cycles, each with ``onward_burn`` set to the next one's
+        ``departure_burn``.
+    """
+    onward = [c.departure_burn for c in cycles[1:]] + [after_last]
+    return [replace(c, onward_burn=burn) for c, burn in zip(cycles, onward)]
 
 
 def price_cycle(
@@ -295,7 +352,7 @@ def price_cycle(
         growth_collision_speed=cycle.growth_wave_v_b,
         growth_wave_burn=cycle.growth_wave_burn + cycle.nozzle_wave_dsm,
         nozzle_collision_speed=cycle.nozzle_wave_v_b,
-        departure_dv=cycle.departure_burn,
+        departure_dv=cycle.onward_burn,
         cycle=cycle.period_years,
         exhaust_speed=VE_METHALOX,
         recovery=recovery,

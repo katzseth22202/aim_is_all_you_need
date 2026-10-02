@@ -80,6 +80,8 @@ from src.two_wave_growth import (
     VE_METHALOX,
     ChainGrowth,
     TwoWaveCycle,
+    departure_burn_after,
+    link_onward_burns,
     price_chain,
 )
 
@@ -407,9 +409,13 @@ def correction_cycles_to_two_wave(
                 growth_wave_arrival_jd=cycle.return_jd - cycle.split_days,
                 growth_wave_v_b=growth.earth_return_collision_speed,
                 growth_wave_burn=scale * growth.total_dv + array_dv,
+                onward_burn=float("nan"),
             )
         )
-    return out
+    if not out:
+        return out
+    # Each return's payload leaves on the next window (ADR 0038).
+    return link_onward_burns(out, departure_burn_after(out[-1].return_jd))
 
 
 def _cycle_periapsis_speed() -> float:

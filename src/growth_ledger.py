@@ -313,7 +313,7 @@ def price_cycle_growth(
         parking_period(cycle),
     )
     departure_burn = departure_at_altitude(
-        cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
+        cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
     )
     model = loss_model or _orbit_loss(fixed_direction_loss, parking_period(cycle))
 
@@ -685,7 +685,7 @@ def price_methalox_cycle(
         parking_period(cycle),
     )
     burn = departure_at_altitude(
-        cycle.departure_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
+        cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
     )
     model = loss_model or _orbit_loss(steered_loss, parking_period(cycle))
     best: Optional[MethaloxDeparture] = None

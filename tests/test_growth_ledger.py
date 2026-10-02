@@ -1,6 +1,7 @@
 """Tests for src/growth_ledger.py: the 1500 t launch unit through one cycle."""
 
 import dataclasses
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -45,14 +46,20 @@ def test_departing_from_600_km_costs_the_parents_premium(
 
 
 def _cycle(
-    multiple: int, burn: float, nozzle_v_b: float, growth_v_b: float
+    multiple: int,
+    burn: float,
+    nozzle_v_b: float,
+    growth_v_b: float,
+    onward: Optional[float] = None,
 ) -> TwoWaveCycle:
+    """A cycle whose payload departs on ``onward`` (default: a repeat of ``burn``)."""
     period = {2: 2.184, 3: 3.276}[multiple]
     return TwoWaveCycle(
         index=0, departure_jd=0.0, return_jd=0.0, synodic_multiple=multiple,
         period_years=period, departure_burn=burn, nozzle_wave_v_b=nozzle_v_b,
         nozzle_wave_dsm=0.0, split_days=20.0, growth_wave_arrival_jd=0.0,
         growth_wave_v_b=growth_v_b, growth_wave_burn=0.0,
+        onward_burn=burn if onward is None else onward,
     )  # fmt: skip
 
 
@@ -181,6 +188,22 @@ def test_each_wave_pays_its_own_correction_burn_in_methalox() -> None:
     )
     assert paid.growth == pytest.approx(expected, rel=1e-12)
     assert paid.growth < free.growth
+
+
+def test_the_pushed_unit_departs_on_the_next_windows_burn() -> None:
+    """Return n's waves push a payload that leaves on cycle n + 1, so it flies
+    the onward burn, not the burn this cycle's own batch left Earth on."""
+    three_to_two = _cycle(3, 5.33, 55.4, 57.4, onward=7.17)
+    args = (0.7, METHANE_7000K, 0.7, 0.05)
+    flown = price_cycle_growth(three_to_two, *args, loss_model=square_law_loss)
+    repeat = _cycle(3, 7.17, 55.4, 57.4)
+    expected = price_cycle_growth(repeat, *args, loss_model=square_law_loss)
+    assert flown.growth == pytest.approx(expected.growth, rel=1e-12)
+    methalox = price_methalox_cycle(three_to_two, 0.7, 0.05, loss_model=square_law_loss)
+    expected_methalox = price_methalox_cycle(
+        repeat, 0.7, 0.05, loss_model=square_law_loss
+    )
+    assert methalox.growth == pytest.approx(expected_methalox.growth, rel=1e-12)
 
 
 def test_hydrogen_pays_its_cryostats_and_boil_off_before_it_departs() -> None:

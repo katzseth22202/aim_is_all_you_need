@@ -324,7 +324,8 @@ def price_chain_departures(
     """Price every flown cycle's departure at its best chamber count.
 
     Each burn starts at the closed cycle's 200 km periapsis speed and adds the
-    cycle's own ``departure_burn``, head-on into its own nozzle wave, whose
+    ``onward_burn`` of the window the payload leaves on (the next cycle's
+    departure, ADR 0038), head-on into this return's nozzle wave, whose
     collision speed ``nozzle_wave_v_b`` is the impactor speed in the same frame.
 
     Args:
@@ -344,7 +345,7 @@ def price_chain_departures(
         best_departure(
             stack_mass,
             periapsis,
-            cycle.departure_burn * u.km / u.s,
+            cycle.onward_burn * u.km / u.s,
             cycle.nozzle_wave_v_b * u.km / u.s,
             pairing,
             efficiency,

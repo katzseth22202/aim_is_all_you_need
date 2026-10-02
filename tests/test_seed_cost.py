@@ -121,9 +121,11 @@ def test_the_chain_seed_leaves_at_the_parents_excess_speed() -> None:
 @pytest.mark.parametrize(
     "index, seed_t, annual, ten_year, built",
     [
-        (0, 72.70, 0.194, 5.09, 12.5),
-        (2, 80.81, 0.510, 69.5, 34.4),
-        (4, 80.73, 0.570, 104.2, 44.3),
+        # ADR 0038 (onward burn); the parent printed 72.7 / 19% / 5.1 / 12.5,
+        # 80.81 / 51% / 69.5 / 34.4 and 80.73 / 57% / 104.2 / 44.3.
+        (0, 72.71, 0.185, 5.071, 10.70),
+        (2, 83.08, 0.488, 49.66, 25.28),
+        (4, 83.25, 0.548, 75.07, 32.85),
     ],
 )
 def test_tab_seed_amortization_reproduces(

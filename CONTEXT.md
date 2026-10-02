@@ -1537,6 +1537,16 @@ of that rule. A fleet kilogram is worth `P (p_L1 - c_delivery)`, not a seed
 kilogram's cost (ADR 0036). _Avoid_: ADR 0035's `M10 / (1+r)^10` as a dollar
 value (it is fleet mass); Starship-to-L1 prices as the sale price.
 
+**Onward burn**:
+The departure burn the payload pushed by a cycle's returning waves must fly:
+the **next** window's `departure_burn`, because the waves arrive at this cycle's
+return, which is the next cycle's departure (`TwoWaveCycle.onward_burn`, ADR
+0038). A 3S outbound needs about 5.3 km/s above the closed-cycle speed and a 2S
+one about 7.0, so a 3S return feeding a 2S departure flies the dearer burn.
+_Avoid_: pricing a push's departure with its own cycle's `departure_burn` (the
+pre-ADR 0038 off-by-one, which undercharged cycle 0 by 1.84 km/s); confusing it
+with the **seed**'s burn, which really is cycle 0's own.
+
 **Growth charge**:
 What every launch unit lofted for growth costs, charged at the return that lofts it:
 its lob, its expended plate, absorber and spray system, the film, its argon, its

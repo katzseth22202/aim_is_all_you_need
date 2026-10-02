@@ -1,5 +1,7 @@
 """Tests for src/chamber_departure.py: the walled chamber's departure, hardware charged."""
 
+from typing import Optional
+
 import pytest
 from astropy import units as u
 
@@ -115,31 +117,37 @@ def test_growth_per_cycle_reproduces_the_parents_hydrogen_ledger() -> None:
     )
 
 
-def _cycle(multiple: int, burn: float, v_b: float) -> TwoWaveCycle:
+def _cycle(
+    multiple: int, burn: float, v_b: float, onward: Optional[float] = None
+) -> TwoWaveCycle:
+    """A cycle whose payload departs on ``onward`` (default: a repeat of ``burn``)."""
     period = {2: 2.184, 3: 3.276}[multiple]
     return TwoWaveCycle(
         index=0, departure_jd=0.0, return_jd=0.0, synodic_multiple=multiple,
         period_years=period, departure_burn=burn, nozzle_wave_v_b=v_b,
         nozzle_wave_dsm=0.0, split_days=10.0, growth_wave_arrival_jd=0.0,
         growth_wave_v_b=v_b + 2.0, growth_wave_burn=0.0,
+        onward_burn=burn if onward is None else onward,
     )  # fmt: skip
 
 
-def test_each_cycle_departs_on_its_own_burn_into_its_own_wave() -> None:
-    """A cycle's burn starts at the 200 km cycle periapsis and meets the nozzle
-    wave head-on, so ignition closes at ``v_b`` plus the periapsis speed."""
+def test_each_payload_departs_on_the_next_windows_burn_into_its_own_wave() -> None:
+    """The waves of return ``n`` push a payload that leaves on cycle ``n + 1``, so
+    the burn is the onward one (ADR 0038). It starts at the 200 km cycle periapsis
+    and meets this return's nozzle wave head-on."""
     stack = 1000.0 * u.t
-    cycles = [_cycle(2, 7.0, 61.0), _cycle(3, 5.33, 55.4)]
+    cycles = [_cycle(3, 5.33, 55.4, onward=7.0), _cycle(2, 7.0, 61.0, onward=5.33)]
     priced = price_chain_departures(
         cycles, stack, METHANE_7000K, 0.7, loss_model=square_law_loss
     )
     v_peri = puffsat_cycle_periapsis_speed()
     for cycle, ledger in zip(cycles, priced):
         alone = best_departure(
-            stack, v_peri, cycle.departure_burn * KM_S, cycle.nozzle_wave_v_b * KM_S,
+            stack, v_peri, cycle.onward_burn * KM_S, cycle.nozzle_wave_v_b * KM_S,
             METHANE_7000K, 0.7, loss_model=square_law_loss,
         )  # fmt: skip
         assert ledger == alone
+    # The 3S return feeding a 2S departure now flies the dearer 7.0 km/s burn.
     assert priced[0].delivered_net < priced[1].delivered_net
 
 

@@ -19,8 +19,10 @@ from src.two_wave_growth import (
     TwoWaveCycle,
     adaptive_two_wave_cycles,
     analyze_two_wave_growth,
+    departure_burn_after,
     fleet_ignition_windows,
     headon_slug_ratio_bounds,
+    link_onward_burns,
     price_chain,
     price_cycle,
 )
@@ -42,6 +44,7 @@ CYCLE = TwoWaveCycle(
     growth_wave_arrival_jd=2462131.7,
     growth_wave_v_b=62.5,
     growth_wave_burn=0.5,
+    onward_burn=7.0580,
 )
 
 
@@ -56,6 +59,28 @@ def test_chain_rides_the_audited_adaptive_policy():
     assert max(c.nozzle_wave_dsm for c in cycles) == pytest.approx(
         18.478978 / 1000.0, abs=1e-6
     )
+
+
+def test_each_cycles_waves_push_a_payload_onto_the_next_departure() -> None:
+    # A 3S return feeding a 2S departure: the payload flies the 2S burn.
+    three = replace(CYCLE, index=0, synodic_multiple=3, departure_burn=5.329)
+    two = replace(CYCLE, index=1, departure_burn=7.1706)
+    linked = link_onward_burns([three, two], after_last=6.9)
+    assert [c.onward_burn for c in linked] == [7.1706, 6.9]
+    assert [c.departure_burn for c in linked] == [5.329, 7.1706]
+
+
+@pytest.mark.slow
+def test_the_flown_chains_onward_burns_are_its_next_departures() -> None:
+    """The last cycle's payload flies the window after the horizon."""
+    cycles = adaptive_two_wave_cycles(years=HORIZON_YEARS)
+    for cycle, following in zip(cycles, cycles[1:]):
+        assert cycle.onward_burn == following.departure_burn
+    last = cycles[-1]
+    assert last.onward_burn == pytest.approx(departure_burn_after(last.return_jd))
+    # Cycle 0 is a 3S return feeding the 2S cycle 1: 5.33 out, 7.17 onward.
+    assert cycles[0].departure_burn == pytest.approx(5.329, abs=1e-3)
+    assert cycles[0].onward_burn == pytest.approx(7.171, abs=1e-3)
 
 
 @pytest.mark.slow
@@ -73,14 +98,15 @@ def test_growth_wave_arrives_exactly_one_split_gap_early(split_days):
 
 
 def test_pricing_composes_with_the_committed_nozzle_ledger():
-    """At f = 0.8 and a 20 d parking orbit, pricing is same_cycle_nozzle's default."""
+    """At f = 0.8 and a 20 d parking orbit, pricing is same_cycle_nozzle's default,
+    with the payload departing on the next window's burn (ADR 0038)."""
     priced = price_cycle(CYCLE, recovery=0.6, fudge=0.8, slug_ratio=7.0)
 
     expected = same_cycle_nozzle(
         growth_collision_speed=CYCLE.growth_wave_v_b,
         growth_wave_burn=CYCLE.growth_wave_burn + CYCLE.nozzle_wave_dsm,
         nozzle_collision_speed=CYCLE.nozzle_wave_v_b,
-        departure_dv=CYCLE.departure_burn,
+        departure_dv=CYCLE.onward_burn,
         cycle=CYCLE.period_years,
         exhaust_speed=VE_METHALOX,
         recovery=0.6,
@@ -237,9 +263,12 @@ def test_the_plate_column_reproduces_at_the_measured_elasticity() -> None:
     ``0.800``, and the difference is the whole gap that made the column look
     unreproducible.  Both are defensible -- they answer different questions --
     so what is pinned is which one the published figures came from.
+
+    ADR 0038 moved the column: each payload now departs on the next window's
+    burn.  The parent printed 1.464e6, 4.244e5 and 7.486e4 before the fix.
     """
     cycles = adaptive_two_wave_cycles()
-    published = {1.0: 1.464e6, 0.9: 4.244e5, 0.8: 7.486e4}
+    published = {1.0: 1.199e6, 0.9: 3.364e5, 0.8: 5.662e4}
     for eta_geom, growth in published.items():
         chain = price_chain(cycles, 1.0, 0.818, geometric_efficiency=eta_geom)
         assert np.isclose(chain.total_growth, growth, rtol=1e-3)
@@ -314,7 +343,8 @@ def test_the_flown_chain_diverts_a_fifth_of_each_batch_to_projectiles() -> None:
     ranges rather than asserting a direction.
     """
     cycles = adaptive_two_wave_cycles()
-    for recovery, low, high in ((0.8, 0.195, 0.236), (0.6, 0.242, 0.290)):
+    # ADR 0038 (onward burn): was 0.195-0.236 and 0.242-0.290.
+    for recovery, low, high in ((0.8, 0.170, 0.242), (0.6, 0.213, 0.297)):
         bends = [
             1.0 - price_cycle(cycle, recovery, 0.8).wave_to_growth for cycle in cycles
         ]

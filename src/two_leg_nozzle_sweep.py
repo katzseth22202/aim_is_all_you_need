@@ -206,7 +206,7 @@ def _score(
             growth_collision_speed=cycle.growth_wave_v_b,
             growth_wave_burn=cycle.growth_wave_burn + cycle.nozzle_wave_dsm,
             nozzle_collision_speed=cycle.nozzle_wave_v_b,
-            departure_dv=cycle.departure_burn,
+            departure_dv=cycle.onward_burn,
             cycle=cycle.period_years,
             exhaust_speed=VE_METHALOX,
             recovery=recovery,

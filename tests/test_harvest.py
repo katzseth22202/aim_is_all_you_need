@@ -153,7 +153,8 @@ def test_the_fleet_irr_is_the_growth_rate_less_the_stepwise_gap() -> None:
     years = valued.returns.harvest_years
     assert years == pytest.approx(9.83, abs=0.005)
     irr = fleet_irr(chain.summary.ten_year_stepwise, years)
-    assert irr - chain.summary.annual_growth == pytest.approx(-0.0137, abs=5e-4)
+    # ADR 0038 (onward burn): was -0.0137.
+    assert irr - chain.summary.annual_growth == pytest.approx(-0.0057, abs=5e-4)
 
 
 @pytest.mark.slow

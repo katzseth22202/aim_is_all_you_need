@@ -53,24 +53,31 @@ def test_methalox_flies_no_rods_and_chambers_do() -> None:
     assert methalox.seed_rods == 0.0
     assert all(c.onward_rods == 0.0 for c in methalox.cycles)
     assert hydrogen.departure is Departure.HYDROGEN
-    # Rods are 17% of solved hydrogen's first-cycle consumption (ASKS H6).
-    assert hydrogen.seed_rods / hydrogen.seed == pytest.approx(0.17, abs=0.01)
+    # Rods are 20% of solved hydrogen's first-cycle consumption (17% in ASKS H6,
+    # before ADR 0038's onward burn).
+    assert hydrogen.seed_rods / hydrogen.seed == pytest.approx(0.196, abs=0.005)
     assert hydrogen.cycles[0].cryostats > 0.0
 
 
 def test_a_launch_unit_spends_what_the_ledger_launched() -> None:
-    # Solved methane, cycle 0 (ASKS v1 table): 21.2 t chamber, 11.3 t of
-    # tanks, 392 t of departure mass (gas, plugs and pitch), 577 t of argon.
+    # Solved methane, cycle 0: one chamber, 13.5 t of tanks, 468 t of departure
+    # mass (gas, plugs and pitch) and 580 t of argon.  The ASKS v1 table's
+    # 11.3 t, 392 t and 577 t predate ADR 0038: cycle 0's payload now flies
+    # cycle 1's 2S burn (7.17 km/s), not its own 3S burn (5.33).
     cycle = design_inputs(DESIGNS[2]).cycles[0]
     assert cycle.departure_units == 1
-    assert cycle.tanks / 1e3 == pytest.approx(11.3, abs=0.1)
-    assert (cycle.gas + cycle.plugs + cycle.pitch) / 1e3 == pytest.approx(392, abs=1)
-    assert cycle.argon / 1e3 == pytest.approx(577, abs=1)
+    assert cycle.tanks / 1e3 == pytest.approx(13.54, abs=0.05)
+    assert (cycle.gas + cycle.plugs + cycle.pitch) / 1e3 == pytest.approx(
+        467.7, abs=0.5
+    )
+    assert cycle.argon / 1e3 == pytest.approx(580.4, abs=0.5)
 
 
 @pytest.mark.parametrize(
     "design, liquidation, steady",
-    [(DESIGNS[0], (45, 3), (39, 10)), (DESIGNS[4], (87, 33), (84, 36))],
+    # ADR 0038 (onward burn); tab:seed_return printed 45 / 3, 39 / 10 and
+    # 87 / 33, 84 / 36.
+    [(DESIGNS[0], (42, 2), (38, 9)), (DESIGNS[4], (81, 29), (80, 33))],
     ids=["methalox", "hydrogen solved"],
 )
 def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
@@ -95,9 +102,9 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
 @pytest.mark.parametrize(
     "design, steady_cost, break_even",
     [
-        (DESIGNS[0], 163, (346, 1694)),
-        (DESIGNS[2], 98, (132, 211)),
-        (DESIGNS[4], 98, (129, 186)),
+        (DESIGNS[0], 169, (360, 1919)),
+        (DESIGNS[2], 100, (135, 240)),
+        (DESIGNS[4], 100, (132, 206)),
     ],
     ids=["methalox", "methane solved", "hydrogen solved"],
 )

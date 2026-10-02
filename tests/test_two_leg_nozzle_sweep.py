@@ -45,6 +45,7 @@ def _cycle(
         growth_wave_arrival_jd=2_462_190.0,
         growth_wave_v_b=growth_v_b,
         growth_wave_burn=0.0,
+        onward_burn=5.329,
     )
 
 
@@ -102,7 +103,8 @@ def test_plate_path_reproduces_adr_0013_where_the_floor_is_slack() -> None:
     constrained = price_chain_two_leg(cycles, 0.6, None, 0.8)
     assert constrained is not None
     assert np.isclose(constrained.rate, incumbent.rate, rtol=1e-3)
-    assert np.isclose(constrained.rate, 0.3989, atol=5e-4)
+    # ADR 0038 (onward burn): ADR 0013 recorded 0.3989.
+    assert np.isclose(constrained.rate, 0.3900, atol=5e-4)
     assert constrained.worst_return_fraction > RETURN_FLOOR
 
 
@@ -154,14 +156,16 @@ def test_matched_recovery_reverses_the_plate_verdict() -> None:
     """ADR 0015's headline: at ``e1 = e2 = f`` the two-leg nozzle wins.
 
     Pins the ends and the crossover of ADR 0015's matched-recovery table.  The
-    nozzle loses at ``e = 0.25``, ties near 0.30, and is 8.5x the plate by 0.60.
+    nozzle loses at ``e = 0.25``, leads by 0.30, and is 11x the plate by 0.60.
+    (ADR 0038's onward burn moved the table; ADR 0015 recorded a tie at 0.30
+    and 8.5x at 0.60.)
     """
     cycles = adaptive_two_wave_cycles(split_days=CHAIN_SPLIT_DAYS)
 
     for recovery, nozzle_growth, plate_growth in (
-        (0.25, 1.33e-4, 3.09e-4),
-        (0.30, 2.95e-2, 2.91e-2),
-        (0.60, 6.632e4, 7.827e3),
+        (0.25, 3.715e-4, 4.345e-4),
+        (0.30, 2.449e-2, 2.040e-2),
+        (0.60, 6.911e4, 6.164e3),
     ):
         nozzle = price_chain_two_leg(cycles, recovery, recovery)
         plate = price_chain_two_leg(cycles, recovery, None, recovery)
@@ -179,10 +183,11 @@ def test_matched_recovery_reverses_the_plate_verdict() -> None:
     assert loses.total_growth < loses_plate.total_growth
     assert wins.total_growth > 8.0 * wins_plate.total_growth
 
-    # As a rate the same gap is only ~24%, which is why ADR 0015 insists the
-    # currency be named: 0.3910 e-foldings/yr against 0.3158.
-    assert np.isclose(wins.rate, 0.3910, atol=5e-4)
-    assert np.isclose(wins_plate.rate, 0.3158, atol=5e-4)
+    # As a rate the same gap is only ~28%, which is why ADR 0015 insists the
+    # currency be named: 0.3925 e-foldings/yr against 0.3073 (ADR 0038; ADR
+    # 0015 recorded 0.3910 against 0.3158).
+    assert np.isclose(wins.rate, 0.3925, atol=5e-4)
+    assert np.isclose(wins_plate.rate, 0.3073, atol=5e-4)
 
 
 def test_the_toll_penalises_the_two_leg_nozzle_more_than_the_plate() -> None:

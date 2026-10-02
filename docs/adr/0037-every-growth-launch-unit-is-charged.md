@@ -60,8 +60,8 @@ is the user's judgment of a proven system, a little above Damodaran's 7.6%,
 **unsourced**. Because one measured cycle is a thin proof, the late rate is quoted
 as a **10-20% band** (user, 2026-10-01, on the condition that it does not change
 the conclusion; it does not). Across the band the solved chambers break even at
-$129-174 / $186-364 (cheap / dear seed), under $500 on both seeds and under $200
-on the cheap one. Methalox breaks even at $346-564 / $1694 to over $3000. Outputs are break-even `p_L1` and value per seed
+$132-178 / $206-427 (cheap / dear seed), under $500 on both seeds and under $200
+on the cheap one. Methalox breaks even at $360-574 / $1919 to over $3000. Outputs are break-even `p_L1` and value per seed
 dollar, not IRR, since growth costs give the cash flows more than one sign
 change.
 
@@ -97,42 +97,45 @@ its per-cycle ledgers, so the chain is flown once.
 
 ## Results (Estimate, stepped 30% -> 10%; `make growth-cost`)
 
+**Amended by ADR 0038.** Each payload now departs on the next window's burn.
+The tables below carry the corrected figures; ADR 0038 lists what they replaced
+(for example solved hydrogen's steady break-even, 129 / 186 before the fix).
+
 Steady-state cost per kilogram at L1 is undiscounted, a lap into the steady
 state, seed excluded. Break-even is the sale price that repays the seed and
 every growth cost, cheap / dear seed ($337 / $9293 per kilogram).
 
 | Design | Steady $/kg | Lob | Plate + spray | Departure hw | Fleet | BE steady | BE liquidation | Value at $500 |
 |---|---|---|---|---|---|---|---|---|
-| Methalox | 163 | 112 | 44 | 3 | 1 | 346 / 1694 | 357 / 2637 | 4.0 / 0.1 |
-| Methane, 50% | 167 | 103 | 37 | 17 | 3 | 346 / 972 | 322 / 1374 | 7.0 / 0.3 |
-| Methane, solved | 98 | 68 | 21 | 5 | 1 | **132 / 211** | 148 / 368 | 119 / 4.6 |
-| Hydrogen, 50% | 199 | 107 | 39 | 29 | 3 | 445 / 1168 | 394 / 1534 | 2.8 / 0.1 |
-| Hydrogen, solved | 98 | 65 | 20 | 7 | 1 | **129 / 186** | 147 / 310 | 171 / 6.7 |
+| Methalox | 169 | 115 | 46 | 4 | 1 | 360 / 1919 | 388 / >3000 | 3.3 / 0.1 |
+| Methane, 50% | 184 | 110 | 42 | 21 | 4 | 373 / 1306 | 379 / 2022 | 4.3 / 0.2 |
+| Methane, solved | 100 | 69 | 22 | 6 | 1 | **135 / 240** | 157 / 452 | 88 / 3.5 |
+| Hydrogen, 50% | 228 | 117 | 45 | 37 | 4 | 490 / 1657 | 481 / 2422 | 1.2 / 0.0 |
+| Hydrogen, solved | 100 | 66 | 20 | 7 | 1 | **132 / 206** | 153 / 371 | 127 / 5.0 |
 
-Paper's prices: methalox 185 $/kg (BE 480 / 1828), solved methane 96 (139 /
-220), solved hydrogen 93 (129 / 186). Pessimistic: 400-916 $/kg, and no design
-repays the seed under $500; solved hydrogen misses by least, at 511 / 566.
+Paper's prices: methalox 194 $/kg (BE 501 / 2061), solved methane 99 (144 /
+250), solved hydrogen 95 (132 / 207). Pessimistic: 410-1035 $/kg, and no design
+repays the seed under $500; solved hydrogen misses by least, at 509 / 582.
 
-**Validation (G1).** With the growth charge off and the plate flat at $114/kg,
-the seed's IRRs at $500 are the parent's `tab:seed_return`: methalox 45 / 3
-(liquidation) and 39 / 10 (steady), solved hydrogen 87 / 33 and 84 / 36.
+**Validation (G1).** Before ADR 0038, with the growth charge off and the plate
+flat at $114/kg, the seed's IRRs at $500 reproduced the parent's
+`tab:seed_return` exactly: methalox 45 / 3 (liquidation) and 39 / 10 (steady),
+solved hydrogen 87 / 33 and 84 / 36. With ADR 0038 they are 42 / 2 and 38 / 9,
+and 81 / 29 and 80 / 33. The test pins the corrected values.
 
 **Readings.** The parent's draft holds. Methalox does not pay for itself at the
-bars that matter ($346 cheap, $1694 dear, against the $500 cap). A solved chamber
-brings the break-even under Suncatcher's $200 on the cheap seed and to about it
-on the dear one. Chamber efficiency decides, not chamber price. The lob is two
+bars that matter ($360 cheap, $1919 dear, against the $500 cap). A solved chamber
+brings the break-even under Suncatcher's $200 on the cheap seed and to just above
+it on the dear one ($206-240). Chamber efficiency decides, not chamber price. The lob is two
 thirds of the solved chambers' cost.
 
 ## G3: the growth index
 
 The cost model's indexing matches `harvest.chain_returns` and the growth
 ledger's own definition of `G_n`. A unit lofted at return `n` is pushed by
-return `n`'s waves and grows by `G_n`. **But the ledger itself pairs return
-`n`'s waves with cycle `n`'s outbound burn** (`price_cycle_growth` uses
-`cycle.departure_burn`), and the payload those waves push leaves on cycle
-`n + 1`. That is an off-by-one inside `src/growth_ledger.py`, upstream of ADRs
-0033-0037. It is **not fixed here**, and its size is unmeasured. Fixing it moves
-every growth figure.
+return `n`'s waves and grows by `G_n`. Answering G3 exposed an off-by-one
+underneath it: every ledger departed that unit on cycle `n`'s own outbound burn,
+though it leaves on cycle `n + 1`. ADR 0038 fixes it.
 
 ## G4: rod size against package count
 
