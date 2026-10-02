@@ -301,16 +301,22 @@ multi-minute searches (`pad_return_frontier`, `conduction_bracket_frontier`,
 `pad_frontier_optimum`, `admissible_pad_floor_depth`, `constrained_growth_optimum`, the
 assist-chain and two-wave grids).
 
-So the question to ask is not "is this a commit?" but **"am I about to change or quote a
-number a sweep produces?"** Three tiers:
+So the question to ask is not "is this a commit?" but **"what can this change reach,
+and am I about to quote a number?"** `make test-changed` answers the first half: it runs
+every test, slow ones included, that imports a changed `src/` file directly or through
+another module (`tests/changed_tests.py`; `BASE=main` to diff against a branch).
+Leaf changes reach one or two test files; `conic_kernel.py` reaches 29 of 42, so
+substrate edits get broad coverage without a special case. Three tiers:
 
-1. **Prose, docstrings, comments, ADR text** — fast suite only. Nothing numeric moves.
-2. **A module that feeds a sweep** — that file's slow tests, e.g.
-   `pytest tests/test_solar_dive_depth_trade.py -m slow`. Most edits land here, and for
-   a leaf module (nothing in `src/` imports `solar_dive_depth_trade`) it is the whole
-   exposure.
-3. **Committing, or writing a figure into an ADR, CONTEXT.md or the paper** — the full
-   `make test-all`.
+1. **Prose, docstrings, comments, ADR text** — nothing to run; `make test-changed`
+   selects nothing for docs.
+2. **Any code change, including a commit** — `make test-changed`. Changes to
+   `pyproject.toml`, `environment.yml` or `tests/conftest.py` select the whole suite.
+3. **Writing a figure into an ADR, CONTEXT.md or the paper** — the full `make test-all`.
+
+Long studies that are not tests (the seed-route pygmo searches behind ADR 0039, the
+opt-in `make` analyses) are not part of any gate; rerun them when their result is
+being quoted.
 
 A fast-only run does *not* protect the headline figures in the ADRs. ADR 0022 is the
 worked example: every number in it came from a slow-marked path, and the 371 fast tests

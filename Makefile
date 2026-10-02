@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -19,6 +19,10 @@ test:  ## Run the fast tests (~1 min); deselects the 'slow' marker
 
 test-slow:  ## Run only the slow tests (~12 min): optimiser sweeps and multi-minute searches
 	pytest -s -m "slow"
+
+test-changed:  ## Run every test (slow ones too) that the uncommitted change can reach by imports; BASE=main to diff against a branch
+	@tests=$$(python tests/changed_tests.py $(or $(BASE),HEAD)); \
+	if [ -n "$$tests" ]; then pytest -s $$tests; else echo "No tests reach this change."; fi
 
 test-all:  ## Run every test (~13 min). The gate before committing or quoting a number
 	pytest -s
