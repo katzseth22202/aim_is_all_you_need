@@ -52,6 +52,15 @@ def test_thrust_falls_as_the_inverse_square_of_sun_distance() -> None:
     )
 
 
+def test_power_is_capped_at_its_1_au_rating_inside_1_au() -> None:
+    # Near Venus (0.72 AU) the sunlight is 1.9x, but the electronics are sized
+    # at 1 AU and the array is turned away to stay cool.
+    stage = SepStage(specific_power=1.0)
+    at_one = stage.capacity([1.0], YEAR_S)
+    assert stage.capacity([0.72], YEAR_S) == pytest.approx(at_one)
+    assert stage.capacity([0.72, 2.0], YEAR_S) == pytest.approx(at_one * 1.25 / 2.0)
+
+
 def test_the_stage_and_its_argon_displace_puffsats() -> None:
     # 1 W/kg at 15 kg/kW is 1.5% of the stack; 3 km/s at 19.6 km/s burns
     # 1 - exp(-3/19.613) of it as argon, with 0.15 kg of tank per kg.

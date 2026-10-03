@@ -330,6 +330,20 @@ Revised from ASKS.md "What comes back to the paper", with this model's numbers.
     drawn from ADRs 0013, 0015 and 0032-0037 (§4 item 1). State that a 3S return
     feeding a 2S departure flies the 2S burn.
 
+**A path that does not depend on Starship** (author, 2026-10-02; for
+`sec:mass_interest`, beside the seed's cost):
+14. Every seed price above assumes an expended Starship refuelled in low
+    orbit. Say what happens without it. No single expendable chemical launch
+    sends a seed-sized mass past Jupiter, so the fallback is a few
+    conventional launches flown together, each with an expendable SEP stage.
+    There SEP is not a saving but the only way to send enough mass. Make the
+    business case plainly: a program that can only start on one provider's
+    refuelled vehicle depends on that provider, and this is the hedge. Give
+    it as a direction, not a priced option: ADR 0039's low-thrust check could
+    not fly the seed's SEP routes at their arrays' power, so the path needs a
+    purpose-built low-thrust trajectory, likely with more power or time
+    (§7 item 5).
+
 **Citations still owed:** the 10% late rate, the argon price and supply, and
 any analogue for the chamber, plate, sprayers, cryostats and package. Until
 then each is a labeled hypothesis.
@@ -340,12 +354,10 @@ then each is a labeled hypothesis.
 
 Requested by the author on 2026-10-01: a short section on how to cut the seed's
 cost if the bank flight prices hold. The rule in the first paragraph and the
-waiting arithmetic are exact. **The route paragraphs are placeholders** until
-the companion's seed-route analysis (gravity assists plus SEP, queued after ADR
-0038) lands. An earlier version of this draft claimed the Venus route sends
-2.9 times the mass. That used ADR 0008's phasing-free trajectories. ADR 0007's
-real-ephemeris search shows chemical phasing costs about 3.6 km/s, which erases
-the gain, so the claim is withdrawn.
+waiting arithmetic are exact. The route paragraphs now carry the companion's
+result (ADR 0039, 2026-10-03): **fly the seed direct.** An earlier version of
+this draft claimed the Venus route sends 2.9 times the mass. That used ADR
+0008's phasing-free trajectories and is withdrawn.
 
 > **Draft text.**
 >
@@ -363,29 +375,27 @@ the gain, so the claim is withdrawn.
 > 2040 \cite{investing2026_ms_spacex}. That is 3.3 times cheaper for ten years of
 > waiting, against the 13.8 times that ten years at 30% demands.
 >
-> A slower route can pass only with help. Venus and Earth gravity assists
-> lower the burn the seed ship makes from low orbit, but with the planets
-> where they really are, the Venus--Earth--Jupiter sequence needs about
-> \SI{3.6}{\kilo\meter\per\second} of maneuvers between flybys. Chemically, that
-> brings its total to \SI{4.57}{\kilo\meter\per\second}, no better than the
-> direct route \cite{Katz_aim_is_all_you_need_2025}. The route pays only if
-> something cheaper than methalox flies those maneuvers.
+> A slower route does not pass either. Venus and Earth gravity assists lower
+> the burn the seed ship makes from low orbit, but with the planets where they
+> really are, the maneuvers between flybys eat the saving. Flown with methalox,
+> the best route found, one Earth loop, sends 1.6 times the seed of the direct
+> route but returns 2.2 years later, and at 30\% that delay needs 1.8 times; it
+> loses by 8\% \cite{Katz_aim_is_all_you_need_2025}. Every Venus route does
+> worse.
 >
-> Solar-electric propulsion can do part of the work instead, and the Venus
-> route needs some of it to phase its encounters. It is charged twice. The
-> array, power processing, thrusters and argon tankage ride with the seed and
-> displace PuffSats, and they are bought. Pushing a stack of mass $m$ through
-> $\Delta v$ in time $t$ takes a jet power of roughly
-> $m\,\Delta v\,v_e/(2\eta t)$. At a \SI{2000}{\second} argon exhaust and 50%
-> thruster efficiency, \SI{3}{\kilo\meter\per\second} on \SI{200}{\tonne} over
-> two years takes about \SI{190}{\kilo\watt}. At \SIrange{10}{20}{\kilo\gram} per
-> kilowatt that is \SIrange{2}{4}{\tonne} of hardware, plus about \SI{28}{\tonne}
-> of argon and \SI{4}{\tonne} of tankage. At a hypothetical \$50 to \$1000 per
-> watt, the hardware costs \$10 million to \$190 million. That is small against a
-> dear seed ship, about \$670 million (thirteen launches and the hull), and
-> large against a cheap one, about \$31 million, so electric propulsion is a dear-seed option. Heliocentric
-> delta-v also earns no Oberth effect, so a kilometer per second of it replaces
-> less than a kilometer per second of the departure burn.
+> Solar-electric propulsion looked like the way through, and is not shown to
+> be. Flying the maneuvers with an argon electric stage, charged for its
+> hardware, its argon and the PuffSats they displace, an impulsive model found
+> Earth- and Venus-assisted routes that beat the direct route by up to 1.5 times
+> on the dear seed ship, at near-commercial array prices. But that model credits
+> a leg's thrust as one burn at the next flyby. A ship thrusting at a tenth of a
+> millimeter per second squared for a year also moves, and must still meet the
+> planet at a fixed time and place. Flown with real low thrust, none of the
+> winning routes could be reached at its array's power: they needed two to ten
+> times the thrust, and the best attempt spent the whole stack on argon
+> \cite{Katz_aim_is_all_you_need_2025}. The limit is thrust, not the array's
+> price. Making electric propulsion pay would need a trajectory designed for low
+> thrust from the start, and likely more power or more time than tried here.
 >
 > A smaller first launch unit cuts the capital at risk but not the price. The
 > seed is one launch unit's first-cycle consumption, and every later cost and
@@ -396,10 +406,14 @@ the gain, so the claim is withdrawn.
 **Electric propulsion assumptions** (author's request, 2026-10-01: charge its
 mass and its cost). The mass figures are ADR 0026's: argon at 2000 s, thruster
 efficiency 0.5, 10/15/20 kg per kW at 1 AU for array, PPU, thrusters and gimbals,
-argon tankage 0.15 kg/kg, power falling as 1/r^2. The **cost of $50/$200/$1000
-per watt at 1 AU** is a new, unsourced hypothesis. It spans a mass-produced
-Starlink-class array to a science-mission system, and the companion analysis
-sweeps it. ADR 0026 found argon SEP cannot pay for the *growth wave's* split
+argon tankage 0.15 kg/kg, power falling as 1/r^2 outside 1 AU and **capped at its
+1 AU rating inside it** (author, 2026-10-02: the electronics are sized at 1 AU,
+and the array is angled to stay cool near Venus). The **price tiers** (author,
+2026-10-02) are unsourced hypotheses: **$10/W** with everything near commercial
+prices, **$50/W** for commercial power and mass-produced argon SEP, and **$200/W**
+conventional. Each is paired with a stage mass, which is Claude's assumption:
+40, 25 and 15 kg/kW, plus $10/W at 15 kg/kW as a cheap-and-light bound.
+ADR 0026 found argon SEP cannot pay for the *growth wave's* split
 corrections. That verdict was on a recurring cost per cycle; a one-time seed is a
 different test, which is why it is back here.
 
@@ -407,56 +421,39 @@ Not in the draft, deliberately: lunar-sourced tanker propellant (`sec:isru`).
 The tankers are most of the bill, so it would matter, but nothing in either repo
 prices it.
 
-**Companion work in progress (2026-10-02, ADR 0039 not yet written).**
-`src/seed_route.py` prices each route's burns from low orbit and scores it on
-the seed it returns per dollar, discounted at 30% to its return. Its model:
+**Companion result (ADR 0039, 2026-10-03).** `src/seed_route.py` searched
+direct, EEJ, EVEJ, EVVEJ and EVEEJ on both seed ships, nodes flown by methalox or
+by an SEP stage at 0.5-8 W/kg and $10, $50 or $200 per watt, power capped at
+1 AU, every route scored on seed per dollar discounted at 30% to its return.
+Full tables and settings are in the ADR. In short:
 
-- Patched conics: circular, coplanar planet orbits phased at their real
-  ecliptic longitudes (astropy's ephemeris), Lambert legs between flybys, the
-  Jupiter perijove solved inside each evaluation so the return lands on Earth
-  exactly.
-- The return must reach the cycle's collision speed (`RETURN_FLOOR`,
-  51.13 km/s).
-- Launch anywhere in a six-year window opening 2026-11-09.
-- Sequences: EJ (direct), EEJ, EVEJ, EVVEJ, EVEEJ. Node burns are flown by
-  methalox at periapsis, or by an SEP stage at 0.5, 1, 2 or 4 W/kg (ADR 0026's
-  masses, argon at 2000 s, efficiency 0.5) in deep space.
-- Each route is searched by pygmo's self-adaptive differential evolution (8
-  independent islands per flyby-bend side, 3 seeds), and its champion is
-  re-priced with the real finite-burn loss.
-- Two seed ships: the dear one (13 flights at the bank prices plus a $20M hull,
-  $670M) and the cheap one ($31M).
+- **Methalox flyby routes never pay.** Best: EEJ at 0.92x direct on the dear
+  ship, 0.81x on the cheap one.
+- **SEP routes beat direct only in the impulsive model, and only on the dear
+  ship** (up to 1.5x at $10/W and 40 kg/kW, 1.1-1.2x at $200/W). On the cheap
+  ship nothing beats direct at any price.
+- **A low-thrust check (pykep Sims-Flanagan, dates freed) flew none of them at
+  its array's power.** They need 2-10x the thrust. So the impulsive wins are
+  not supported, and the seed flies direct.
+- `make growth-cost` section 9 (seed routes) is therefore empty; the machinery
+  that would price a flyable route there (`growth_cost.route_break_even`)
+  stays.
+- **The preview in which SEP brought solved hydrogen under $200/kg on the dear
+  seed is withdrawn.** It rested on the impulsive SEP routes. Solved hydrogen
+  stays at $206/kg there (§4 item 1).
 
-`growth_cost.delayed()` slides the whole program by a route's delay, to rerun
-the break-evens with the proof date moved. It is tested but not yet wired into
-`make growth-cost`. **Still to do:** finish the route study, wire in the
-delay, write ADR 0039, then replace §6's route paragraphs. The 15-year harvest
-sweep is still owed too.
-
-**Preliminary results, dear ship ($670M), stripped 60 t ship, 3 seeds each.**
-The study is still running, so these are partial:
-
-| Route | Propulsion | Trip (yr) | Returns (yr after window opens) | Seed (t) | Cost ($M) | Seed per $M, discounted (kg) |
-|---|---|---|---|---|---|---|
-| EJ | methalox | 3.33 | 3.33 | 93.9 | 670 | 58.45 |
-| EEJ | methalox | 5.19 | 5.52 | 153.7 | 670 | 53.93 |
-| EEJ | SEP 0.5 W/kg | 6.17 | 6.61 | 119.3 | 682 | 30.86 |
-| EEJ | SEP 1 W/kg | 6.19 | 6.61 | 150.8 | 703 | 37.88 |
-
-So far the pattern matches the waiting test in the draft. An Earth loop sends
-1.64 times the seed but returns 2.19 years later. At 30% that needs 1.78
-times, so it loses by 8%. Low-power SEP flies too little of the maneuvering to pay
-for its array.
-
-An earlier exploratory run scored routes on **seed mass alone** (no dollars,
-no discounting) and is superseded. It showed the mass gain exists: EEJ with SEP
-at 4 W/kg sent 322 t against 110 t direct, but it returned 5.5 years later. With no
-discounting it had no reason to launch early, so its dates and its rows
-should not be quoted.
+**Cheap panels, kept as context for the no-Starship direction (§7 item 5).**
+The arrays the search sized work only until the last flyby before Jupiter,
+1.1-3.5 years between 0.67 and 3.2 AU, far from the radiation belts. That
+argues for cheap commercial-grade cells of the kind CubeSats fly, scaled up,
+angled away from the Sun near Venus to stay cool, with mass-produced argon Hall
+thrusters. Price and mass trade one for one in the results ($10/W at 40 kg/kW
+scored the same as $50/W at 25 kg/kW). None of this rescues the routes above,
+whose limit is thrust; it bears on a purpose-built SEP design.
 
 ---
 
-## 7. Status (2026-10-02)
+## 7. Status (2026-10-03)
 
 **Answered in the companion:**
 - Asks G1-G4: ADR 0037, with ADR 0038 fixing the off-by-one that G3 exposed.
@@ -466,8 +463,8 @@ should not be quoted.
 - The full suite passed (792 tests) at the ADR 0038 commit, `37c19f3`.
 
 **Open:**
-1. **Seed routes (§6):** in progress, as above. This is the only modelling
-   question left in the growth cost model.
+1. **Seed routes (§6): answered** by ADR 0039: fly the seed direct. The growth
+   cost model has no open modelling question left.
 2. **Nothing is written into the parent's `.tex`.** §5 lists the 13 changes.
    The author's plan is to bring everything back together once the route
    study lands.
@@ -476,7 +473,24 @@ should not be quoted.
    labeled hypothesis.
 4. **Argon supply** against about 30 000 t per cycle (§4 item 8). This is for
    the paper to check; the companion does not model it.
-5. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a
+5. **Draft owed: SEP as the fallback without Starship refuelling** (author,
+   2026-10-02). Every seed price here assumes an expended Starship refuelled
+   in low orbit by twelve tankers. If Starship, or its refuelling, is not
+   available to this program, chemical stages cannot send a seed-sized payload
+   past Jupiter at any reasonable price. No single expendable chemical launch
+   sends a seed-sized mass, so the realistic plan becomes **a few launches
+   flown together, each with an expendable SEP stage**. SEP is then not a cost
+   saving but the only way to get enough mass there. The paper should make
+   this point for a business reason too: a program that can only start with
+   one provider's refuelled vehicle depends on that provider, and an SEP
+   route on several conventional launches is the hedge. ADR 0039's low-thrust
+   check is the caveat: the SEP routes found for a refuelled Starship's seed
+   could not be flown at their arrays' power, so a provider-independent SEP
+   path needs a purpose-built low-thrust trajectory, likely with more power or
+   time. The paper should give the direction and the caveat. Not yet priced: the companion has no launcher other than
+   Starship and no SEP-only seed ship (each would need its own launch price,
+   departure and route search).
+6. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a
    falling lob or sale price over time, demand capping the fleet, a seed
    larger than one launch unit, and the trade between rod size and package
    count (G4).

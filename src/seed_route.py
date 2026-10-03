@@ -150,9 +150,20 @@ class SepStage:
             duration: The arc's duration (s).
 
         Returns:
-            ``a_1AU x duration x mean(1 / r^2)``.
+            ``a_1AU x duration x mean(min(1, 1 / r^2))``.
+
+        Power is capped at its 1 AU rating inside 1 AU. The power processing
+        and thrusters are sized for the 1 AU array, and near Venus the array is
+        turned partly away from the Sun to keep the cells cool (as MESSENGER
+        and BepiColombo do), so the extra sunlight is thrown away.
+
+        A necessary condition, not a sufficient one (ADR 0039): it asks only
+        whether the leg supplies enough velocity change in total, not whether
+        thrust spread over the leg can still meet the next planet on time. A
+        low-thrust check found the routes this admits needed 2-10x the thrust.
         """
-        inverse_square = float(np.mean(np.asarray(distances_au, dtype=float) ** -2))
+        r = np.asarray(distances_au, dtype=float)
+        inverse_square = float(np.mean(np.minimum(1.0, r**-2)))
         return self.acceleration_1au() * duration * inverse_square / 1.0e3
 
     def split(self, stack: float, burn: float) -> SepSplit:

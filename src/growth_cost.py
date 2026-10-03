@@ -22,7 +22,7 @@ unsourced.
 
 import enum
 from dataclasses import dataclass, field, replace
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from scipy.optimize import brentq
 
@@ -684,4 +684,58 @@ def delayed(inputs: DesignInputs, years: float) -> DesignInputs:
         inputs,
         times=tuple(t + years for t in inputs.times),
         start_years=inputs.start_years + years,
+    )
+
+
+@dataclass(frozen=True)
+class RouteSeed:
+    """A seed route (ADR 0039), relative to the direct route on the same ship.
+
+    Applied relative to the direct route so that the cost model's own seed
+    prices (ADR 0036) stay the reference: the route scales the seed's price
+    per kilogram and delays the whole program.
+
+    Attributes:
+        label: The route, e.g. ``"EVEJ, SEP 2 W/kg, $200/W"``.
+        dear: True for the dear seed's ship, False for the cheap one's.
+        price_ratio: The route's dollars per seed kilogram over the direct
+            route's, on the same ship; below one is cheaper.
+        delay_years: The route's return minus the direct route's.
+    """
+
+    label: str
+    dear: bool
+    price_ratio: float
+    delay_years: float
+
+
+def route_break_even(
+    inputs: DesignInputs,
+    prices: PriceBook,
+    seed_price: float,
+    route: RouteSeed,
+    schedule: Callable[[DesignInputs], DiscountSchedule],
+    steady: bool = True,
+) -> Optional[float]:
+    """Break-even L1 price when the seed flies ``route`` instead of direct.
+
+    The program is delayed by the route's extra years, so the proof that steps
+    the rate slides with it, and the seed costs ``price_ratio`` times as much
+    per kilogram. The seed is still paid at ``t = 0``.
+
+    Args:
+        inputs: The design's chain, flown on the direct seed's schedule.
+        prices: The price book.
+        seed_price: The direct seed's dollars per kilogram on this ship.
+        route: The route.
+        schedule: Builds the discount schedule from the (delayed) chain, so a
+            stepped rate switches at the delayed proof.
+        steady: Hold the fleet level after the harvest instead of liquidating.
+
+    Returns:
+        The break-even price ($/kg), or None above the search cap.
+    """
+    late = delayed(inputs, route.delay_years)
+    return break_even_price(
+        late, prices, seed_price * route.price_ratio, schedule(late), steady
     )

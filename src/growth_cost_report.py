@@ -24,8 +24,10 @@ from src.growth_cost import (
     DiscountSchedule,
     HalvingPrice,
     PriceBook,
+    RouteSeed,
     break_even_price,
     legacy_prices,
+    route_break_even,
     run_program,
     steady_state_cost,
     value_per_seed_dollar,
@@ -54,6 +56,10 @@ LINES = (
     "pulse_consumables",
     "film",
 )
+
+#: Seed routes (ADR 0039), each relative to the direct route on its own ship.
+#: Empty: no route was shown to beat direct once flown with real low thrust.
+SEED_ROUTES: Tuple[RouteSeed, ...] = ()
 
 
 def stepped(inputs: DesignInputs, late: float = LATE_RATES[0]) -> DiscountSchedule:
@@ -324,6 +330,45 @@ def _sweep(
     return tabulate(rows, ["Case"] + labels + [f"BE {label}" for label in labels])
 
 
+def seed_routes(
+    designs: Sequence[DesignInputs], routes: Sequence[RouteSeed] = SEED_ROUTES
+) -> str:
+    """Steady break-even, stepped rate, with the seed flown on each route.
+
+    Args:
+        designs: The designs.
+        routes: The routes; each applies to its own ship's seed price.
+
+    Returns:
+        A table: direct, then one column per route.
+    """
+    if not routes:
+        return (
+            "(none: no gravity-assist or SEP route beats flying the seed direct "
+            "once flown; ADR 0039)"
+        )
+    prices = seed_prices()
+    rows = []
+    for inputs in designs:
+        row = [inputs.label, _break_evens(inputs, ESTIMATE, stepped(inputs))]
+        for route in routes:
+            row.append(
+                _fmt(
+                    route_break_even(
+                        inputs,
+                        ESTIMATE,
+                        prices[1 if route.dear else 0],
+                        route,
+                        stepped,
+                    )
+                )
+            )
+        rows.append(row)
+    headers = ["Design", "direct (cheap / dear)"]
+    headers += [f"{r.label} ({'dear' if r.dear else 'cheap'})" for r in routes]
+    return tabulate(rows, headers)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the growth cost model's report.
 
@@ -366,6 +411,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print(packages(pick))
     print("\n8. One line at a time from the Estimate: steady $/kg and stepped BE")
     print(sensitivities(pick))
+    print("\n9. Seed routes (ADR 0039): steady BE, stepped 30% -> 10%, Estimate")
+    print(seed_routes(designs))
 
 
 if __name__ == "__main__":

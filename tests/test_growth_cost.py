@@ -16,10 +16,12 @@ from src.growth_cost import (
     DesignInputs,
     DiscountSchedule,
     PriceBook,
+    RouteSeed,
     break_even_price,
     delayed,
     legacy_prices,
     present_value,
+    route_break_even,
     run_program,
     steady_state_cost,
     value_per_seed_dollar,
@@ -255,3 +257,34 @@ def test_a_late_cheap_seed_is_the_on_time_seed_at_its_discounted_price() -> None
     )
     assert late is not None and equivalent is not None
     assert late == pytest.approx(equivalent, rel=1e-6)
+
+
+def test_a_route_with_no_saving_and_no_delay_is_the_direct_seed() -> None:
+    def schedule(inputs: DesignInputs) -> DiscountSchedule:
+        return DiscountSchedule.stepped(0.30, 0.10, inputs.proof_years)
+
+    direct = break_even_price(chain(), FLAT, 9293.0, schedule(chain()), True)
+    same = route_break_even(
+        chain(), FLAT, 9293.0, RouteSeed("direct", True, 1.0, 0.0), schedule
+    )
+    assert same == pytest.approx(direct)
+
+
+def test_a_cheaper_later_route_pays_only_when_k_beats_the_wait() -> None:
+    # At 30% until the (delayed) proof, a route 2.2x cheaper and 2 years late
+    # beats direct (2.2 > 1.3^2 = 1.69); one 1.5x cheaper does not. The seed's
+    # own manufacture is zeroed so the k (1 + r)^-dt test is exact.
+    book = replace(FLAT, fleet_flat=0.0)
+
+    def schedule(inputs: DesignInputs) -> DiscountSchedule:
+        return DiscountSchedule.stepped(0.30, 0.10, inputs.proof_years)
+
+    direct = break_even_price(chain(), book, 9293.0, schedule(chain()), True)
+    good = route_break_even(
+        chain(), book, 9293.0, RouteSeed("good", True, 1 / 2.2, 2.0), schedule
+    )
+    poor = route_break_even(
+        chain(), book, 9293.0, RouteSeed("poor", True, 1 / 1.5, 2.0), schedule
+    )
+    assert direct is not None and good is not None and poor is not None
+    assert good < direct < poor
