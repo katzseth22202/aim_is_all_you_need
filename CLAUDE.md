@@ -220,9 +220,10 @@ seed_route.py                ← seed_cost + retrograde_return_legs + jovian_fly
                                 sep_split_correction + two_wave_growth + conic_kernel:
                                 the seed's route search (gravity assists, methalox
                                 or a charged SEP stage, pygmo islands capped by free
-                                memory). Verdict: fly the seed direct; the SEP
-                                capacity test is necessary, not sufficient, and a
-                                low-thrust check could not fly its winners (ADR 0039)
+                                memory). Verdict: fly the seed direct for now;
+                                methalox assists never pay, and the SEP capacity
+                                test is necessary, not sufficient, so its wins
+                                await a continuous-thrust check (ADR 0039)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

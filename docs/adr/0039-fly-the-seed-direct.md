@@ -1,4 +1,4 @@
-# Fly the seed direct: gravity assists and SEP do not pay once flown
+# Fly the seed direct for now: methalox assists never pay, SEP is unverified
 
 Status: accepted
 
@@ -26,37 +26,40 @@ PuffSats, and the hardware is bought.
 
 ## Decision
 
-**Fly the seed direct (EJ).** No gravity-assist route, with methalox or with an
-SEP stage at any power or price tier tried, is shown to deliver more seed per
-dollar, discounted to its return, on either seed ship.
+**Fly the seed direct (EJ) until an SEP route is verified.** No methalox
+gravity-assist route pays. SEP routes pay on the dear ship only in an
+impulsive model whose treatment of low thrust is optimistic, and they have not
+yet been checked with continuous thrust.
 
 1. **Methalox flyby routes never pay.** The burns between flybys eat the mass
    the lower departure saves, and the route returns years later. Best: EEJ at
-   0.92x direct on the dear ship and 0.81x on the cheap one.
-2. **SEP routes looked like they paid on the dear ship, and do not survive a
-   low-thrust check.** In the impulsive search (below) SEP with Venus or Earth
-   flybys beat direct on the $670M ship by up to 1.5x at near-commercial prices
-   (1.8x in the cheap-and-light bound).
-   A Sims-Flanagan low-thrust check of three of those routes found none
-   flyable at its array's thrust: they need 2-10 times the thrust, and the best
-   attempt consumes the whole stack (§ Low-thrust check). The impulsive model
-   credits each leg's SEP thrust as one burn delivered at the next flyby; real
-   thrust spread over the leg also moves the ship, which must still meet the
-   planet at a fixed time and place.
-3. **On the $31M ship nothing beats direct**, even in the impulsive model at
-   $10/W. The array is a large share of a cheap ship's bill.
+   0.92x direct on the dear ship and 0.81x on the cheap one. No low thrust is
+   involved, so this verdict stands as found.
+2. **On the $31M ship nothing beats direct**, even in the impulsive model at
+   $10/W. That model is optimistic about SEP (item 3), so a loss in it is a
+   loss: the array is a large share of a cheap ship's bill.
+3. **SEP on the $670M ship is unverified.** The impulsive search (below) finds
+   SEP with Earth or Venus flybys beating direct by up to 1.5x at near-commercial
+   prices (1.8x in the cheap-and-light bound) and 1.1-1.2x at $200/W. But the
+   model credits each leg's SEP thrust as one burn at the next flyby, and asks
+   only whether the leg supplies enough velocity change in total. Real thrust
+   spread over a leg also moves the ship, which must still meet the planet at a
+   fixed time and place, so the model is optimistic in principle. By how much
+   is not measured: the first low-thrust check was itself unreliable
+   (§ Low-thrust check). These wins are not adopted until a continuous-thrust
+   check confirms them.
 4. `growth_cost_report.SEED_ROUTES` stays empty and section 9 of
    `make growth-cost` says why. `growth_cost.RouteSeed` and
-   `route_break_even` stay, tested, for a route that is shown flyable.
-5. `SepStage.capacity` gains the caveat: it is a necessary condition, not a
-   sufficient one.
+   `route_break_even` stay, tested, to price a route once it is verified.
+5. `SepStage.capacity` says what it checks: a necessary condition for a route
+   to be flyable, not a sufficient one.
 
 **Not decided here, and owed to the paper** (author, 2026-10-02): without a
 refuelled Starship, no expendable chemical launch sends a seed-sized mass past
 Jupiter, so a few conventional launches flown together, each with an SEP stage,
 may be the only provider-independent path. That is a different comparison
 (against expendable chemical launch, not a refuelled Starship) and needs a
-purpose-built low-thrust trajectory, which this ADR does not provide. It goes
+low-thrust trajectory shown to fly, which this ADR does not yet provide. It goes
 to the paper as a direction with that caveat
 (`docs/growth_cost_for_parent.md` §5 item 14).
 
@@ -195,68 +198,64 @@ Direct: 1532.3 kg per $M.
 | mass-produced | 0.43 | 0.34 | 0.18 | 0.37 | 0.27 | 0.13 |
 | conventional | 0.15 | 0.11 | 0.06 | 0.17 | 0.09 | 0.05 |
 
-## Low-thrust check
+## Low-thrust check (first attempt, inconclusive)
 
-Three routes the impulsive search scored well were re-flown with pykep 3.0.1's
-Sims-Flanagan legs (planar, 16 segments per powered leg, cut 0.5):
+A first check re-flew the best SEP routes with pykep 3.0.1's Sims-Flanagan legs
+(planar, 16 impulses per powered leg), keeping the last flyby and everything
+after it, freeing the launch date, departure, intermediate flyby dates and
+thrust, and solving with scipy SLSQP under a thrust homotopy (50x down to 1x)
+with basin hopping. Its results are recorded because each failure taught
+something, but **none of them stands**:
 
-- **Held:** the last flyby (Earth) and everything after it. The coast to
-  Jupiter and the return carry no thrust, so the impulsive model is exact
-  there.
-- **Freed:** the launch date (from the window's opening to 60 days before the
-  first flyby), the departure speed (0-12 km/s) and direction, each
-  intermediate flyby's date (±365 days), every segment's thrust, and each
-  intermediate flyby's arrival velocity, turned without power within its
-  minimum-periapsis limit. Every leg is at least 30 days.
-- **Thrust:** the stage's, at each leg's farthest point from the Sun, capped at
-  1 AU (conservative).
-- **Objective:** most seed, `stack(v_inf) x (final mass - stage hardware -
-  argon tanks)`.
-- **Solver:** scipy SLSQP with numerical gradients; thrust homotopy from 50x
-  the stage's thrust down to 1x (50, 30, 20, 14, 10, 7, 5, 3.5, 2.5, 1.8, 1.4,
-  1.2, 1.0), each step a feasibility solve at fixed departure speed then a
-  seed solve, with up to 6 basin hops (throttle noise 0.15); 8 launch dates
-  for EEJ, 4 for EVEJ.
-- **Sanity case:** EVEEJ at 0.5 W/kg ($31M ship), whose flyby burns are
-  nearly zero, re-flies at the real thrust with final mass 0.9985 against the
-  model's 0.9989.
+- **The conservative thrust setting made routes infeasible by construction.**
+  Holding thrust at each leg's farthest point from the Sun (2.2 AU on EEJ)
+  left the stage about 1.2 km/s of capacity against the 2.38 km/s EEJ needs.
+  A positive control (targets reached by flying known thrust patterns
+  forward, 6 of 6 recovered) exposed this. At the optimistic setting (1 AU
+  thrust throughout, capped) EEJ at 2 W/kg still needed 1.8x its thrust, and
+  EEJ at 4 W/kg "flew".
+- **Sixteen impulses are far too coarse at this thrust.** Each stands for
+  about 43 days of thrusting, an impulse of 0.8-1.5 km/s. Integrating the
+  "flyable" EEJ 4 W/kg solution's throttle history continuously, it missed
+  Earth by 15 million km and 2.1 km/s; the optimiser had exploited the
+  discretisation. The coarse model's failures are no more reliable than its
+  successes.
+- **Local optima.** The same launch date converged to 109 t of seed in one run
+  and 240 t in another, depending only on the basin-hopping random sequence.
 
-| Route (dear ship) | Impulsive verdict | SEP burn | Lowest thrust that flies | Seed there |
-|---|---|---|---|---|
-| EEJ, 2 W/kg, $200/W | 0.97x direct | 2.38 km/s | 10x (fails at 7x) | 307 t at 10x, vs the model's 183 t |
-| EVEJ, 2 W/kg, $200/W | 1.14x direct | 3.84 km/s | about 5x, dates held (fails at 3x) | far below the model's |
-| EVEJ, 4 W/kg, $10/W | 1.52x direct | 6.32 km/s | 1.8x (fails at 1.4x) | none: the stack is consumed |
-
-The failure is consistent across launch dates and with an earlier check that
-held every date. The capacity integral asks only whether a leg supplies enough
-velocity change in total; it does not ask whether thrust spread over the leg
-can arrive on time and on target. For scale, Hayabusa2 thrusted for about a
-year before its Earth flyby to gain a few hundred m/s of excess speed.
+**What a valid check needs:** pykep's zero-order-hold leg (`pk.leg.zoh` with
+`pk.ta.zoh_kep`), which integrates continuous thrust exactly through each
+segment and supplies exact gradients; thrust bracketed between the near and
+far settings or, better, varying as `min(1, 1/r^2)` along the arc; several
+launch dates and random restarts; positive controls built with the same
+dynamics; and every accepted solution confirmed by an independent continuous
+integration that meets each planet (position to about 150 km, velocity to a
+few cm/s, in the patched-conic sense).
 
 ## Consequences
 
 - The seed stays as ADR 0035/0036 price it. `tab:seed_amortization`,
   `tab:seed_return` and the growth-cost break-evens do not move. The preview in
   which SEP routes brought solved hydrogen under $200/kg on the dear seed is
-  withdrawn.
-- §6 of `docs/growth_cost_for_parent.md`: the route paragraphs now say methalox
-  flybys do not pay and SEP is not shown to; the cheap-panel paragraph stays as
-  context for the no-Starship direction.
-- A real SEP case needs a low-thrust design from the start (free dates, final
-  flyby and return included), probably more power or more time than tried
-  here.
+  not adopted; it returns only if a verified SEP route supports it.
+- §6 of `docs/growth_cost_for_parent.md`: the route paragraphs say methalox
+  flybys do not pay and SEP is unverified, an upside on a dear seed if a
+  continuous-thrust check confirms it.
+- The continuous-thrust check is the next step (§ Low-thrust check).
 
 ## Considered and rejected
 
-- **Quoting the impulsive SEP results with a caveat.** The low-thrust check
-  does not show them slightly optimistic; it shows the routes cannot be flown
-  at the stated power.
-- **A burn-to-approach-speed ratio as the screen.** Rows under 0.5 (EVEJ at
-  2 W/kg, 0.41) failed the low-thrust check too, so the ratio does not separate
-  flyable from not.
+- **Quoting the impulsive SEP results as wins.** The model is optimistic in
+  principle about spread-out thrust; until measured, the wins are upside, not
+  results.
+- **Treating the first low-thrust check's failures as a verdict.** It was too
+  coarse to support either a failure or a success (§ Low-thrust check).
+- **A burn-to-approach-speed ratio as the screen.** It compares burn sizes,
+  not whether thrust can be delivered in time; it is no substitute for flying
+  the trajectory.
 - **pykep for the impulsive search.** It can abort at interpreter exit
   (pykep 3.0.1 with pygmo 2.19.8 on aarch64); the search uses pygmo and
-  `conic_kernel` only. The low-thrust check saves its result and exits with
+  `conic_kernel` only. Low-thrust scripts save their results and exit with
   `os._exit`.
 
 ## Reproduction

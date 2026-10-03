@@ -58,7 +58,7 @@ LINES = (
 )
 
 #: Seed routes (ADR 0039), each relative to the direct route on its own ship.
-#: Empty: no route was shown to beat direct once flown with real low thrust.
+#: Empty: methalox routes never pay; SEP wins are unverified (ADR 0039).
 SEED_ROUTES: Tuple[RouteSeed, ...] = ()
 
 
@@ -344,8 +344,8 @@ def seed_routes(
     """
     if not routes:
         return (
-            "(none: no gravity-assist or SEP route beats flying the seed direct "
-            "once flown; ADR 0039)"
+            "(none: methalox assists never pay and SEP routes are unverified; "
+            "the seed flies direct, ADR 0039)"
         )
     prices = seed_prices()
     rows = []

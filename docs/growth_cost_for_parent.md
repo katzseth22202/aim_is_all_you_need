@@ -339,10 +339,8 @@ Revised from ASKS.md "What comes back to the paper", with this model's numbers.
     There SEP is not a saving but the only way to send enough mass. Make the
     business case plainly: a program that can only start on one provider's
     refuelled vehicle depends on that provider, and this is the hedge. Give
-    it as a direction, not a priced option: ADR 0039's low-thrust check could
-    not fly the seed's SEP routes at their arrays' power, so the path needs a
-    purpose-built low-thrust trajectory, likely with more power or time
-    (§7 item 5).
+    it as a direction, not a priced option, until a continuous-thrust check
+    shows an SEP route can be flown (ADR 0039, §7 item 5).
 
 **Citations still owed:** the 10% late rate, the argon price and supply, and
 any analogue for the chamber, plate, sprayers, cryostats and package. Until
@@ -383,19 +381,16 @@ this draft claimed the Venus route sends 2.9 times the mass. That used ADR
 > loses by 8\% \cite{Katz_aim_is_all_you_need_2025}. Every Venus route does
 > worse.
 >
-> Solar-electric propulsion looked like the way through, and is not shown to
+> Solar-electric propulsion may be the way through, and is not yet shown to
 > be. Flying the maneuvers with an argon electric stage, charged for its
-> hardware, its argon and the PuffSats they displace, an impulsive model found
+> hardware, its argon and the PuffSats they displace, an impulsive model finds
 > Earth- and Venus-assisted routes that beat the direct route by up to 1.5 times
-> on the dear seed ship, at near-commercial array prices. But that model credits
-> a leg's thrust as one burn at the next flyby. A ship thrusting at a tenth of a
-> millimeter per second squared for a year also moves, and must still meet the
-> planet at a fixed time and place. Flown with real low thrust, none of the
-> winning routes could be reached at its array's power: they needed two to ten
-> times the thrust, and the best attempt spent the whole stack on argon
-> \cite{Katz_aim_is_all_you_need_2025}. The limit is thrust, not the array's
-> price. Making electric propulsion pay would need a trajectory designed for low
-> thrust from the start, and likely more power or more time than tried here.
+> on the dear seed ship at near-commercial array prices, and by 10 to 20\% at
+> \$200 per watt. But that model credits a leg's thrust as one burn at the next
+> flyby. A ship thrusting at a tenth of a millimeter per second squared for a
+> year also moves, and must still meet the planet at a fixed time and place, so
+> the model is optimistic. [TBD: the continuous-thrust check, ADR 0039 follow-up.]
+> On the cheap seed ship no route beats direct even in that optimistic model.
 >
 > A smaller first launch unit cuts the capital at risk but not the price. The
 > seed is one launch unit's first-cycle consumption, and every later cost and
@@ -429,18 +424,17 @@ Full tables and settings are in the ADR. In short:
 
 - **Methalox flyby routes never pay.** Best: EEJ at 0.92x direct on the dear
   ship, 0.81x on the cheap one.
-- **SEP routes beat direct only in the impulsive model, and only on the dear
-  ship** (up to 1.5x at $10/W and 40 kg/kW, 1.1-1.2x at $200/W). On the cheap
-  ship nothing beats direct at any price.
-- **A low-thrust check (pykep Sims-Flanagan, dates freed) flew none of them at
-  its array's power.** They need 2-10x the thrust. So the impulsive wins are
-  not supported, and the seed flies direct.
-- `make growth-cost` section 9 (seed routes) is therefore empty; the machinery
-  that would price a flyable route there (`growth_cost.route_break_even`)
-  stays.
-- **The preview in which SEP brought solved hydrogen under $200/kg on the dear
-  seed is withdrawn.** It rested on the impulsive SEP routes. Solved hydrogen
-  stays at $206/kg there (§4 item 1).
+- **On the cheap ship nothing beats direct**, even in the impulsive model, which
+  is optimistic about SEP; so that loss stands.
+- **SEP beats direct on the dear ship only in the impulsive model** (up to 1.5x
+  at $10/W and 40 kg/kW, 1.1-1.2x at $200/W). The model is optimistic about
+  spread-out thrust, and a first low-thrust check was too coarse to measure by
+  how much (16 impulses per leg; its "flyable" solution missed Earth by 15
+  million km under continuous integration). **Unverified**; a continuous-thrust
+  check is under way.
+- Until then the seed flies direct, `make growth-cost` section 9 is empty, and
+  the preview in which SEP brought solved hydrogen under $200/kg on the dear
+  seed is not adopted. Solved hydrogen stays at $206/kg there (§4 item 1).
 
 **Cheap panels, kept as context for the no-Starship direction (§7 item 5).**
 The arrays the search sized work only until the last flyby before Jupiter,
@@ -448,8 +442,8 @@ The arrays the search sized work only until the last flyby before Jupiter,
 argues for cheap commercial-grade cells of the kind CubeSats fly, scaled up,
 angled away from the Sun near Venus to stay cool, with mass-produced argon Hall
 thrusters. Price and mass trade one for one in the results ($10/W at 40 kg/kW
-scored the same as $50/W at 25 kg/kW). None of this rescues the routes above,
-whose limit is thrust; it bears on a purpose-built SEP design.
+scored the same as $50/W at 25 kg/kW). This matters only if the SEP routes
+survive the continuous-thrust check.
 
 ---
 
@@ -463,8 +457,9 @@ whose limit is thrust; it bears on a purpose-built SEP design.
 - The full suite passed (792 tests) at the ADR 0038 commit, `37c19f3`.
 
 **Open:**
-1. **Seed routes (§6): answered** by ADR 0039: fly the seed direct. The growth
-   cost model has no open modelling question left.
+1. **Seed routes (§6): mostly answered** by ADR 0039. Methalox assists never
+   pay; on the cheap seed nothing beats direct. SEP on the dear seed is
+   unverified pending a continuous-thrust check, the one open modelling question.
 2. **Nothing is written into the parent's `.tex`.** §5 lists the 13 changes.
    The author's plan is to bring everything back together once the route
    study lands.
@@ -483,11 +478,9 @@ whose limit is thrust; it bears on a purpose-built SEP design.
    saving but the only way to get enough mass there. The paper should make
    this point for a business reason too: a program that can only start with
    one provider's refuelled vehicle depends on that provider, and an SEP
-   route on several conventional launches is the hedge. ADR 0039's low-thrust
-   check is the caveat: the SEP routes found for a refuelled Starship's seed
-   could not be flown at their arrays' power, so a provider-independent SEP
-   path needs a purpose-built low-thrust trajectory, likely with more power or
-   time. The paper should give the direction and the caveat. Not yet priced: the companion has no launcher other than
+   route on several conventional launches is the hedge. The caveat: no SEP
+   route has yet been shown flyable with continuous thrust (ADR 0039), so the
+   paper should give the direction, not a priced option, until one is. Not yet priced: the companion has no launcher other than
    Starship and no SEP-only seed ship (each would need its own launch price,
    departure and route search).
 6. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a

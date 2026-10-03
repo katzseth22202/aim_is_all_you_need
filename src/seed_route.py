@@ -159,8 +159,8 @@ class SepStage:
 
         A necessary condition, not a sufficient one (ADR 0039): it asks only
         whether the leg supplies enough velocity change in total, not whether
-        thrust spread over the leg can still meet the next planet on time. A
-        low-thrust check found the routes this admits needed 2-10x the thrust.
+        thrust spread over the leg can still meet the next planet on time, so
+        routes it admits are optimistic until flown with continuous thrust.
         """
         r = np.asarray(distances_au, dtype=float)
         inverse_square = float(np.mean(np.minimum(1.0, r**-2)))
