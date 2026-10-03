@@ -207,8 +207,10 @@ learning_curve.py            ← leaf: Wright's law with a floor and an anchor,
       ↓
 growth_cost.py               ← learning_curve only: PURE arithmetic over a
                                 DesignInputs record (floats, kg and $). Charges
-                                every growth launch unit, the stepped 30%→10%
-                                rate, break-even p_L1 and steady $/kg by line.
+                                every growth launch unit; values the program at
+                                10% a year with 50% odds the cycle works (ADR
+                                0040; the stepped 30%→10% rate kept as a
+                                comparison); break-even p_L1 and steady $/kg.
                                 Tested on hand-built chains in the fast suite
       ↓
 growth_cost_inputs.py        ← growth_cost + seed_cost + harvest: builds the
@@ -220,10 +222,10 @@ seed_route.py                ← seed_cost + retrograde_return_legs + jovian_fly
                                 sep_split_correction + two_wave_growth + conic_kernel:
                                 the seed's route search (gravity assists, methalox
                                 or a charged SEP stage, pygmo islands capped by free
-                                memory). Verdict: fly the seed direct for now;
-                                methalox assists never pay, and the SEP capacity
-                                test is necessary, not sufficient, so its wins
-                                await a continuous-thrust check (ADR 0039)
+                                memory). Verdict: fly the seed on one Earth loop
+                                (EEJ) with methalox, 1.16-1.33x direct under ADR
+                                0040's valuation; SEP is out of scope, its
+                                capacity test necessary but not sufficient (ADR 0039)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

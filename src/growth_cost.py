@@ -312,17 +312,27 @@ def legacy_prices(plate_per_kg: float) -> PriceBook:
 
 @dataclass(frozen=True)
 class DiscountSchedule:
-    """An annual cost of capital that steps once.
+    """An annual cost of capital that steps once, and an optional risk.
+
+    ADR 0040 values the program as an expected value: time at an ordinary
+    rate, and the chance the cycle works applied once, to every flow from the
+    proof on. Flows before the proof (the seed, the first growth launch) are
+    spent whether or not it works.
 
     Attributes:
         early: Rate until ``switch_years``.
         late: Rate after it.
         switch_years: When the rate steps, in years from the seed's departure.
+        success: Probability the cycle works; 1 is the success case.
+        risk_years: When that is settled (the proof); flows at or after it
+            are weighted by ``success``.
     """
 
     early: float
     late: float
     switch_years: float
+    success: float = 1.0
+    risk_years: float = float("inf")
 
     @classmethod
     def flat(cls, rate: float) -> "DiscountSchedule":
@@ -352,6 +362,22 @@ class DiscountSchedule:
         """
         return cls(early, late, switch_years)
 
+    @classmethod
+    def risked(
+        cls, rate: float, success: float, proof_years: float
+    ) -> "DiscountSchedule":
+        """``rate`` throughout, flows from ``proof_years`` on weighted by ``success``.
+
+        Args:
+            rate: Annual time value of money.
+            success: Probability the cycle works.
+            proof_years: When that is known.
+
+        Returns:
+            The schedule.
+        """
+        return cls(rate, rate, 0.0, success, proof_years)
+
     def factor(self, years: float) -> float:
         """Present value of one dollar paid at ``years``.
 
@@ -361,10 +387,12 @@ class DiscountSchedule:
         Returns:
             The discount factor.
         """
+        odds = self.success if years >= self.risk_years else 1.0
         if years <= self.switch_years:
-            return float((1.0 + self.early) ** (-years))
+            return float(odds * (1.0 + self.early) ** (-years))
         early = (1.0 + self.early) ** (-self.switch_years)
-        return float(early * (1.0 + self.late) ** (-(years - self.switch_years)))
+        late = (1.0 + self.late) ** (-(years - self.switch_years))
+        return float(odds * early * late)
 
 
 @dataclass

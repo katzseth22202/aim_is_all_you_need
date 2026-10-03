@@ -14,21 +14,27 @@ disagrees with the scratch model, the reason is given.
 **Nothing has been written into `templateArxiv.tex`.**
 
 **Every figure below includes ADR 0038's fix** (each payload departs on the next
-window's burn, not its own cycle's). §4 item 1 lists what that moved, including
+window's burn, not its own cycle's) **and ADR 0040's valuation** (10% a year, a
+50% chance the cycle works, settled at the first growth return), which replaced
+ADR 0037's 30%-then-10% rate on 2026-10-03. The seed flies an Earth gravity
+assist (ADR 0039). §4 item 1 lists what that moved, including
 tables the parent has already published.
 
-**Bottom line.** With every growth cost charged, a *solved* pulsed chamber meets
-the cost targets and methalox probably does not. Under the Estimate prices, a
+**Bottom line.** With every growth cost charged and the program valued as an
+expected value (10% a year, 50% odds the cycle works), a *solved* pulsed chamber
+meets the cost targets and methalox does not. Under the Estimate prices, a
 solved chamber delivers to L1 for $100/kg in steady state and repays the seed at
-$132-178/kg on the cheap seed and $206-427 on the dear one, across a late rate
-of 10-20%. That is under Starcloud's $500 cap on both seeds and under
-Suncatcher's $200 on the cheap one; on the dear seed it sits just above $200.
-Methalox's steady-state cost is $169/kg, under both bars, but it grows too
-slowly to repay its seed in time. It needs $360-574/kg on the cheap seed and
-$1919 to over $3000 on the dear one. A chamber at half its
-ceiling does no better than methalox, so the target is met by chamber
-*efficiency*, not by having a chamber. With every price at its worst at once
-(the Pessimistic book), nothing repays the seed under $500.
+$134-137/kg on the cheap seed and $194-222 on the dear one, flying the seed
+direct. On the Earth gravity assist the seed now takes (ADR 0039), the dear seed
+falls to **$179** (solved hydrogen) and **$201** (solved methane). That is under
+Starcloud's $500 on both seeds and under Suncatcher's $200 on the cheap seed and,
+for solved hydrogen, on the dear one. Methalox's steady-state cost is $169/kg,
+under both bars, but it grows too slowly to repay its seed: $352/kg on the
+cheap seed and $1129-1396 on the dear one. A chamber at half its ceiling does no
+better than methalox, so the target is met by chamber *efficiency*, not by having
+a chamber. At 25% odds the dear-seed figures rise sharply (solved hydrogen $262
+direct); with every price at its worst at once (the Pessimistic book), nothing
+repays the dear seed under $500.
 
 ---
 
@@ -110,7 +116,8 @@ Cycle 0 is a 3S return feeding the 2S cycle 1, so its unit flies the dearer
 
 | Item | Value | Status |
 |---|---|---|
-| Cost of capital | **30% until the first growth return, then 10-20%** | 30%: Gompers et al. 10%: the author's judgment, **unsourced**; the band per §4 item 3 |
+| Valuation (ADR 0040) | **10% a year; 50% chance the cycle works, settled at the first growth return; flows before it certain** | Both the author's judgment (2026-10-03), **unsourced**; 10% is about a risky bond's yield. Reported also at 25% and 100% odds |
+| Old rate (comparison) | 30% until the first growth return, then 10-20% (ADR 0037) | 30%: Gompers et al. |
 | First growth return | 5.46 yr (chambers), 6.55 yr (methalox) | `times[1]` |
 | Sale price at L1 | $500 cap (Starcloud), $200 (Suncatcher) | parent `sec:heat_shield_bill` |
 | Horizon | 300 yr; steady-state $/kg measured on chain lap 3 after the harvest | modelling choice |
@@ -119,64 +126,79 @@ Cycle 0 is a 3S return feeding the 2S cycle 1, so its unit flies the dearer
 
 ## 3. Results
 
-### Headline: Estimate prices, stepped rate
+### Headline: Estimate prices (ADR 0040: 10%, 50% odds)
 
 "Steady $/kg" is the undiscounted cost per kilogram at L1, a lap into the
 steady state, seed excluded. Break-even (BE) is the sale price that repays the
-seed and every growth cost. Each pair is cheap / dear seed.
+seed and every growth cost. Value per seed dollar is the expected present value
+of everything after the seed over the seed's cost. Each pair is cheap / dear
+seed, flown direct.
 
 | Design | Steady $/kg | Lob | Plate + spray | Departure hw + spray | Fleet | Other | BE steady | BE liquidation | Value per seed $ at $500 | at $200 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Methalox | 169 | 115 | 46 | 4 | 1 | 3 | 360 / 1919 | 388 / >3000 | 3.3 / 0.1 | -1.6 / -0.1 |
-| Methane, 50% | 184 | 110 | 42 | 25 | 4 | 4 | 373 / 1306 | 379 / 2022 | 4.3 / 0.2 | -3.4 / -0.1 |
-| **Methane, solved** | **100** | 69 | 22 | 7 | 1 | 2 | **135 / 240** | 157 / 452 | 88 / 3.5 | 16 / 0.6 |
-| Hydrogen, 50% | 228 | 117 | 45 | 41 | 4 | 20 | 490 / 1657 | 481 / 2422 | 1.2 / 0.0 | -4.9 / -0.2 |
-| **Hydrogen, solved** | **100** | 66 | 20 | 8 | 1 | 5 | **132 / 206** | 153 / 371 | 127 / 5.0 | 23 / 0.9 |
+| Methalox | 169 | 115 | 46 | 4 | 1 | 3 | 352 / 1396 | 374 / 2168 | 4.7 / 0.2 | -2.7 / -0.1 |
+| Methane, 50% | 184 | 110 | 42 | 25 | 4 | 4 | 388 / 1138 | 406 / 1726 | 4.6 / 0.2 | -5.0 / -0.2 |
+| **Methane, solved** | **100** | 69 | 22 | 7 | 1 | 2 | **137 / 222** | 162 / 400 | 109 / 4.3 | 19 / 0.7 |
+| Hydrogen, 50% | 228 | 117 | 45 | 41 | 4 | 20 | 516 / 1454 | 524 / 2084 | 0.6 / 0.0 | -7.0 / -0.3 |
+| **Hydrogen, solved** | **100** | 66 | 20 | 8 | 1 | 5 | **134 / 194** | 159 / 334 | 158 / 6.2 | 28 / 1.1 |
 
-"Other" is argon, tanks, propellant, cryostats, plugs, pitch and film.
+"Other" is argon, tanks, propellant, cryostats, plugs, pitch and film. The
+steady $/kg columns do not depend on the valuation.
 
-### The other price books
+### With the seed on the Earth gravity assist (ADR 0039; `make growth-cost` §9)
+
+Steady break-even, Estimate, 50% odds. The route makes the seed 1.43x (cheap)
+and 1.64x (dear) cheaper per kilogram and returns 2.18 years later.
+
+| Design | Direct, cheap / dear | EEJ, cheap | EEJ, dear | EVEEJ, cheap | EVEEJ, dear |
+|---|---|---|---|---|---|
+| Methalox | 352 / 1396 | 346 | **1129** | 346 | 1357 |
+| Methane, solved | 137 / 222 | 136 | **201** | 136 | 219 |
+| Hydrogen, solved | 134 / 194 | 134 | **179** | 134 | 192 |
+
+### The other price books (ADR 0040, seed direct)
 
 | Design | Paper's: steady $/kg | Paper's: BE steady | Pessimistic: steady $/kg | Pessimistic: BE steady |
 |---|---|---|---|---|
-| Methalox | 194 | 501 / 2061 | 506 | 855 / 2421 |
-| Methane, 50% | 184 | 398 / 1332 | 910 | 1400 / 2333 |
-| Methane, solved | 99 | 144 / 250 | 438 | 555 / 659 |
-| Hydrogen, 50% | 215 | 475 / 1643 | 1035 | 1625 / 2793 |
-| Hydrogen, solved | 95 | 132 / 207 | 410 | 509 / 582 |
+| Methalox | 194 | 500 / 1545 | 506 | 861 / 1911 |
+| Methane, 50% | 184 | 416 / 1166 | 910 | 1466 / 2216 |
+| Methane, solved | 99 | 146 / 232 | 438 | 563 / 647 |
+| Hydrogen, 50% | 215 | 499 / 1438 | 1035 | 1712 / 2650 |
+| Hydrogen, solved | 95 | 134 / 195 | 410 | 515 / 574 |
 
-With every line at its worst at once, no design repays the seed under $500.
+With every line at its worst at once, nothing repays the dear seed under $500.
 
-### By cost of capital (Estimate, steady break-even)
+### By valuation (Estimate, steady break-even, seed direct)
 
-| Design | 30%->10% | 30%->15% | 30%->20% | Flat 7.6% | Flat 30% | 30%->10%, growth uncharged |
-|---|---|---|---|---|---|---|
-| Methalox | 360 / 1919 | 463 / 2903 | 574 / >3000 | 255 / 594 | 831 / >3000 | 117 / 1688 |
-| Methane, solved | 135 / 240 | 156 / 327 | 178 / 427 | 121 / 150 | 231 / 679 | 47 / 169 |
-| Hydrogen, solved | 132 / 206 | 151 / 271 | 172 / 346 | 120 / 140 | 220 / 533 | 45 / 134 |
+| Design | **10%, 50% odds** | 10%, 25% | 10%, 100% | 30%->10% (ADR 0037) | Flat 7.6% | Flat 30% | 10%, 50%, growth uncharged |
+|---|---|---|---|---|---|---|---|
+| Methalox | **352 / 1396** | 479 / 2564 | 288 / 812 | 360 / 1919 | 255 / 594 | 831 / >3000 | 94 / 1154 |
+| Methane, solved | **137 / 222** | 151 / 317 | 130 / 173 | 135 / 240 | 121 / 150 | 231 / 679 | 46 / 147 |
+| Hydrogen, solved | **134 / 194** | 145 / 262 | 128 / 159 | 132 / 206 | 120 / 140 | 220 / 533 | 44 / 118 |
 
 The growth charge roughly triples the solved chambers' cheap-seed break-even
-($45-47 to $132-135). **It is the largest change to `tab:seed_return`.**
+($44-46 to $134-137). **It is the largest change to `tab:seed_return`.** The odds
+matter most on the dear seed.
 
-### Sensitivity: one line at a time from the Estimate (steady $/kg; BE steady)
+### Sensitivity: one line at a time from the Estimate (steady $/kg; BE steady, seed direct)
 
 | Case | Methalox | Methane, solved | Hydrogen, solved |
 |---|---|---|---|
-| Estimate | 169; 360 / 1919 | 100; 135 / 240 | 100; 132 / 206 |
-| Lob $5/kg | 77; 222 / 1779 | 46; 77 / 179 | 48; 79 / 150 |
-| Lob $10/kg | 101; 256 / 1814 | 60; 92 / 195 | 62; 92 / 164 |
-| Lob $15/kg | 123; 291 / 1849 | 74; 106 / 210 | 75; 106 / 178 |
-| Lob $50/kg | 280; 533 / 2094 | 165; 206 / 314 | 161; 197 / 274 |
-| Argon $5/kg | 175; 370 / 1930 | 104; 138 / 244 | 104; 135 / 210 |
-| Package $300 | 170; 364 / 1923 | 110; 148 / 252 | 108; 143 / 217 |
-| Package $1000 | 176; 378 / 1937 | 133; 185 / 288 | 129; 175 / 247 |
-| Package $3000 | 192; 419 / 1978 | 201; 286 / 388 | 189; 263 / 334 |
-| Plate spray $8M | 184; 383 / 1942 | 109; 144 / 250 | 109; 141 / 215 |
-| Paper's $20/kg fleet | 172; 368 / 1927 | 102; 135 / 241 | 101; 133 / 207 |
+| Estimate | 169; 352 / 1396 | 100; 137 / 222 | 100; 134 / 194 |
+| Lob $5/kg | 77; 209 / 1251 | 46; 79 / 161 | 48; 80 / 137 |
+| Lob $10/kg | 101; 245 / 1288 | 60; 93 / 176 | 62; 94 / 152 |
+| Lob $15/kg | 123; 280 / 1324 | 74; 108 / 191 | 75; 107 / 166 |
+| Lob $50/kg | 280; 530 / 1577 | 165; 209 / 296 | 161; 200 / 262 |
+| Argon $5/kg | 175; 363 / 1408 | 104; 140 / 226 | 104; 137 / 197 |
+| Package $300 | 170; 356 / 1400 | 110; 150 / 234 | 108; 145 / 204 |
+| Package $1000 | 176; 369 / 1413 | 133; 187 / 270 | 129; 177 / 235 |
+| Package $3000 | 192; 408 / 1452 | 201; 289 / 370 | 189; 266 / 323 |
+| Plate spray $8M | 184; 376 / 1421 | 109; 146 / 232 | 109; 143 / 203 |
+| Paper's $20/kg fleet | 172; 360 / 1404 | 102; 137 / 222 | 101; 135 / 194 |
 
 Film, chamber sprayers, cryostats, plugs and pitch each move a solved chamber by
-$0-4/kg. The package's learning curve is worth $2-3/kg; even free packages save
-only about $1 more.
+$0-5/kg. The package's learning curve is worth $2-3/kg; even free packages save
+only about $3 more.
 
 ### Thresholds
 
@@ -218,7 +240,9 @@ new growth figures. The rest are changes owed to the paper (§5).
      ADR 0015's matched-recovery table, whose verdict holds and sharpens (11x at
      e = 0.6, was 8.5x).
    **The headline conclusion survives.** One claim weakens: solved hydrogen
-   no longer clears $200 on the dear seed ($206, was $186).
+   no longer clears $200 on the dear seed ($206, was $186) under
+   ADR 0037's rate. ADR 0040's valuation restores it ($194 direct, $179 on the
+   Earth gravity assist).
 2. **The 1500 t launch unit needs a booster 10-20% bigger than Super Heavy.
    Settled: we assume one** (author's judgment, 2026-10-01). `sec:vertical_lob`
    lofts 1250-1430 t with the braking reserve under 4 g at 380 s (1070-1250 t at
@@ -232,16 +256,13 @@ new growth figures. The rest are changes owed to the paper (§5).
    more per flight and the cost per kilogram does not move. **The paper should
    say plainly that it assumes a lifting rocket big enough for 1500 t** (draft
    in §5, item 10).
-3. **"Proven" after one cycle is a thin proof for a 10% rate. Settled: the late
-   rate is quoted as a 10-20% band** (author, 2026-10-01). The parent's own
-   `sec:mass_interest` says each cycle returns one measurement of `eta_geom` and
-   permits one redesign. **The band does not change the conclusion.** Across
-   10-20% the solved chambers break even at $132-178 on the cheap seed and
-   $206-427 on the dear one. That clears Starcloud's $500 on both seeds and
-   Suncatcher's $200 on the cheap seed. Methalox breaks even at $360-574 and
-   $1919 to over $3000. It never clears $200, never clears $500 on the dear
-   seed, and on the cheap seed clears $500 only up to a 15% late rate. The 10%
-   end stays labeled as the author's assumption.
+3. **"Proven" after one cycle is a thin proof for a 10% rate. Superseded by
+   ADR 0040** (author, 2026-10-03). The 30%-then-10% rate charged venture risk
+   again for every year of waiting, which decided the seed-route question by
+   assumption. The program is now valued as an expected value: 10% a year and a
+   50% chance the cycle works, settled once at the first growth return. The
+   odds, not a rate band, carry the doubt, and the paper should print 25% and
+   100% beside 50% (§3, "By valuation").
 4. **`tab:delivery_ledger`'s "paper's figures" column charges every delivery
    the 100th plate's price** ($11.4M). That assumes 99 plates are already paid
    for. By the harvest the program has built 5-38 plates. Charging each plate
@@ -293,13 +314,18 @@ Revised from ASKS.md "What comes back to the paper", with this model's numbers.
 1. Say that the growth phase is charged: every launch unit's lob, plate and
    spray, departure hardware, tanks, propellant, cryostats, consumables and
    fleet manufacture, and the seed's own manufacture.
-2. Replace `tab:seed_return`'s IRR columns with stepped-rate break-even and
-   value per seed dollar (tables in §3). Keep flat 7.6% and 30% as a comparison
-   row.
-3. State the stepped rate and its reason. Quote the late rate as a 10-20% band (§4,
-   item 3).
-4. Near-term choice: methalox breaks even at $360 / $1919; the solved chambers
-   at $132-135 / $206-240. A half-ceiling chamber is no better than methalox.
+2. Replace `tab:seed_return`'s IRR columns with ADR 0040's break-even and
+   expected value per seed dollar (tables in §3). Keep ADR 0037's stepped rate
+   and the flat 7.6% and 30% as comparison rows.
+3. State the valuation and its reason: time at 10% a year (about a risky
+   bond's yield), and a 50% chance the cycle works, settled at the first growth
+   return, applied to every flow from then on; money spent before it is spent
+   either way. A venture rate compounded each year would charge the same risk
+   again for every year of waiting. Print the 25% and 100% rows; label both
+   numbers as the author's assumptions.
+4. Near-term choice: methalox breaks even at $352 / $1396 (seed direct); the
+   solved chambers at $134-137 / $194-222, and $179-201 on the dear seed with
+   the Earth gravity assist. A half-ceiling chamber is no better than methalox.
 5. Steady-state overhead goes as `C_g / (G - 1)`: methalox, at G near 2,
    carries about one reinvested launch unit per delivered one.
 
@@ -333,14 +359,23 @@ Revised from ASKS.md "What comes back to the paper", with this model's numbers.
 **A path that does not depend on Starship** (author, 2026-10-02; for
 `sec:mass_interest`, beside the seed's cost):
 14. Every seed price above assumes an expended Starship refuelled in low
-    orbit. Say what happens without it. No single expendable chemical launch
-    sends a seed-sized mass past Jupiter, so the fallback is a few
-    conventional launches flown together, each with an expendable SEP stage.
-    There SEP is not a saving but the only way to send enough mass. Make the
-    business case plainly: a program that can only start on one provider's
-    refuelled vehicle depends on that provider, and this is the hedge. Give
-    it as a direction, not a priced option, until a continuous-thrust check
-    shows an SEP route can be flown (ADR 0039, §7 item 5).
+    orbit. Say what happens without it, whether through competition,
+    technical setbacks or access (author, 2026-10-03: the strongest reason to
+    plan for it). The direct route is demanding: the seed leaves Earth at
+    11.3 km/s of excess speed, because it must come back from Jupiter at the
+    cycle's collision speed. Conventional expendable launchers deliver little
+    useful mass at that speed. Chemical gravity assists cut it: an Earth loop
+    leaves at 6.8 km/s, Venus routes at 2.8-4.4 km/s. That is why Galileo
+    (Venus-Earth-Earth) and Juno (an Earth loop) flew them. Without a
+    refuelled Starship, the comparison is not seed per dollar against a cheap
+    direct route but flying with assists or not flying, so the plan is a few
+    conventional launches on gravity-assist routes. Make the business case
+    plainly: a program that can only start on one provider's refuelled
+    vehicle depends on that provider, and this is the hedge. These routes are
+    flight-proven and the companion models them correctly (ADR 0039). SEP
+    could add to them but is not shown to fly as modelled; leave it as a
+    possible addition, not part of the case. Not priced: no launcher other
+    than Starship is in the companion.
 
 **Citations still owed:** the 10% late rate, the argon price and supply, and
 any analogue for the chamber, plate, sprayers, cryostats and package. Until
@@ -351,46 +386,45 @@ then each is a labeled hypothesis.
 ## 6. Draft owed: cheaper seeds if launch stays dear (for `sec:mass_interest`)
 
 Requested by the author on 2026-10-01: a short section on how to cut the seed's
-cost if the bank flight prices hold. The rule in the first paragraph and the
-waiting arithmetic are exact. The route paragraphs now carry the companion's
-result (ADR 0039, 2026-10-03): **fly the seed direct.** An earlier version of
-this draft claimed the Venus route sends 2.9 times the mass. That used ADR
-0008's phasing-free trajectories and is withdrawn.
+cost if the bank flight prices hold. It now carries the companion's results
+(ADR 0039 for the routes, ADR 0040 for the valuation, 2026-10-03): **fly the
+seed on an Earth gravity assist.** An earlier version claimed the Venus route
+sends 2.9 times the mass; that used ADR 0008's phasing-free trajectories and is
+withdrawn. Solar-electric propulsion is out of scope (ADR 0039).
 
 > **Draft text.**
 >
 > The seed is paid once, so it can be bought cheaper by spending time. A choice
 > that makes the seed $k$ times cheaper per kilogram but delays the first return
-> by $\Delta t$ years repays itself when $k(1+r)^{-\Delta t} > 1$, with $r$ the
-> rate charged before the cycle is proven. The program's later costs and revenues
-> slide together, so the test does not depend on what the fleet is worth. At 30%,
-> a two-year delay has to buy a seed 1.7 times cheaper and a three-year delay
-> one 2.2 times cheaper.
+> by $\Delta t$ years repays itself when $k(1+r)^{-\Delta t} > 1$. Because the
+> chance that the cycle works is the same whichever way the seed travels, it
+> cancels, and $r$ is the ordinary time value of money, 10\% a year. The program's
+> later costs and revenues slide together, so the test does not depend on what
+> the fleet is worth. A two-year delay has to buy a seed 1.21 times cheaper, a
+> four-year delay 1.46 times.
 >
-> Waiting for cheaper launches fails this test. Under the bank prices the twelve
-> tankers are 85 to 92% of the seed's bill, so the seed's price follows the flight
-> price. Morgan Stanley's \$500 per kilogram in 2030 becomes less than \$150 by
-> 2040 \cite{investing2026_ms_spacex}. That is 3.3 times cheaper for ten years of
-> waiting, against the 13.8 times that ten years at 30% demands.
+> A gravity assist passes. Venus and Earth flybys lower the burn the seed ship
+> makes from low orbit, from an excess speed of 11.3 km/s for the direct route
+> to 6.8 km/s for one Earth loop. With the planets where they really are, the
+> maneuvers between flybys still cost something, but the Earth loop sends 1.64
+> times the seed of the direct route on the dear seed ship (1.43 times on the
+> cheap one) and returns 2.2 years later. That delay needs 1.23 times, so the
+> route is worth 1.33 times the direct seed per dollar (1.16 times on the cheap
+> ship) \cite{Katz_aim_is_all_you_need_2025}. A Venus--Earth--Earth route, the
+> one Galileo flew, does about as well on the cheap ship (1.19 times) and barely
+> pays on the dear one (1.04 times); routes with burns of several km/s between
+> flybys lose. On the dear seed the Earth loop lowers solved hydrogen's
+> break-even from \$194 to \$179 per kilogram, and solved methane's from \$222
+> to \$201.
 >
-> A slower route does not pass either. Venus and Earth gravity assists lower
-> the burn the seed ship makes from low orbit, but with the planets where they
-> really are, the maneuvers between flybys eat the saving. Flown with methalox,
-> the best route found, one Earth loop, sends 1.6 times the seed of the direct
-> route but returns 2.2 years later, and at 30\% that delay needs 1.8 times; it
-> loses by 8\% \cite{Katz_aim_is_all_you_need_2025}. Every Venus route does
-> worse.
->
-> Solar-electric propulsion may be the way through, and is not yet shown to
-> be. Flying the maneuvers with an argon electric stage, charged for its
-> hardware, its argon and the PuffSats they displace, an impulsive model finds
-> Earth- and Venus-assisted routes that beat the direct route by up to 1.5 times
-> on the dear seed ship at near-commercial array prices, and by 10 to 20\% at
-> \$200 per watt. But that model credits a leg's thrust as one burn at the next
-> flyby. A ship thrusting at a tenth of a millimeter per second squared for a
-> year also moves, and must still meet the planet at a fixed time and place, so
-> the model is optimistic. [TBD: the continuous-thrust check, ADR 0039 follow-up.]
-> On the cheap seed ship no route beats direct even in that optimistic model.
+> Waiting for cheaper launches passes the same test, narrowly. Under the bank
+> prices the twelve tankers are 85 to 92\% of the seed's bill, so the seed's
+> price follows the flight price. Morgan Stanley's \$500 per kilogram in 2030
+> becomes less than \$150 by 2040 \cite{investing2026_ms_spacex}, 3.3 times
+> cheaper for ten years of waiting against the 2.6 times that ten years at 10\%
+> demands. The case against a decade's wait is not the discount rate but what
+> the rate leaves out: competitors, a team carried for ten years, and the chance
+> the opportunity closes.
 >
 > A smaller first launch unit cuts the capital at risk but not the price. The
 > seed is one launch unit's first-cycle consumption, and every later cost and
@@ -398,52 +432,32 @@ this draft claimed the Venus route sends 2.9 times the mass. That used ADR
 > together, and leaves every break-even price where it is. It costs one doubling
 > time to catch up.
 
-**Electric propulsion assumptions** (author's request, 2026-10-01: charge its
-mass and its cost). The mass figures are ADR 0026's: argon at 2000 s, thruster
-efficiency 0.5, 10/15/20 kg per kW at 1 AU for array, PPU, thrusters and gimbals,
-argon tankage 0.15 kg/kg, power falling as 1/r^2 outside 1 AU and **capped at its
-1 AU rating inside it** (author, 2026-10-02: the electronics are sized at 1 AU,
-and the array is angled to stay cool near Venus). The **price tiers** (author,
-2026-10-02) are unsourced hypotheses: **$10/W** with everything near commercial
-prices, **$50/W** for commercial power and mass-produced argon SEP, and **$200/W**
-conventional. Each is paired with a stage mass, which is Claude's assumption:
-40, 25 and 15 kg/kW, plus $10/W at 15 kg/kW as a cheap-and-light bound.
-ADR 0026 found argon SEP cannot pay for the *growth wave's* split
-corrections. That verdict was on a recurring cost per cycle; a one-time seed is a
-different test, which is why it is back here.
-
 Not in the draft, deliberately: lunar-sourced tanker propellant (`sec:isru`).
 The tankers are most of the bill, so it would matter, but nothing in either repo
 prices it.
 
-**Companion result (ADR 0039, 2026-10-03).** `src/seed_route.py` searched
-direct, EEJ, EVEJ, EVVEJ and EVEEJ on both seed ships, nodes flown by methalox or
-by an SEP stage at 0.5-8 W/kg and $10, $50 or $200 per watt, power capped at
-1 AU, every route scored on seed per dollar discounted at 30% to its return.
-Full tables and settings are in the ADR. In short:
+**Companion result (ADR 0039).** `src/seed_route.py` searched direct, EEJ, EVEJ,
+EVVEJ and EVEEJ with methalox burns between flybys on both seed ships, each
+route scored on seed per dollar with the delay charged at 10% a year (the odds
+cancel). Seed per dollar against direct:
 
-- **Methalox flyby routes never pay.** Best: EEJ at 0.92x direct on the dear
-  ship, 0.81x on the cheap one.
-- **On the cheap ship nothing beats direct**, even in the impulsive model, which
-  is optimistic about SEP; so that loss stands.
-- **SEP beats direct on the dear ship only in the impulsive model** (up to 1.5x
-  at $10/W and 40 kg/kW, 1.1-1.2x at $200/W). The model is optimistic about
-  spread-out thrust, and a first low-thrust check was too coarse to measure by
-  how much (16 impulses per leg; its "flyable" solution missed Earth by 15
-  million km under continuous integration). **Unverified**; a continuous-thrust
-  check is under way.
-- Until then the seed flies direct, `make growth-cost` section 9 is empty, and
-  the preview in which SEP brought solved hydrogen under $200/kg on the dear
-  seed is not adopted. Solved hydrogen stays at $206/kg there (§4 item 1).
+| Route | $670M ship | $31M ship |
+|---|---|---|
+| **EEJ** (one Earth loop) | **1.33x** | 1.16x |
+| EVEEJ (Galileo's) | 1.04x | **1.19x** |
+| EVEJ | 0.60x | 0.51x |
+| EVVEJ | 0.59x | 0.51x |
 
-**Cheap panels, kept as context for the no-Starship direction (§7 item 5).**
-The arrays the search sized work only until the last flyby before Jupiter,
-1.1-3.5 years between 0.67 and 3.2 AU, far from the radiation belts. That
-argues for cheap commercial-grade cells of the kind CubeSats fly, scaled up,
-angled away from the Sun near Venus to stay cool, with mass-produced argon Hall
-thrusters. Price and mass trade one for one in the results ($10/W at 40 kg/kW
-scored the same as $50/W at 25 kg/kW). This matters only if the SEP routes
-survive the continuous-thrust check.
+At ADR 0037's 30% a year the same routes all lost (EEJ 0.92x and 0.81x): the
+old rate, not the trajectory, had decided the question.
+
+**SEP, out of scope (ADR 0039).** An impulsive model credited SEP routes with
+wins of up to 1.5x on the dear seed, but it treats a leg's thrust as one burn at
+the next flyby. Flown with continuous thrust (pykep's zero-order-hold legs,
+checked against an independent integration), EEJ at 2 W/kg needed twice its
+array's thrust and EEJ at 4 W/kg could not fly once its thrust fell with
+distance from the Sun. Deciding SEP needs a trajectory designed for low thrust
+from end to end, which this analysis does not build.
 
 ---
 
@@ -454,36 +468,20 @@ survive the continuous-thrust check.
 - All ten requested outputs: `make growth-cost`.
 - All eight pushback items in §4: accepted by the author on 2026-10-01.
 - Validation against `tab:seed_return`: §1.
-- The full suite passed (792 tests) at the ADR 0038 commit, `37c19f3`.
+- The valuation: ADR 0040 (10% a year, 50% odds the cycle works).
+- Seed routes: ADR 0039 (fly an Earth gravity assist; SEP out of scope).
 
 **Open:**
-1. **Seed routes (§6): mostly answered** by ADR 0039. Methalox assists never
-   pay; on the cheap seed nothing beats direct. SEP on the dear seed is
-   unverified pending a continuous-thrust check, the one open modelling question.
-2. **Nothing is written into the parent's `.tex`.** §5 lists the 13 changes.
-   The author's plan is to bring everything back together once the route
-   study lands.
-3. **Citations owed:** the 10% late rate, the argon price, and analogues for
-   the chamber, plate, sprayers, cryostats and package. Until then, each is a
-   labeled hypothesis.
-4. **Argon supply** against about 30 000 t per cycle (§4 item 8). This is for
+1. **Nothing is written into the parent's `.tex`.** §5 lists 14 changes.
+2. **Citations owed:** the 10% time value and the 50% odds (both the author's
+   assumptions), the argon price, and analogues for the chamber, plate,
+   sprayers, cryostats and package. Until then, each is a labeled hypothesis.
+3. **Argon supply** against about 30 000 t per cycle (§4 item 8). This is for
    the paper to check; the companion does not model it.
-5. **Draft owed: SEP as the fallback without Starship refuelling** (author,
-   2026-10-02). Every seed price here assumes an expended Starship refuelled
-   in low orbit by twelve tankers. If Starship, or its refuelling, is not
-   available to this program, chemical stages cannot send a seed-sized payload
-   past Jupiter at any reasonable price. No single expendable chemical launch
-   sends a seed-sized mass, so the realistic plan becomes **a few launches
-   flown together, each with an expendable SEP stage**. SEP is then not a cost
-   saving but the only way to get enough mass there. The paper should make
-   this point for a business reason too: a program that can only start with
-   one provider's refuelled vehicle depends on that provider, and an SEP
-   route on several conventional launches is the hedge. The caveat: no SEP
-   route has yet been shown flyable with continuous thrust (ADR 0039), so the
-   paper should give the direction, not a priced option, until one is. Not yet priced: the companion has no launcher other than
-   Starship and no SEP-only seed ship (each would need its own launch price,
-   departure and route search).
-6. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a
+4. **A path that does not depend on Starship** (§5 item 14): a few
+   conventional launches on chemical gravity-assist routes. A direction for the
+   paper; not priced, since the companion has no launcher other than Starship.
+5. **Not priced, by decision** (ADR 0037): plate and chamber recovery, a
    falling lob or sale price over time, demand capping the fleet, a seed
    larger than one launch unit, and the trade between rod size and package
    count (G4).

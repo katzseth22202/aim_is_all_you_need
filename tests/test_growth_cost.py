@@ -288,3 +288,17 @@ def test_a_cheaper_later_route_pays_only_when_k_beats_the_wait() -> None:
     )
     assert direct is not None and good is not None and poor is not None
     assert good < direct < poor
+
+
+def test_risk_is_charged_once_at_the_proof_and_time_at_the_bond_rate() -> None:
+    # ADR 0040: 10% a year throughout; flows from the proof on happen only if
+    # the cycle works (50%); flows before it are spent regardless.
+    risked = DiscountSchedule.risked(0.10, 0.5, proof_years=5.46)
+    assert risked.factor(3.0) == pytest.approx(1.1**-3.0)
+    assert risked.factor(5.46) == pytest.approx(0.5 * 1.1**-5.46)
+    assert risked.factor(12.0) == pytest.approx(0.5 * 1.1**-12.0)
+    # Certain success is the plain 10% schedule.
+    sure = DiscountSchedule.risked(0.10, 1.0, proof_years=5.46)
+    assert sure.factor(12.0) == pytest.approx(DiscountSchedule.flat(0.10).factor(12.0))
+    # The old stepped schedule is unchanged by the new fields.
+    assert STEPPED.factor(8.0) == pytest.approx(1.3**-6.0 * 1.1**-2.0)

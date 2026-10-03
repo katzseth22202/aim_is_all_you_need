@@ -68,7 +68,7 @@ seed-cost:  ## The expended seed ship's $/kg and tab:seed_amortization, stripped
 seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1, liquidation, steady state, IRR, break-even price (ADR 0036)
 	python -m src.harvest
 
-growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1, stepped rate (ADR 0037)
+growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1: 10%, 50% odds (ADR 0037/0040), seed routes (ADR 0039)
 	python -m src.growth_cost_report
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber

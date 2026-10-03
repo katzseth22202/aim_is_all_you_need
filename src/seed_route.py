@@ -7,10 +7,11 @@ the burn from low orbit sends more PuffSats per ship, so the seed costs less
 per kilogram. But it arrives later, and the whole program slides with it.
 
 **The test.** A route that makes the seed ``k`` times cheaper and delays its
-return by ``dt`` years repays itself when ``k (1 + r)^-dt > 1``, with ``r`` the
-rate charged before the cycle is proven (30%). Every later cost and revenue
+return by ``dt`` years repays itself when ``k (1 + r)^-dt > 1``. Under ADR
+0040's valuation the chance the cycle works is the same on every route and
+cancels, so ``r`` is the time value of money, 10%. Every later cost and revenue
 slides by the same ``dt``, so the test does not depend on what the fleet is
-worth (:func:`seed_route_worth`).
+worth (:func:`seed_route_worth`). ADR 0039: one Earth loop (EEJ) wins.
 
 **Solar-electric propulsion is charged twice** (author, 2026-10-01). Its array,
 power processing, thrusters and argon tankage ride with the seed and displace
@@ -69,7 +70,9 @@ def seed_route_worth(cheaper: float, delay_years: float, rate: float) -> float:
     Args:
         cheaper: How many times cheaper per kilogram the route makes the seed.
         delay_years: How much later its first return comes.
-        rate: Annual cost of capital before the cycle is proven.
+        rate: Annual cost of capital charged on the delay: the venture rate
+            if waiting carries venture risk, the late rate (ADR 0039's
+            convention) if it carries only time value.
 
     Returns:
         The route's worth relative to the direct seed.
@@ -78,23 +81,39 @@ def seed_route_worth(cheaper: float, delay_years: float, rate: float) -> float:
 
 
 def discounted_seed_per_dollar(
-    seed_mass: float, return_years: float, dollars: float, rate: float
+    seed_mass: float,
+    return_years: float,
+    dollars: float,
+    rate: float,
+    late_rate: Optional[float] = None,
+    switch_years: float = float("inf"),
 ) -> float:
     """Seed mass per dollar, discounted from its return to the seed's purchase.
 
     The route search maximises this: it is the ``k (1 + r)^-dt`` test with the
     dollars, SEP hardware included, inside ``k``.
 
+    ADR 0039 charges the venture rate only for as long as the direct route
+    takes to return; years a slower route adds carry time value alone, at
+    ``late_rate``. Waiting does not make the physics likelier to fail.
+
     Args:
         seed_mass: Seed sent per ship (kg).
         return_years: From purchase to the seed's return (yr).
         dollars: What the ship and its stage cost.
-        rate: Annual cost of capital before the cycle is proven.
+        rate: Annual cost of capital until ``switch_years``.
+        late_rate: Annual cost of capital after it; None keeps ``rate``.
+        switch_years: When the rate steps (yr from purchase), the direct
+            route's return under ADR 0039's convention.
 
     Returns:
         Kilograms per dollar, discounted.
     """
-    return float(seed_mass * (1.0 + rate) ** (-return_years) / dollars)
+    early = min(return_years, switch_years)
+    late = max(0.0, return_years - switch_years)
+    after = rate if late_rate is None else late_rate
+    factor = (1.0 + rate) ** (-early) * (1.0 + after) ** (-late)
+    return float(seed_mass * factor / dollars)
 
 
 def ship_cost(flight_price: float, hull: float) -> float:
@@ -546,10 +565,14 @@ class _RouteProblem:
         ship: SeedShip,
         ship_dollars: float,
         rate: float,
+        late_rate: Optional[float] = None,
+        switch_years: float = float("inf"),
     ) -> None:
         self.sequence = sequence
         self.ship_dollars = ship_dollars
         self.rate = rate
+        self.late_rate = late_rate
+        self.switch_years = switch_years
         self.bend_sign = bend_sign
         self.propulsion = propulsion
         self.stage = stage
@@ -624,7 +647,12 @@ class _RouteProblem:
             return [_INFEASIBLE / 4.0]
         dollars = self.ship_dollars + (self.stage.price(stack) if self.stage else 0.0)
         value = discounted_seed_per_dollar(
-            seed, launch + flight.trip_years, dollars, self.rate
+            seed,
+            launch + flight.trip_years,
+            dollars,
+            self.rate,
+            self.late_rate,
+            self.switch_years,
         )
         slow = max(0.0, RETURN_FLOOR - flight.collision_speed)
         # Log value, so a km/s of shortfall weighs like a factor of e^10.
@@ -644,14 +672,18 @@ def _evolve_island(
         int,
         int,
         int,
+        Optional[float],
+        float,
     ],
 ) -> Tuple[List[float], float]:
     """One independent island: build the problem here, evolve, return its champion."""
     import pygmo as pg
 
     (sequence, sign, propulsion, stage, ship, dollars, rate, population, generations,
-     evolutions, seed) = task  # fmt: skip
-    udp = _RouteProblem(sequence, sign, propulsion, stage, ship, dollars, rate)
+     evolutions, seed, late_rate, switch_years) = task  # fmt: skip
+    udp = _RouteProblem(
+        sequence, sign, propulsion, stage, ship, dollars, rate, late_rate, switch_years
+    )
     pop = pg.population(pg.problem(udp), population, seed=seed)
     algo = pg.algorithm(pg.sade(gen=generations, seed=seed))
     for _ in range(evolutions):
@@ -701,6 +733,8 @@ def best_route(
     ship_dollars: float = 670.0e6,
     rate: float = 0.30,
     seed: int = 0,
+    late_rate: Optional[float] = None,
+    switch_years: float = float("inf"),
     islands: int = 8,
     population: int = 40,
     generations: int = 150,
@@ -724,7 +758,10 @@ def best_route(
         ship: The seed ship.
         ship_dollars: What the ship costs (:func:`ship_cost`); the default
             is the dear end, Morgan Stanley's flights and a $20M hull.
-        rate: Cost of capital until the seed returns.
+        rate: Cost of capital until ``switch_years``.
+        late_rate: Cost of capital after it (ADR 0039: years a slower route
+            adds past the direct route's return); None keeps ``rate``.
+        switch_years: When the rate steps, in years from purchase.
         seed: Random seed; island ``i`` on side ``s`` uses ``seed + 2 i + s``.
         islands: Islands per bend side.
         population: Individuals per island.
@@ -739,7 +776,7 @@ def best_route(
 
     tasks = [
         (sequence, sign, propulsion, stage, ship, ship_dollars, rate, population,
-         generations, evolutions, seed + 2 * island + side)
+         generations, evolutions, seed + 2 * island + side, late_rate, switch_years)
         for side, sign in enumerate((1.0, -1.0))
         for island in range(islands)
     ]  # fmt: skip
@@ -750,7 +787,15 @@ def best_route(
     best: Optional[SeedRoute] = None
     for task, (x, _) in zip(tasks, champions):
         udp = _RouteProblem(
-            sequence, task[1], propulsion, stage, ship, ship_dollars, rate
+            sequence,
+            task[1],
+            propulsion,
+            stage,
+            ship,
+            ship_dollars,
+            rate,
+            late_rate,
+            switch_years,
         )
         route = _price(udp, x)
         if route is not None and (best is None or route.value > best.value):
@@ -785,6 +830,11 @@ def _price(udp: _RouteProblem, x: Sequence[float]) -> Optional[SeedRoute]:
         puffsats_per_ship=seed_mass,
         dollars=dollars,
         value=discounted_seed_per_dollar(
-            seed_mass, launch + flight.trip_years, dollars, udp.rate
+            seed_mass,
+            launch + flight.trip_years,
+            dollars,
+            udp.rate,
+            udp.late_rate,
+            udp.switch_years,
         ),
     )

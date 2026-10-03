@@ -3,7 +3,8 @@
 Prints the outputs the parent asked for (``docs/growth_cost_for_parent.md``,
 asks G1-G4): the hardware each launch unit carries, the steady-state cost per
 kilogram at L1 by line, break-even sale prices and value per seed dollar
-under the stepped rate and the flat comparisons, the chamber and package
+as expected values (ADR 0040: 10% a year, 50% odds the cycle works) with
+the stepped and flat rates as comparisons, the chamber and package
 prices at which a chamber matches methalox, plate learning, and one-line
 sensitivities.  Building the chains takes several minutes.
 """
@@ -37,8 +38,15 @@ from src.harvest import PLATE_PRICES, solve_rate
 from src.learning_curve import LearningCurve
 from src.seed_cost import DESIGNS
 
-#: The late rate after the first growth return (ASKS G2), and the two higher
-#: ones the companion sweeps because one measured cycle is a thin proof.
+#: ADR 0040's headline: time at 10% a year (about a risky bond's yield) and a
+#: 50% chance the cycle works, settled once at the first growth return. Both
+#: are the author's assumptions (2026-10-03); the odds are also reported at
+#: 25% and at certain success.
+TIME_RATE = 0.10
+SUCCESS = 0.5
+SUCCESS_BAND = (0.5, 0.25, 1.0)
+#: ADR 0037's stepped schedule, kept as a comparison: 30% until the first
+#: growth return (ASKS G2), then a late rate.
 LATE_RATES = (0.10, 0.15, 0.20)
 EARLY_RATE = 0.30
 FLAT_RATES = (0.076, 0.30)
@@ -57,9 +65,28 @@ LINES = (
     "film",
 )
 
-#: Seed routes (ADR 0039), each relative to the direct route on its own ship.
-#: Empty: methalox routes never pay; SEP wins are unverified (ADR 0039).
-SEED_ROUTES: Tuple[RouteSeed, ...] = ()
+#: Seed routes (ADR 0039), each relative to the direct route on its own ship:
+#: the route's dollars per seed kilogram over direct's, and how much later it
+#: returns. From the chemical sweep scored at 10% for added years (ADR 0040).
+SEED_ROUTES: Tuple[RouteSeed, ...] = (
+    RouteSeed("EEJ, methalox", dear=False, price_ratio=0.6991, delay_years=2.184),
+    RouteSeed("EVEEJ, methalox", dear=False, price_ratio=0.5544, delay_years=4.356),
+    RouteSeed("EEJ, methalox", dear=True, price_ratio=0.6112, delay_years=2.184),
+    RouteSeed("EVEEJ, methalox", dear=True, price_ratio=0.6375, delay_years=4.335),
+)
+
+
+def risked(inputs: DesignInputs, success: float = SUCCESS) -> DiscountSchedule:
+    """ADR 0040: 10% a year; flows from the first growth return on x ``success``.
+
+    Args:
+        inputs: The design's chain (its proof is its first growth return).
+        success: Probability the cycle works.
+
+    Returns:
+        The schedule.
+    """
+    return DiscountSchedule.risked(TIME_RATE, success, inputs.proof_years)
 
 
 def stepped(inputs: DesignInputs, late: float = LATE_RATES[0]) -> DiscountSchedule:
@@ -150,11 +177,11 @@ def hardware(designs: Sequence[DesignInputs]) -> str:
 
 
 def headline(designs: Sequence[DesignInputs], prices: PriceBook) -> str:
-    """Steady $/kg by line; stepped break-evens and value per seed dollar."""
+    """Steady $/kg by line; risked break-evens and value per seed dollar."""
     rows = []
     for inputs in designs:
         total, lines = steady_state_cost(inputs, prices)
-        schedule = stepped(inputs)
+        schedule = risked(inputs)
         values = [
             " / ".join(
                 f"{value_per_seed_dollar(inputs, prices, s, p, schedule):.1f}"
@@ -180,10 +207,11 @@ def headline(designs: Sequence[DesignInputs], prices: PriceBook) -> str:
 
 
 def rates(designs: Sequence[DesignInputs]) -> str:
-    """Steady break-even under the stepped rates and the flat comparisons."""
+    """Steady break-even by chance of success, and the older schedules."""
     rows = []
     for inputs in designs:
         row = [inputs.label]
+        row += [_break_evens(inputs, ESTIMATE, risked(inputs, p)) for p in SUCCESS_BAND]
         row += [
             _break_evens(inputs, ESTIMATE, stepped(inputs, late)) for late in LATE_RATES
         ]
@@ -191,17 +219,16 @@ def rates(designs: Sequence[DesignInputs]) -> str:
             _break_evens(inputs, ESTIMATE, DiscountSchedule.flat(r)) for r in FLAT_RATES
         ]
         row += [
-            _break_evens(
-                inputs, legacy_prices(PLATE_PRICES["learned"]), stepped(inputs)
-            )
+            _break_evens(inputs, legacy_prices(PLATE_PRICES["learned"]), risked(inputs))
         ]
         rows.append(row)
     return tabulate(
         rows,
         ["Design"]
+        + [f"10%, {p:.0%} odds" for p in SUCCESS_BAND]
         + [f"30%->{late:.0%}" for late in LATE_RATES]
         + [f"flat {r:.1%}" for r in FLAT_RATES]
-        + ["30%->10%, growth uncharged"],
+        + ["10%, 50% odds, growth uncharged"],
     )
 
 
@@ -324,7 +351,7 @@ def _sweep(
         rows.append(
             [name]
             + [f"{steady_state_cost(d, prices)[0]:.0f}" for d in designs]
-            + [_break_evens(d, prices, stepped(d)) for d in designs]
+            + [_break_evens(d, prices, risked(d)) for d in designs]
         )
     labels = [d.label for d in designs]
     return tabulate(rows, ["Case"] + labels + [f"BE {label}" for label in labels])
@@ -333,7 +360,7 @@ def _sweep(
 def seed_routes(
     designs: Sequence[DesignInputs], routes: Sequence[RouteSeed] = SEED_ROUTES
 ) -> str:
-    """Steady break-even, stepped rate, with the seed flown on each route.
+    """Steady break-even, ADR 0040's schedule, with the seed flown on each route.
 
     Args:
         designs: The designs.
@@ -343,14 +370,11 @@ def seed_routes(
         A table: direct, then one column per route.
     """
     if not routes:
-        return (
-            "(none: methalox assists never pay and SEP routes are unverified; "
-            "the seed flies direct, ADR 0039)"
-        )
+        return "(none: no route listed; ADR 0039)"
     prices = seed_prices()
     rows = []
     for inputs in designs:
-        row = [inputs.label, _break_evens(inputs, ESTIMATE, stepped(inputs))]
+        row = [inputs.label, _break_evens(inputs, ESTIMATE, risked(inputs))]
         for route in routes:
             row.append(
                 _fmt(
@@ -359,7 +383,7 @@ def seed_routes(
                         ESTIMATE,
                         prices[1 if route.dear else 0],
                         route,
-                        stepped,
+                        risked,
                     )
                 )
             )
@@ -392,14 +416,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print("\n2. Hardware per launch unit, cycle 0")
     print(hardware(designs))
     for prices in SCENARIOS:
-        print(
-            f"\n3. {prices.label}: stepped rate 30% -> 10% at the first growth return"
-        )
+        print(f"\n3. {prices.label}: 10% a year, 50% odds the cycle works (ADR 0040)")
         print(headline(designs, prices))
     if args.quick:
         return
     pick = [designs[0], designs[2], designs[4]]
-    print("\n4. Steady-state break-even by cost of capital (Estimate)")
+    print(
+        "\n4. Steady-state break-even by chance of success and cost of capital (Estimate)"
+    )
     print(rates(designs))
     print(
         "\n5. Flat price at which a chamber's steady $/kg equals methalox's (Estimate)"
@@ -407,11 +431,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print(matching(designs))
     print("\n6. Plates built before the price falls below $10M ($6M floor)")
     print(plate_learning(designs))
-    print("\n7. Package price over volume or time: steady $/kg and stepped BE")
+    print("\n7. Package price over volume or time: steady $/kg and BE (ADR 0040)")
     print(packages(pick))
-    print("\n8. One line at a time from the Estimate: steady $/kg and stepped BE")
+    print("\n8. One line at a time from the Estimate: steady $/kg and BE (ADR 0040)")
     print(sensitivities(pick))
-    print("\n9. Seed routes (ADR 0039): steady BE, stepped 30% -> 10%, Estimate")
+    print("\n9. Seed routes (ADR 0039): steady BE, ADR 0040's schedule, Estimate")
     print(seed_routes(designs))
 
 

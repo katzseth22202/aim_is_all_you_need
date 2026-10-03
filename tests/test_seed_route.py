@@ -217,3 +217,20 @@ def test_island_workers_are_capped_by_free_memory(
     monkeypatch.setattr(seed_route, "_available_bytes", lambda: None)
     assert seed_route._island_workers(8) == 8
     assert seed_route._island_workers(3) == 3
+
+
+def test_years_past_the_direct_return_carry_only_the_late_rate() -> None:
+    # ADR 0039: 30% until the direct route returns (3.33 yr here), 10% for the
+    # years a slower route adds. A route back at 5.52 yr is charged
+    # 1.3^-3.33 x 1.1^-2.19, not 1.3^-5.52.
+    stepped = discounted_seed_per_dollar(150.0e3, 5.52, 670.0e6, 0.30, 0.10, 3.33)
+    assert stepped == pytest.approx(150.0e3 * 1.3**-3.33 * 1.1**-2.19 / 670.0e6)
+    # Before the switch, and with no late rate, it is the flat rate.
+    early = discounted_seed_per_dollar(94.0e3, 3.33, 670.0e6, 0.30, 0.10, 3.33)
+    assert early == pytest.approx(
+        discounted_seed_per_dollar(94.0e3, 3.33, 670.0e6, 0.30)
+    )
+    flat = discounted_seed_per_dollar(150.0e3, 5.52, 670.0e6, 0.30)
+    assert flat == pytest.approx(150.0e3 * 1.3**-5.52 / 670.0e6)
+    # Relative to direct, the delay is the late-rate test k 1.1^-dt.
+    assert stepped / early == pytest.approx(seed_route_worth(150.0 / 94.0, 2.19, 0.10))
