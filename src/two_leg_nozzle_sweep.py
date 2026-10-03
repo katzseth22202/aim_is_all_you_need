@@ -94,6 +94,10 @@ _K_GRID_POINTS = 32
 _REFINE_ROUNDS = 4
 #: Recovery grids swept on each leg.
 DEFAULT_RECOVERIES: Tuple[float, ...] = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+#: The plate's elasticity as the hydrodynamic sweep measured it
+#: (``sec:two_leg_nozzle``), against the paper's stated 0.8.  The tolled
+#: diagonal prices the plate at both, as ADR 0015's matched table does.
+MEASURED_PLATE_ELASTICITY = 0.818
 #: Plate elasticities the crossover search may consider.  Above 1.0 is
 #: unphysical and is reported as such rather than clipped.
 _PLATE_BRACKET = (0.02, 4.0)
@@ -391,6 +395,8 @@ class TwoLegSweep:
             and the column that matters is ``nozzle_over_plate``: the toll
             reaches the two-leg option through *both* legs and the plate option
             through only one, so it is not a wash between architectures.
+            ``measured_plate_growth`` grants the plate its measured
+            :data:`MEASURED_PLATE_ELASTICITY` instead of the stated 0.8.
         windows: Fleet-wide ignition windows on each leg.
         split_days: Split gap the chain was flown at.
         horizon_years: Length of the flown chain.
@@ -487,6 +493,9 @@ def analyze_two_leg_nozzle(
         plate = price_chain_two_leg(
             cycles, 1.0, None, STD_FUDGE_FACTOR, geometric_efficiency=geometric
         )
+        measured = price_chain_two_leg(
+            cycles, 1.0, None, MEASURED_PLATE_ELASTICITY, geometric_efficiency=geometric
+        )
         published = price_chain_two_leg(cycles, geometric, geometric)
         tolled_rows.append(
             {
@@ -501,6 +510,9 @@ def analyze_two_leg_nozzle(
                     float("nan")
                     if nozzle is None or plate is None or plate.total_growth <= 0.0
                     else nozzle.total_growth / plate.total_growth
+                ),
+                "measured_plate_growth": (
+                    float("nan") if measured is None else measured.total_growth
                 ),
                 "published_nozzle_growth": (
                     float("nan") if published is None else published.total_growth
@@ -567,7 +579,10 @@ def main() -> None:
     print(
         "    eta_geom is swept; eta_jet = eta_chem * eta_geom on each nozzle leg.\n"
         "    The plate column pays the toll on its head-on leg only, because a\n"
-        "    plate owes no chemistry -- which is why the ratio column falls."
+        "    plate owes no chemistry -- which is why the ratio column falls.\n"
+        f"    plate_growth is at the paper's f = {STD_FUDGE_FACTOR:g}; "
+        f"measured_plate_growth at the\n    hydrodynamic sweep's f = "
+        f"{MEASURED_PLATE_ELASTICITY:g} (ADR 0015's matched table)."
     )
     print(
         _format_plain(
@@ -579,6 +594,7 @@ def main() -> None:
                 "nozzle_growth": ".4g",
                 "plate_growth": ".4g",
                 "nozzle_over_plate": ".2f",
+                "measured_plate_growth": ".4g",
                 "published_nozzle_growth": ".4g",
             },
         )

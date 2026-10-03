@@ -13,6 +13,7 @@ from src.nozzle_analysis import same_cycle_nozzle
 from src.plume_thermal import slug_ratio_window
 from src.two_leg_nozzle_sweep import DEFAULT_SPLIT_DAYS as SWEEP_SPLIT_DAYS
 from src.two_leg_nozzle_sweep import (
+    MEASURED_PLATE_ELASTICITY,
     PAYLOAD_FRACTION_AT_INTERCEPT,
     RETURN_FLOOR,
     _score,
@@ -221,3 +222,23 @@ def test_a_plate_leg_is_never_charged_the_chemistry() -> None:
     quiet = _score(cycles, None, 0.8, 1.0, 0.5, 8.5, 0.8)[0]
     loud = _score(cycles, None, 0.8, 1.0, 40.0, 8.5, 0.8)[0]
     assert np.isclose(quiet, loud, rtol=1e-12)
+
+
+@pytest.mark.parametrize("eta_geom", [1.0, 0.9, 0.8])
+def test_the_measured_plate_column_is_the_pinned_plate_chain(eta_geom: float) -> None:
+    """``measured_plate_growth`` prints the plate column the parent quotes.
+
+    The figures themselves (1.199e6 / 3.364e5 / 5.662e4) are pinned on the
+    flown chain through ``two_wave_growth.price_chain`` at f = 0.818; this ties
+    the sweep's plate path at the same arguments to that one.
+    """
+    assert MEASURED_PLATE_ELASTICITY == 0.818
+    cycles = [_cycle(0), _cycle(1, growth_v_b=57.43, nozzle_v_b=56.53)]
+    swept = price_chain_two_leg(
+        cycles, 1.0, None, MEASURED_PLATE_ELASTICITY, geometric_efficiency=eta_geom
+    )
+    pinned = price_chain(
+        cycles, 1.0, MEASURED_PLATE_ELASTICITY, geometric_efficiency=eta_geom
+    )
+    assert swept is not None
+    assert np.isclose(swept.total_growth, pinned.total_growth, rtol=1e-8)

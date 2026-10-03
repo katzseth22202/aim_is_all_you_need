@@ -14,6 +14,8 @@ from src.growth_ledger import (
     DEFAULT_PARKING_DAYS,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
+    METHANE_PITCH,
+    METHANE_PITCH_RANGE,
     PLATE_MASS,
     RAPTOR3_MASS,
     best_cycle_growth,
@@ -21,6 +23,8 @@ from src.growth_ledger import (
     departure_at_altitude,
     methalox_departure,
     periapsis_raise,
+    pitch_ratio,
+    pitch_sweep,
     price_cycle_growth,
     price_methalox_cycle,
     summarize_chain,
@@ -319,3 +323,27 @@ def test_the_parking_orbit_is_the_cycles_own_split(split: float) -> None:
     assert departure.start_speed == puffsat_cycle_periapsis_speed(
         period=period, altitude=600.0 * u.km
     ).to(u.km / u.s)
+
+
+@pytest.mark.slow
+def test_the_pitch_sweep_brackets_the_pitch_the_matrix_carries() -> None:
+    """The paper's "1.4 to 5.6 kg per pulse moves its doubling by 0.01 to 0.02 yr"
+    comes from this sweep; its heavy end is the pitch the matrix carries.
+
+    No sign is asserted on ``saved yr``: on the flown chain the CH4 50% row
+    behind a 1.0 plate comes out 0.006 yr *slower* at the lighter pitch.
+    """
+    assert METHANE_PITCH == METHANE_PITCH_RANGE[1]
+    cycles = [_cycle(3, 5.33, 55.4, 57.4), _cycle(2, 7.17, 61.4, 63.6)]
+    rows = pitch_sweep(cycles, loss_model=square_law_loss)
+    assert len(rows) == 12
+    for row in rows:
+        assert row["saved yr"] == pytest.approx(row["5.6 kg yr"] - row["1.4 kg yr"])
+    solved = next(r for r in rows if r["plate"] == 0.7 and "solved" in r["departure"])
+    grown = chain_growth(
+        cycles, 0.7, METHANE_7000K, 0.538, pitch_ratio(METHANE_PITCH),
+        loss_model=square_law_loss,
+    )  # fmt: skip
+    periods = [c.period_years for c in cycles]
+    expected = summarize_chain(periods, [g.growth for g in grown]).doubling_years
+    assert solved["5.6 kg yr"] == pytest.approx(expected, rel=1e-12)

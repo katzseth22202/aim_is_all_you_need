@@ -757,8 +757,15 @@ PLATE_EFFICIENCIES = (0.50, 0.70, 1.00)
 CEILING_SHARES = (0.50, 0.70, 0.90, 1.00)
 SOLVED_EFFICIENCY = {HYDROGEN_5500K.name: 0.858, METHANE_7000K.name: 0.538}
 DEPARTURE_PAIRINGS = (HYDROGEN_5500K, METHANE_7000K)
-#: Methane's pitch per pulse, at the pessimistic end of 1.4-5.6 kg.
-METHANE_PITCH = 5.6 * u.kg
+#: Methane's pitch per pulse: the range :func:`pitch_sweep` prints, and the
+#: pessimistic end the matrix carries.
+METHANE_PITCH_RANGE = (1.4 * u.kg, 5.6 * u.kg)
+METHANE_PITCH = METHANE_PITCH_RANGE[1]
+
+
+def pitch_ratio(pitch: u.Quantity) -> float:
+    """A pitch per pulse as a share of the rod, as :func:`chain_growth` takes it."""
+    return float((pitch / ROD_MASS).to_value(u.one))
 
 
 def _mean(values: Sequence[float]) -> float:
@@ -788,7 +795,7 @@ def _chamber_row(
     """One chamber row of the matrix: capped, with the uncapped doubling."""
     periods = [c.period_years for c in cycles]
     hydrogen = pairing is HYDROGEN_5500K
-    pitch = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
+    pitch = 0.0 if hydrogen else pitch_ratio(METHANE_PITCH)
     cryostat = HYDROGEN_CRYOSTAT if hydrogen else 0.0
     boil_off = hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
     grown = chain_growth(
@@ -880,6 +887,55 @@ def _hold_sweep(cycles: Sequence[TwoWaveCycle]) -> str:
     return tabulate(rows, headers="keys", floatfmt=".3g")
 
 
+def pitch_sweep(
+    cycles: Sequence[TwoWaveCycle], loss_model: Optional[LossModel] = None
+) -> List[Dict[str, object]]:
+    """Methane's doubling at each end of its pitch range, behind each plate.
+
+    The matrix carries the pessimistic 5.6 kg; this is the sensitivity
+    behind it, at the solved efficiency and at 50/70/100% of the ceiling.
+
+    Args:
+        cycles: Flown cycles from :func:`src.two_wave_growth.adaptive_two_wave_cycles`.
+        loss_model: As in :func:`chain_growth`.
+
+    Returns:
+        One row per plate and departure: the doubling (yr) at each pitch, and
+        what the lightest pitch saves against the heaviest.
+    """
+    periods = [c.period_years for c in cycles]
+    solved = SOLVED_EFFICIENCY[METHANE_7000K.name]
+    departures = sorted(
+        [
+            (absolute_efficiency(METHANE_7000K, s), f"CH4 {s:.0%}")
+            for s in (0.5, 0.7, 1.0)
+        ]
+        + [(solved, f"CH4 solved ({solved / METHANE_7000K.chemistry_ceiling:.0%})")]
+    )
+    rows = []
+    for plate_eta in PLATE_EFFICIENCIES:
+        for eta, label in departures:
+            doubling = [
+                summarize_chain(
+                    periods,
+                    [
+                        g.growth
+                        for g in chain_growth(
+                            cycles, plate_eta, METHANE_7000K, eta, pitch_ratio(pitch),
+                            loss_model=loss_model,
+                        )  # fmt: skip
+                    ],
+                ).doubling_years
+                for pitch in METHANE_PITCH_RANGE
+            ]
+            row: Dict[str, object] = {"plate": plate_eta, "departure": label}
+            for pitch, years in zip(METHANE_PITCH_RANGE, doubling):
+                row[f"{pitch.to_value(u.kg):g} kg yr"] = years
+            row["saved yr"] = doubling[-1] - doubling[0]
+            rows.append(row)
+    return rows
+
+
 def _report(cycles: Sequence[TwoWaveCycle], three_only: Sequence[TwoWaveCycle]) -> str:
     """Tabulate the scenario matrix, the methalox incumbent and the hold sweep."""
     rows = []
@@ -904,6 +960,11 @@ def _report(cycles: Sequence[TwoWaveCycle], three_only: Sequence[TwoWaveCycle]) 
         + "\n\nSolved hydrogen (0.858) behind a 0.7 plate: doubling (yr) across cryostat "
         + "mass (per kilogram launched) and boil-off rate over the hold:\n"
         + _hold_sweep(cycles)
+        + "\n\nMethane's pitch per pulse: doubling (yr) at each end of "
+        + f"{METHANE_PITCH_RANGE[0].to_value(u.kg):g}-"
+        + f"{METHANE_PITCH_RANGE[1].to_value(u.kg):g} kg (the matrix carries "
+        + f"{METHANE_PITCH.to_value(u.kg):g} kg):\n"
+        + tabulate(pitch_sweep(cycles), headers="keys", floatfmt=".3f")
     )
 
 
@@ -923,9 +984,7 @@ def _slug_comparison(cycles: Sequence[TwoWaveCycle]) -> str:
         for pairing in DEPARTURE_PAIRINGS:
             eta = SOLVED_EFFICIENCY[pairing.name]
             hydrogen = pairing is HYDROGEN_5500K
-            pitch = (
-                0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
-            )
+            pitch = 0.0 if hydrogen else pitch_ratio(METHANE_PITCH)
             held = HYDROGEN_CRYOSTAT if hydrogen else 0.0
             boil = (
                 hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY)
@@ -1026,7 +1085,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         "k = plate loading, first -> last pulse (per-cycle optimal schedule), "
         f"held to {PLATE_MAX_SLUG_RATIO:g}; 'uncapped yr' frees it (sensitivity).  "
         "push = departing stack per growth PuffSat; net = stack delivered net of "
-        "tanks and chambers.  Chambers gated; methane at 5.6 kg pitch/pulse; "
+        "tanks and chambers.  Chambers gated; methane at "
+        f"{METHANE_PITCH.to_value(u.kg):g} kg pitch/pulse; "
         f"hydrogen with {HYDROGEN_CRYOSTAT:g} cryostats and "
         f"{100 * HYDROGEN_BOIL_OFF_PER_DAY:g}%/day boil-off over the hold.  "
         "Efficiency 1.0 is a theoretical ceiling."
