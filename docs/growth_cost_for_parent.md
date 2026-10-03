@@ -116,7 +116,7 @@ Cycle 0 is a 3S return feeding the 2S cycle 1, so its unit flies the dearer
 
 | Item | Value | Status |
 |---|---|---|
-| Valuation (ADR 0040) | **10% a year; 50% chance the cycle works, settled at the first growth return; flows before it certain** | Both the author's judgment (2026-10-03), **unsourced**; 10% is about a risky bond's yield. Reported also at 25% and 100% odds |
+| Valuation (ADR 0040) | **10% a year; 50% chance the cycle works, settled once at the first growth return; flows before it certain; no further risk after it (optimistic)** | Both the author's judgment (2026-10-03), **unsourced**; 10% is about a risky bond's yield. Reported also at 25% and 100% odds |
 | Old rate (comparison) | 30% until the first growth return, then 10-20% (ADR 0037) | 30%: Gompers et al. |
 | First growth return | 5.46 yr (chambers), 6.55 yr (methalox) | `times[1]` |
 | Sale price at L1 | $500 cap (Starcloud), $200 (Suncatcher) | parent `sec:heat_shield_bill` |

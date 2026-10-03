@@ -33,7 +33,10 @@ deciding the answer.
    first growth return, `DesignInputs.proof_years`). Every flow **from the
    proof on** (later growth launches, all deliveries and sales) is weighted by
    it. Flows **before** the proof (the seed, the growth launch at the seed's
-   return) are spent whether or not it works.
+   return) are spent whether or not it works. **After the proof the program
+   is assumed to work:** no later cycle carries further risk. That is
+   optimistic (wear, accidents or a bad batch could still stop it) and is not
+   modelled.
 3. `DiscountSchedule.risked(rate, success, proof_years)` implements it; the
    existing stepped and flat schedules are unchanged (the new fields default to
    certain success). `growth_cost_report.TIME_RATE` = 0.10, `SUCCESS` = 0.5.
