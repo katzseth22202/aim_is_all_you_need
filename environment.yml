@@ -6,6 +6,9 @@ dependencies:
   - astropy
   - black
   - boinor
+  # Graphite-hydrogen equilibrium (B') for the pitch coat: NASA Glenn
+  # thermochemistry bundled with Cantera (src/carbon_hydrogen_equilibrium.py).
+  - cantera>=3.2
   - isort
   - jupyter
   - mypy

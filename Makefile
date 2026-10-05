@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -61,6 +61,9 @@ chamber-departure:  ## Price the walled chamber's departure over the flown chain
 
 growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
 	python -m src.growth_ledger
+
+carbon-equilibrium:  ## B' of graphite in hot hydrogen: the carbon a pitch coat loses to the gas (companion reply 2026-10-04)
+	python -m src.carbon_hydrogen_equilibrium
 
 seed-cost:  ## The expended seed ship's $/kg and tab:seed_amortization, stripped baseline and stock comparison (ADR 0035/0036)
 	python -m src.seed_cost

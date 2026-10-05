@@ -72,6 +72,7 @@ make dsm-bound      # free the split's correction burn in time and place (ADR 00
 make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
 make growth-cost    # every growth launch unit charged, stepped cost of capital (ADR 0037)
+make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
 conda env create -f environment.yml
@@ -201,6 +202,12 @@ harvest.py                   ← seed_cost + growth_ledger + water_plate: the se
                                 valued as cargo at L1, k optimised for dollars
                                 under the k <= 10 cap; liquidation, steady state,
                                 IRR and break-even price (ADR 0036)
+
+carbon_hydrogen_equilibrium.py ← leaf (Cantera + scipy): B', the carbon hot
+                                hydrogen carries off a graphite wall at
+                                equilibrium; NASA Glenn data, ideal gas. Sets the
+                                hydrogen hot band's chemical loss (companion
+                                reply 2026-10-04, make carbon-equilibrium)
 
 learning_curve.py            ← leaf: Wright's law with a floor and an anchor,
                                 integrated at the unit midpoint (ADR 0037)
