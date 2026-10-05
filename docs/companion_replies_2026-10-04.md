@@ -1,4 +1,4 @@
-# Companion replies, 2026-10-04 (updated 2026-10-05), for the parent paper
+# Companion replies, 2026-10-04 (updated 2026-10-05 for both hydrocode replies), for the parent paper
 
 Answers the open questions on the hydrogen hot-band coat and its thermography, as
 landed in `Balloon-Pulse-Propulsion` @ `9031d3c` ("Spray pitch on the hydrogen
@@ -6,29 +6,44 @@ chamber's hot spots and sense coats thermally" and the panel redraw after it).
 **Written to be copied into the paper repo**, so the quoted paper text is
 restated here and every number is given in full.
 
-**This is the single reply to take back.** It folds in the hydrocode's answer of
-2026-10-05 (`puffsat_impact_simulation` @ `8a4f80a`, "Cross-check the hydrocode
-ask's B' on our own EOS (N18 revised)") and replaces the separate
-`docs/hydrocode_asks_2026-10-04.md`. That ask's N18 revision now lives in the
-last section below, updated with what the hydrocode did and did not do.
+**This is the single reply to take back.** It folds in the hydrocode's two
+answers of 2026-10-05 and replaces the separate `docs/hydrocode_asks_2026-10-04.md`:
 
-**Nothing has been written into `templateArxiv.tex`.**
+- `puffsat_impact_simulation` @ `8a4f80a`, "Cross-check the hydrocode ask's B' on
+  our own EOS (N18 revised)": item 3.
+- `puffsat_impact_simulation` @ `526098f`, "Couple chemical ablation and blowing
+  into the hydrogen pitch wall (N18 item 1)": item 1, the coupled surface balance
+  (its ADR-0054 and `docs/walled_nozzle_hydrogen_pitch.md`).
+
+That ask's N18 revision now lives in the last section below, updated with what the
+hydrocode did and did not do.
+
+**Nothing has been written into `templateArxiv.tex`.** The paper is still at
+`9031d3c`. Line numbers below are against that revision.
 
 ## In short
 
-- **The hydrocode's answer changes no paper-facing number.** It checked B′ on its
-  own equation of state. On the species both codes carry, the two agree within
-  7% at all five points asked. The hydrocode's lower hot-end values are missing
-  species, mainly C₄H₂, not a difference in thermochemistry. The Cantera table
-  below stands, now cross-checked.
+- **The hot band is settled, with a wide margin.** The hydrocode solved 0.2 mm of
+  pitch on steel under the hydrogen pulse, with the chemistry and its blowing
+  coupled into the heat flux. At the high edge of the flux a pulse removes 26 to
+  27 µm by chemistry and 8 to 11 µm by heat, 34 to 38 µm in all. That is a third
+  of methane's 120 µm, which the paper had borrowed as the bound. With a hot spot
+  doubling the load the band spends 0.04 to 0.05 kg, a tenth of N18's 0.5 kg bar.
+- **The low edge loses about 2 µm, not 13.** The surface never gets past about
+  2500 K there, where B′ is small.
+- **B′ is cross-checked.** The hydrocode solved it on its own equation of state.
+  On the species both codes carry, the two agree within 7% at all five points
+  asked. The hydrocode's lower hot-end values come from missing species, mainly
+  C₄H₂, not from different thermochemistry. The Cantera table below stands.
 - **The paper edits are the ones below.** H1: B′ is 0.7 at 2500 K (methane) and
-  5.3 at 3900 K (acetylene), and the loss is 13 to 26 µm per pulse. The hot band
-  spends 0.23 kg. The whole-wall coat costs at least 1.2 kg, or 2%, and must not
-  yet be called worth it. H2: one thermography sentence. H3: drop Milos.
-- **The deciding term is still open.** Pitch's thermal recession under hydrogen
-  (N18 item 1) has not been started. The hydrocode gave specific reasons (below).
-  Until it is solved, the hot band rests on methane's 120 µm, and the whole-wall
-  decision is not made either way.
+  5.3 at 3900 K (acetylene). The loss is about 2 to 27 µm by chemistry, 34 to 38 µm
+  in all at the high edge, and the caveat sentence can say it is solved. H1 also
+  covers the hot band and the whole-wall sentence. H2: one thermography sentence.
+  H3: drop Milos.
+- **One trade is reopened, not decided.** At 5500 K a whole-wall coat costs 1.6 to
+  1.8 kg per pulse, 2.6 to 2.9% of the charge, not the paper's "at least 4 kg, 7%".
+  That figure no longer argues for staying at 5500 K. Nobody has solved the hotter
+  charge, so the suggested text states the cost and leaves the trade open.
 
 Two of the three answers needed numbers this repository had not computed: the
 equilibrium carbon loading of hydrogen at the chamber's pressure, and the
@@ -167,22 +182,71 @@ Reproduce: run in `puffsat_impact_simulation` @ `a8f0e73`
 and `cp_frozen = 2.5 k_B / (ρ / n_total)`,
 `cp_eq = wall.frozen_heat_capacity(...)` exactly as `bartz_liner` builds them.
 
-### The loss per pulse
+### The loss per pulse, estimated
 
 `m = g ln(1 + B') t_clock`, with pitch at 1300 kg/m³:
 
 | wall | B' used | ln(1+B') | loss per pulse |
 |---|---|---|---|
-| 3900 K | 5.3 | 1.84 | **13 to 26 µm** |
-| 2500 K | 0.70 (peak, an upper bound) | 0.53 | **at most 4 to 8 µm** |
+| 3900 K | 5.3 | 1.84 | 13 to 26 µm |
+| 2500 K | 0.70 (peak, an upper bound) | 0.53 | at most 4 to 8 µm |
 
 The 2500 K row takes `g` with the σ factor for a 2500 K wall, 1.12 times the
 3900 K value. Had the hydrocode's B′ been used at 3900 K, ln(1+B′) would be
 about 15% lower (1.58 against 1.84). Use the full-species value.
 
+This estimate assumed the wall sits at 3900 K for the whole clock at both flux
+edges. The coupled solve below replaces it.
+
+### The loss per pulse, solved (hydrocode, 2026-10-05)
+
+The hydrocode ran its coated-wall solver (`wall_layers.py`, ADR-0053) on
+`hydrogen_5500` with the chemistry coupled in (ADR-0054). The coat is 0.2 mm of
+pitch on bare Cr-Mo steel, starting from 300 K, for one pulse, at both flux edges
+and both throats. The mass flux is `g ln(1 + B′(T_s, p))`, and the convective heat
+is cut by the same blowing factor `ln(1 + B′)/B′`. `g = h_g / c_p` is taken on
+the same Bartz edge as the heat-transfer coefficient, as above. B′ is the
+full-species Cantera table above, copied into the hydrocode's `blowing.py` with
+its provenance.
+
+| throat (m²) | edge | chemical (µm) | thermal (µm) | total (µm) | hot band, 3× A* (kg) | whole wall, 35.6 m² (kg) | surface |
+|---|---|---|---|---|---|---|---|
+| 0.149 | low | 2.0 | 0 | 2.0 | 0.001 | 0.09 | peaks at 2510 K |
+| 0.149 | high | 27.3 | 10.9 | 38.1 | 0.022 | 1.76 | at 3900 K for 74 ms |
+| 0.198 | low | 1.9 | 0 | 1.9 | 0.001 | 0.09 | peaks at 2475 K |
+| 0.198 | high | 25.7 | 8.0 | 33.7 | 0.026 | 1.56 | at 3900 K for 53 ms |
+
+- **The chemical term is the one estimated above.** At the high edge the solve
+  gives 25.7 to 27.3 µm against the estimate's 26 µm. Its `g` is 0.244 to 0.446
+  and 0.306 to 0.560 kg/m²/s, the same as the table above.
+- **The thermal term is small, 8 to 11 µm against methane's 94 to 120 µm.** The
+  hydrogen gas is cooler than methane's and radiates far less. The blowing also
+  cuts the convective heat to 0.35 of its unblown value at the cap (B′ = 5.3).
+  With the chemistry switched off, the thermal term would be 15 to 19 µm.
+- **The low edge never reaches the cap.** The surface peaks near 2500 K, where B′
+  is 0.2 to 0.7. So the chemistry removes 2 µm, not the 13 µm the 3900 K estimate
+  gave.
+- **A hot spot (2× the load)** removes 64 to 70 µm, which is 0.041 to 0.049 kg in
+  the hot band and 3.0 to 3.2 kg over the whole wall.
+- **The steel peaks at 345 to 420 K.** The substrate does not limit the coat, so
+  GRCop-84 and A-286 data are not worth chasing for this question.
+- **The reaction heat is bracketed, not solved.** Charging the graphite-to-C₂H₂
+  formation enthalpy (9.43 MJ/kg C) as a heat sink lowers the thermal term by
+  another 3 to 4 µm and moves the chemical term by under 2%.
+- **Not modelled:** a moving grid as the coat recedes, the carbon already in the
+  edge gas (so B′ is an upper bound), and the Lewis-number correction (item 2). If
+  the mass-transfer Stanton number sits tens of percent off the heat-transfer one,
+  the chemical term moves by the same fraction. That does not change any verdict
+  below.
+
+Reproduce: `make walled-nozzle-wall-layers-hydrogen` in
+`puffsat_impact_simulation` @ `526098f`. It writes
+`data/results/walled_nozzle/near_term/wall_layers_hydrogen.csv`.
+
 ### What the paper should say
 
-Replace the equilibrium and loss sentences. Suggested text, in the paper's voice:
+Replace the equilibrium and loss sentences in the paragraph at `:2169`. Suggested
+text, in the paper's voice:
 
 > At \SI{2500}{\kelvin} and the chamber's \SI{818}{\bar}, hydrogen in equilibrium
 > with a carbon wall holds \SI{0.7}{\kilogram} of carbon per kilogram of gas,
@@ -196,34 +260,79 @@ Replace the equilibrium and loss sentences. Suggested text, in the paper's voice
 > \SI{0.56}{\kilogram\per\square\meter\per\second}. Carbon vapor leaving the surface pushes that film outward
 > and slows the exchange. The usual correction multiplies the gas flow by
 > $\ln(1+B)$ rather than by the equilibrium ratio $B$ itself, which turns 5.3
-> into 1.8. Over the 31 to \SI{41}{\milli\second} in which the gas stays hotter than the
-> wall, a surface at \SI{3900}{\kelvin} loses 13 to \SI{26}{\micro\meter} of pitch per pulse, and
-> one at \SI{2500}{\kelvin} at most \SI{8}{\micro\meter}. That is a fifth of the methane chamber's
-> thermal recession below.
+> into 1.8. The same vapor shields the surface from heat, cutting the convective
+> flux to about a third. The companion solves heat and chemistry together for a
+> \SI{0.2}{\milli\meter} pitch coat over one pulse \cite{Katz_puffsat_impact_sim_2026}.
+> At the high edge of the flux the surface sits at \SI{3900}{\kelvin} for 53 to
+> \SI{74}{\milli\second} and loses 26 to \SI{27}{\micro\meter} of pitch to hydrogen
+> and 8 to \SI{11}{\micro\meter} to heat. At the low edge it never gets past about
+> \SI{2500}{\kelvin} and loses \SI{2}{\micro\meter}. Even the high edge is a third of
+> the methane chamber's thermal recession below.
 
-Keep the caveat sentence ("This is our estimate from a single transfer
-coefficient, not a solved balance of heat and chemistry at the surface."). It is
-still true. If the paper wants to say the equilibrium figures are checked, one
-clause will do. Two independent thermochemistry sources agree on them within
-7% on a common set of species.
+The caveat sentence ("This is our estimate from a single transfer coefficient,
+not a solved balance of heat and chemistry at the surface.") should go. The
+balance is now solved, and the suggested text says so. If the paper wants a
+limit stated, one clause will do: the solve assumes hydrogen with no carbon at
+the edge, which overstates the loss. If the paper wants to say the equilibrium
+figures are checked, one clause will do: two independent thermochemistry sources
+agree on them within 7% on a common set of species.
+
+**The whole-wall sentences in the same paragraph** ("But at the high edge of the
+flux the whole \SI{35.6}{\square\meter} would spend at least \SI{4}{\kilogram} of
+pitch per pulse, \SI{7}{\percent} of the charge, before the hotter gas raised the
+flux. ... We keep \SI{5500}{\kelvin}, where the copper carries the average load by
+itself.") State the solved cost and leave the trade open:
+
+> But at the high edge of the flux the whole \SI{35.6}{\square\meter} would spend
+> about \SI{1.8}{\kilogram} of pitch per pulse, \SI{3}{\percent} of the charge, and
+> twice that where hot spots double the load. That is at \SI{5500}{\kelvin}. A
+> hotter charge raises the flux, and we have not solved it. That carbon would also
+> leave in the exhaust and cost specific impulse of its own. We keep
+> \SI{5500}{\kelvin}, where the copper carries the average load by itself, and
+> leave the coated, hotter chamber as an open trade.
 
 ### What follows from it
 
 - **The hot band (`:2213`).** "Hydrogen's chemistry and the heat together remove
-  at most about 0.2 mm" becomes **about 0.15 mm** (26 µm of chemistry plus the
-  120 µm thermal bound borrowed from methane). With a hot spot doubling the load,
-  the band spends 0.29 mm × 1300 kg/m³ × 0.594 m² = **0.23 kg**, or 0.4% of the
-  59.9 kg charge. "Under 0.4 kg" stays true, and the 0.3 mm spray now covers
-  even the doubled load.
-- **The whole-wall coat (same paragraph as H1).** "At least 4 kg of pitch per
-  pulse, 7% of the charge" was the chemical loss alone over 35.6 m². At 26 µm it
-  is **at least 1.2 kg, 2% of the charge**. The argument for staying at 5500 K
-  then rests on the thermal recession and the hotter gas's added flux, not on
-  the chemistry. The thermal recession of pitch under *hydrogen* is not yet
-  solved (N18 item 1 below, not started as of 2026-10-05). So the sentence
-  should not yet claim that a whole-wall coat pays either.
+  at most about \SI{0.2}{\milli\meter} of it per pulse, so the band takes a spray
+  near \SI{0.3}{\milli\meter} thick" becomes about 40 µm per pulse. That is
+  70 µm where a hot spot doubles the load. A 0.2 mm spray, the layer the
+  companion solved, keeps more than half of itself at a doubled load. "Under
+  \SI{0.4}{\kilogram} of pitch" becomes **about \SI{0.05}{\kilogram}, under
+  \SI{0.1}{\percent} of the charge**. Suggested:
+
+  > At the high edge of the flux, hydrogen's chemistry and the heat together
+  > remove about \SI{40}{\micro\meter} of it per pulse
+  > \cite{Katz_puffsat_impact_sim_2026}, so a spray of \SI{0.2}{\milli\meter}
+  > leaves a wide reserve. Even where a hot spot doubles the load, the band spends
+  > about \SI{0.05}{\kilogram} of pitch, under \SI{0.1}{\percent} of the
+  > \SI{59.9}{\kilogram} charge, so it does not change the hydrogen chamber's
+  > numbers.
+
+  The figures behind it: 0.2 mm × 1300 kg/m³ is 0.26 kg/m², and 70 µm over 0.45
+  to 0.59 m² is 0.041 to 0.049 kg. Keeping the 0.3 mm spray is also correct, just
+  more cautious than it needs to be. That is a design choice for the paper.
+- **The reserve sentence at `:2215`** ("The high edge already removes
+  \SI{120}{\micro\meter} of the \SI{0.2}{\milli\meter} layer ... a spot near 1.7
+  times that load strips the layer in one pulse") is about methane and still
+  holds. If the paper wants to contrast hydrogen with it: under hydrogen the same
+  layer would take a spot near five times the load to strip. That assumes
+  recession scales with flux, which the paper already assumes for methane. The
+  hydrocode has not run the strip threshold (item 4).
+- **The whole-wall coat.** See the suggested text above. "At least 4 kg, 7%" was
+  the old chemical estimate alone. The solved figure, chemical plus thermal, is
+  1.6 to 1.8 kg (2.6 to 2.9%), or 3.0 to 3.2 kg (5.0 to 5.4%) at a doubled load,
+  at 5500 K. The paper's reason for staying at 5500 K then rests on the bare
+  copper carrying the average load, and on the unsolved hotter charge.
 - **"Mostly as acetylene" at 2500 K is wrong** at the chamber pressure. It is
   methane.
+- **Elsewhere in the paper, nothing else contradicts this at `9031d3c`.** The old
+  "hydrogen rules graphite out" lines (`:1844`, `:1874`, `:1900`, the `:2182`
+  caption) were already rewritten when the hot-band spray landed. One small
+  pointer remains. `:1876` says the methane recession model "does not include
+  hydrogen's chemical attack, which \autoref{sec:methane_7000_near_term}
+  estimates separately". After this edit that section solves it rather than
+  estimates it, so "estimates" can become "solves".
 
 ### The arithmetic note behind 94 MJ/kg
 
@@ -274,7 +383,7 @@ Nothing in the suggested sentence waits on it.
 "What is wanted" sections, and from there into `puffsat_impact_simulation`.
 N18 is "Does a renewed carbon coat survive hydrogen? B′ and a coupled surface
 balance for the near-term chamber", @ `9031d3c`. This section revises N18 as of
-2026-10-04 and records the hydrocode's reply of 2026-10-05 (@ `8a4f80a`). Item
+2026-10-04 and records the hydrocode's replies of 2026-10-05 (@ `8a4f80a` and `526098f`). Item
 numbers are the ones both sides have used.
 
 ### What changed since N18 was written
@@ -284,58 +393,37 @@ N18 asked for a paper-side estimate to be confirmed or broken:
 giving up to 93 µm per pulse at 3900 K. Two of its three inputs have been
 replaced (H1 above). B′ is solved and cross-checked: 0.70 at 2500 K and 5.3 at
 3900 K, at 818 bar. The transfer coefficient is `g = h_g / c_p` from the
-hydrocode's own Bartz flux. **The result is 13 to 26 µm per pulse at 3900 K.
-The chemical term is no longer the large one. The thermal term is, and nobody
-has solved it for hydrogen.**
+hydrocode's own Bartz flux. The hydrocode then solved the coupled surface
+balance (item 1). **At the high edge a pulse removes 26 to 27 µm by chemistry and
+8 to 11 µm by heat. The thermal term N18 feared is the small one.**
 
 ### Status
 
 | # | item | status, 2026-10-05 |
 |---|---|---|
+| 1 | coupled surface balance under hydrogen | **done on bare Cr-Mo steel** (@ `526098f`, ADR-0054; H1). The steel peaks at 420 K, so other substrates are not wanted |
 | 3 | B′ on the hydrocode's EOS | **done for pure H₂; agrees within 7% on matched species** (H1). Two parts remain open: the real edge composition, and methane's B′ at 496 bar |
-| 1 | coupled surface balance under hydrogen | **not started.** It needs a structural change to `wall_layers.py`, plus substrate data |
-| 2 | Lewis-number correction | **not started.** It needs a binary C₂H₂–H₂ cross-section from a cited source |
-| 4 | strip threshold and Isp cost | **blocked on item 1** |
+| 2 | Lewis-number correction | **not started.** It needs a binary C₂H₂–H₂ cross-section from a cited source. It scales the chemical term, now the larger one, but no verdict turns on it |
+| 4 | strip threshold and Isp cost | **unblocked, not done** |
 | 5 | thermography with radiation, on methane | **not started.** It does not depend on hydrogen, and it is the cheapest item left |
 | 6 | the hydrogen chamber's infrared view | **not wanted.** It gates nothing |
+| 7 | the whole-wall coat at a hotter hydrogen charge | **new, optional.** Only if the paper wants to close the trade it now leaves open |
 
-### 1. The coupled surface balance under hydrogen (first)
+None of the open items gates the paper text in H1, H2 and H3.
 
-Run the A5 wall solver (`make walled-nozzle-wall-layers`, `wall_layers.py`) for
-**pitch under the hydrogen chamber's blowdown** (`near_term.PAIRINGS[0]`,
-`hydrogen_5500`), with the chemical term added. So far it has run pitch only
-under methane. The paper's hydrogen hot band borrows methane's 120 µm thermal
-recession as its bound, and that is now the larger term by a factor of five.
+### 1. The coupled surface balance under hydrogen (done)
 
-- Chemical term: `m_chem = g ln(1 + B′(T_s, p(t)))`, with g from `h_g / c_p`.
-  Apply the blowing correction to the heat flux as well. The `ln(1+B)/B` factor
-  that cuts the mass flux cuts the convective heat too.
-- **Use the full-species B′.** Use the H1 table, or `carbon_blowing_parameter`
-  after C4H2, C6H2 and C2H4 are added to `eos_methane.MOLECULES`. As it stands,
-  the function reads ln(1+B′) about 15% low at 3900 K.
-- Report per pulse: recession in µm, **split chemical against thermal**; kg over
-  a 3× throat-area hot band and over the whole 35.6 m²; the surface temperature
-  history (does the surface sit at 3900 K under hydrogen's flux, or below it?);
-  and the substrate's peak temperature. Cover both flux edges and both throats.
+Done on 0.2 mm of pitch over bare Cr-Mo steel, `hydrogen_5500`, one pulse from
+300 K, both edges and both throats: see H1, "The loss per pulse, solved". The
+chemical term matches the estimate. The thermal term is 8 to 11 µm, a tenth of the
+120 µm the paper had borrowed from methane. The steel peaks at 345 to 420 K, so
+GRCop-84 and A-286 data would not change the answer, and are not wanted.
 
-**Why it is not started (hydrocode, 2026-10-05).** There are two gaps.
-(a) `wall_layers.py` removes mass only once the surface pins at a thermal cap.
-That is the only way methane loses mass, since its boundary layer plates carbon.
-Hydrogen's chemical ablation runs continuously, and the blowing factor enters
-the heat-flux boundary condition of the implicit solve. That is a change to a
-nonlinear solve, not a new parameter. (b) The repository carries graphite, pitch
-and Cr-Mo steel, but not GRCop-84 (the liner) or A-286 (the throat inserts).
-Inventing their properties would break its provenance rule.
-
-**Agreed order.** Build it first on bare Cr-Mo steel, whose data is already in the
-repository. Get the chemical/thermal split and the verdict below. Chase GRCop-84
-and A-286 data only if those numbers say the substrate matters.
-
-**What it decides.** The paper keeps hydrogen at 5500 K partly because a
-whole-wall coat at a hotter charge would cost "at least 4 kg of pitch per pulse,
-7% of the charge". That figure was the old chemical loss alone. At 26 µm it is
-1.2 kg, or 2%. Whether a whole-wall coat pays now turns on the thermal recession
-this item computes.
+Limits the hydrocode states: one pulse from 300 K with an adiabatic back face; a
+fixed grid as the coat recedes; the reaction heat bracketed (graphite to C₂H₂,
+9.43 MJ/kg C) rather than solved; B′ below 2500 K extrapolated from the two
+coolest columns; the pure-hydrogen B′ (an upper bound); no Lewis-number
+correction.
 
 ### 2. A Lewis-number correction
 
@@ -344,7 +432,9 @@ Both g and the `ln(1 + B′)` form assume the carbon species diffuse like heat
 The mass-transfer Stanton number is `St_m = St_h (Pr/Sc)^(2/3)`, so it could sit
 some tens of percent either side of St_h. Wanted: Sc for C₂H₂ in the hydrogen
 chamber's edge gas at 3900 K and 62–818 bar, and the resulting factor on g. One
-number with a bracket is enough.
+number with a bracket is enough. Item 1 made the chemical term the larger one, so
+this factor now scales most of the loss. Even a 50% rise leaves the hot band
+under 0.08 kg with a doubled load, well inside N18's bar.
 
 **Why it is not started (hydrocode, 2026-10-05).** `wall.chapman_enskog_viscosity`
 is a single-species hard-sphere self-viscosity. A binary diffusion coefficient
@@ -363,14 +453,16 @@ Done: see H1's cross-check. Still wanted:
   gas lowers B′, so the pure-H₂ table is an upper bound. First define the
   increment: the wall's ablation, net of carbon that arrives from upstream.
 - **Methane's B′ at 496 bar.** It stays wanted for the reason N18 gave: methane
-  is not exempt. The 2026-10-05 reply did not address it.
+  is not exempt. Neither 2026-10-05 reply addressed it.
 
-### 4. Strip threshold and specific-impulse cost (blocked on item 1)
+### 4. Strip threshold and specific-impulse cost (unblocked)
 
 As N18 asked: the high-edge flux multiplier at which a 0.1, 0.2 or 0.3 mm layer
 is gone in one pulse, from item 1's coupled model; and the η cost of the
-picked-up carbon through the A3 machinery. At 0.23 kg per pulse the carbon is
-about 4% of the 5.9 kg the rod and plug already bring, so expect a small number.
+picked-up carbon through the A3 machinery. At 0.05 kg per pulse the carbon is
+about 1% of the 5.9 kg the rod and plug already bring, so expect a negligible
+number. A linear scaling from item 1 puts the 0.2 mm strip near five times the
+high-edge load. The solve would say whether the blowing keeps it linear.
 
 ### 5. Thermography, with radiation
 
@@ -391,24 +483,32 @@ C₄H₂, and it can form soot as it cools. That would mean the in-band optical
 depth of the emptying chamber 100 to 250 ms after impact. The paper does not
 claim this view, so nothing is asked.
 
+### 7. Optional: the whole-wall coat at a hotter hydrogen charge
+
+At 5500 K a whole-wall coat costs 1.6 to 1.8 kg per pulse (H1). The paper's case
+for a hotter charge is about 100 s from 5500 K to 7000 K
+(`tab:cool_hydrogen`, an upper edge from the larger chamber). Against that, the
+hotter gas raises the flux. To close the trade, run item 1's solve on a hydrogen
+charge at 7000 K: whole-wall recession per pulse at both edges, and the η cost
+of the carbon it picks up. The paper text suggested in H1 leaves this trade open,
+so nothing in it waits on this item.
+
 ### What would settle it
 
-N18's thresholds stand, restated against the new numbers:
+N18's thresholds, against what item 1 found:
 
-- **The hot-band text stands if** item 1 gives a hydrogen hot band under about
-  0.5 kg per pulse at the high edge with a 2× hot spot, and a 0.3 mm spray or
-  thinner survives it. At 0.23 kg on the borrowed thermal bound, the hydrogen
-  thermal term can come out at about twice methane's and still pass.
-- **The whole-wall decision reopens if** item 1's hydrogen thermal recession is
-  well under methane's 120 µm. A whole-wall coat would then cost a few percent
-  of the charge, and the 100 s that 7000 K is worth would be back on the table.
+- **The hot-band text stands.** The test was under about 0.5 kg per pulse at the
+  high edge with a 2× hot spot, with a 0.3 mm spray or thinner surviving it. Item
+  1 gives 0.04 to 0.05 kg and 64 to 70 µm. **Met.**
+- **The whole-wall decision reopens.** The test was a hydrogen thermal recession
+  well under methane's 120 µm. Item 1 gives 8 to 11 µm. **Met.** A whole-wall
+  coat costs 2.6 to 2.9% of the charge at 5500 K. Whether a hotter charge pays is
+  item 7.
 - **The methane pitch figure moves if** its chemical term (item 3's 496 bar B′
-  through item 1) is not small against the thermal one, as N18 said.
-
-Item 3's cross-check moves none of these thresholds. It changes confidence in
-the inputs to item 1, not the decision.
+  through item 1) is not small against the thermal one, as N18 said. **Open.**
 
 ### Not impact-sim scope
 
 As N18 said: pitch pyrolysis in 800 bar hydrogen, char conductivity and
 emissivity, and the camera's view of the throat.
+
