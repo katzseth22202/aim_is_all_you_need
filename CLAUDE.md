@@ -73,7 +73,10 @@ make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
 make growth-cost    # every growth launch unit charged, stepped cost of capital (ADR 0037)
 make plate-designs  # the impact-sim's spray cup / plug through the growth ledger (ADR 0041)
-make plate-designs-cost # the same through the cost model, lob climbing at 400 km (ADR 0041)
+make plate-designs-cost # the same through the cost model, lob climbing at 400 km (ADR 0041, 0042)
+make plate-grid     # full ledger matrix + sensitivities behind the spray cup and plug (ADR 0042)
+make plate-cost     # whole cost report behind the spray cup; plug and ADR 0033 headlines (ADR 0042)
+make plate-seed     # seed amortization, L1 deliveries, grow-or-harvest behind the spray cup (ADR 0042)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
@@ -171,6 +174,8 @@ water_plate.py               ← plume_thermal only: the overtake plate's push, 
                                 per-pulse loading (k falls through the push, capped at 10)
 
 growth_ledger.py             ← chamber_departure + water_plate: the 1500 t launch unit
+                                (pass split_days=DEFAULT_PARKING_DAYS (20) explicitly:
+                                two_wave_growth's own default is 10; ADR 0042)
                                 pushed at 400 km, reversed at apoapsis, departed from
                                 600 km, over the flown chain; chamber efficiency as a
                                 share of its chemistry ceiling; the methalox incumbent

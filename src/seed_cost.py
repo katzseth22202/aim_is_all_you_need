@@ -49,6 +49,7 @@ from src.growth_ledger import (
     HYDROGEN_BOIL_OFF_PER_DAY,
     HYDROGEN_CRYOSTAT,
     METHANE_PITCH,
+    PLATE_DESIGNS_BY_NAME,
     RAPTOR3_THRUST,
     SOLVED_EFFICIENCY,
     ChainSummary,
@@ -582,9 +583,25 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         argv: Command-line arguments; defaults to ``sys.argv[1:]``.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--plate",
+        choices=sorted(PLATE_DESIGNS_BY_NAME),
+        help="tab:seed_amortization behind one plate design (ADR 0042)",
+    )
+    args = parser.parse_args(argv)
     flown, _ = chains()
     excess = seed_excess_speed(flown[0])
+    if args.plate:
+        plate = PLATE_DESIGNS_BY_NAME[args.plate]
+        print(f"Seed behind {plate.label} (ADR 0041/0042), stripped baseline:")
+        print(
+            _amortization(
+                [design_chain(d, plate) for d in DESIGNS],
+                STRIPPED_SHIPS[0],
+                seed_price_range(excess),
+            )
+        )
+        return
     print(
         f"Seed: the chain's first cycle, v_inf {excess.to_value(u.km / u.s):.2f} km/s, "
         f"burned from a {SEED_PARKING_ALTITUDE.to_value(u.km):g} km circular orbit "

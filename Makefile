@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -77,8 +77,21 @@ growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1: 
 plate-designs:  ## The impact-sim's plate designs (spray cup 0.60/0.57, plug 0.70, paper 0.775) through the growth ledger (ADR 0041)
 	python -m src.growth_ledger --designs
 
-plate-designs-cost:  ## The same plates through the growth cost model, lob charged for climbing at 400 km (ADR 0041)
+plate-designs-cost:  ## The same plates through the growth cost model, lob charged for climbing at 400 km (ADR 0041, baseline ADR 0042)
 	python -m src.growth_cost_report --plates
+
+plate-grid:  ## The full ledger matrix and sensitivities behind the spray cup and the plug (ADR 0042)
+	python -m src.growth_ledger --designs-grid spray-cup
+	python -m src.growth_ledger --designs-grid plug
+
+plate-cost:  ## The whole cost report behind the spray cup; headline and odds behind the plug and ADR 0033's plate (ADR 0042)
+	python -m src.growth_cost_report --plate spray-cup
+	python -m src.growth_cost_report --plate plug --quick
+	python -m src.growth_cost_report --plate adr-0033 --quick
+
+plate-seed:  ## tab:seed_amortization, L1 deliveries and grow-or-harvest behind the spray cup (ADR 0042)
+	python -m src.seed_cost --plate spray-cup
+	python -m src.harvest --plate spray-cup
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
 	python -m src.growth_ledger --slugs

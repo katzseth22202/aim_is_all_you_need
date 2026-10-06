@@ -34,10 +34,10 @@ from src.growth_cost import (
     value_per_seed_dollar,
 )
 from src.growth_cost_inputs import design_inputs, seed_prices
-from src.growth_ledger import PLATE_DESIGNS
+from src.growth_ledger import PLATE_DESIGNS, PLATE_DESIGNS_BY_NAME, PlateDesign
 from src.harvest import PLATE_PRICES, solve_rate
 from src.learning_curve import LearningCurve
-from src.lob_rise import RISE_SPEEDS, booster_growth
+from src.lob_rise import OPERATING_RISE_SPEED, RISE_SPEEDS, booster_growth
 from src.seed_cost import DESIGNS
 
 #: ADR 0040's headline: time at 10% a year (about a risky bond's yield) and a
@@ -208,17 +208,17 @@ def headline(designs: Sequence[DesignInputs], prices: PriceBook) -> str:
     )
 
 
-def rates(designs: Sequence[DesignInputs]) -> str:
+def rates(designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE) -> str:
     """Steady break-even by chance of success, and the older schedules."""
     rows = []
     for inputs in designs:
         row = [inputs.label]
-        row += [_break_evens(inputs, ESTIMATE, risked(inputs, p)) for p in SUCCESS_BAND]
+        row += [_break_evens(inputs, estimate, risked(inputs, p)) for p in SUCCESS_BAND]
         row += [
-            _break_evens(inputs, ESTIMATE, stepped(inputs, late)) for late in LATE_RATES
+            _break_evens(inputs, estimate, stepped(inputs, late)) for late in LATE_RATES
         ]
         row += [
-            _break_evens(inputs, ESTIMATE, DiscountSchedule.flat(r)) for r in FLAT_RATES
+            _break_evens(inputs, estimate, DiscountSchedule.flat(r)) for r in FLAT_RATES
         ]
         row += [
             _break_evens(inputs, legacy_prices(PLATE_PRICES["learned"]), risked(inputs))
@@ -256,15 +256,15 @@ def _matching(
     return out
 
 
-def matching(designs: Sequence[DesignInputs]) -> str:
+def matching(designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE) -> str:
     """Flat chamber price and package price at which a chamber matches methalox."""
 
     def chamber(price: float) -> PriceBook:
         flat = LearningCurve.flat(price)
-        return replace(ESTIMATE, methane_chamber=flat, hydrogen_chamber=flat)
+        return replace(estimate, methane_chamber=flat, hydrogen_chamber=flat)
 
     def package(price: float) -> PriceBook:
-        return replace(ESTIMATE, package=LearningCurve.flat(price))
+        return replace(estimate, package=LearningCurve.flat(price))
 
     chambers = dict(_matching(designs, chamber, 1.0e9))
     packages = dict(_matching(designs, package, 1.0e5))
@@ -281,7 +281,9 @@ def _money(value: Optional[float], unit: float = 1.0e6) -> str:
     return f"${value / 1e6:.1f}M" if unit == 1.0e6 else f"${value:,.0f}"
 
 
-def plate_learning(designs: Sequence[DesignInputs]) -> str:
+def plate_learning(
+    designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE
+) -> str:
     """Plates built before a plate costs under $10M; plates built by liquidation."""
     firsts, learning = (20.0e6, 30.0e6, 50.0e6, 78.0e6), (0.85, 0.80, 0.75, 0.70)
     grid = [
@@ -292,7 +294,7 @@ def plate_learning(designs: Sequence[DesignInputs]) -> str:
     built = [
         [
             inputs.label,
-            f"{run_program(inputs, ESTIMATE, 337.0, 500.0, False).plates:.0f}",
+            f"{run_program(inputs, estimate, 337.0, 500.0, False).plates:.0f}",
         ]
         for inputs in designs
     ]
@@ -303,44 +305,48 @@ def plate_learning(designs: Sequence[DesignInputs]) -> str:
     )
 
 
-def packages(designs: Sequence[DesignInputs]) -> str:
+def packages(designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE) -> str:
     """Package price over volume or time, against the flat $100."""
     cases = [
-        ("Flat $100", replace(ESTIMATE, package=LearningCurve.flat(100.0))),
-        ("Wright 80%, $10 floor (Estimate)", ESTIMATE),
+        ("Flat $100", replace(estimate, package=LearningCurve.flat(100.0))),
+        ("Wright 80%, $10 floor (Estimate)", estimate),
         (
             "Wright 70%, $10 floor",
-            replace(ESTIMATE, package=LearningCurve(100.0, 10.0, 0.7, 1.0e5)),
+            replace(estimate, package=LearningCurve(100.0, 10.0, 0.7, 1.0e5)),
         ),
         (
             "Halves every 3 yr, $10 floor",
-            replace(ESTIMATE, package=HalvingPrice(100.0, 10.0, 3.0)),
+            replace(estimate, package=HalvingPrice(100.0, 10.0, 3.0)),
         ),
-        ("Free packages (bound)", replace(ESTIMATE, package=LearningCurve.flat(0.0))),
+        ("Free packages (bound)", replace(estimate, package=LearningCurve.flat(0.0))),
     ]
     return _sweep(designs, cases)
 
 
-def sensitivities(designs: Sequence[DesignInputs]) -> str:
+def sensitivities(
+    designs: Sequence[DesignInputs],
+    estimate: PriceBook = ESTIMATE,
+    pessimistic: PriceBook = PESSIMISTIC,
+) -> str:
     """One line at a time from the Estimate (ask output 10), and the lob band."""
     cases = [
-        ("Estimate", ESTIMATE),
-        ("Lob $5/kg", replace(ESTIMATE, lob=5.0)),
-        ("Lob $10/kg", replace(ESTIMATE, lob=10.0)),
-        ("Lob $15/kg", replace(ESTIMATE, lob=15.0)),
-        ("Lob $50/kg", replace(ESTIMATE, lob=50.0)),
-        ("Argon $5/kg", replace(ESTIMATE, argon=5.0)),
-        ("Package $30", replace(ESTIMATE, package=LearningCurve.flat(30.0))),
-        ("Package $300", replace(ESTIMATE, package=LearningCurve.flat(300.0))),
-        ("Package $1000", replace(ESTIMATE, package=LearningCurve.flat(1000.0))),
-        ("Package $3000", replace(ESTIMATE, package=LearningCurve.flat(3000.0))),
-        ("Plate spray $8M", replace(ESTIMATE, plate_spray=8.0e6)),
-        ("Orion film (4%)", replace(ESTIMATE, film_fraction=0.04)),
-        ("Chamber spray $5M", replace(ESTIMATE, chamber_spray=5.0e6)),
-        ("Cryostats $1000/kg", replace(ESTIMATE, cryostats=1000.0)),
-        ("Plugs $10, pitch $5", replace(ESTIMATE, plugs=10.0, pitch=5.0)),
-        ("Paper's $20/kg fleet", replace(ESTIMATE, fleet_flat=20.0)),
-        ("Pessimistic", PESSIMISTIC),
+        ("Estimate", estimate),
+        ("Lob $5/kg", replace(estimate, lob=5.0)),
+        ("Lob $10/kg", replace(estimate, lob=10.0)),
+        ("Lob $15/kg", replace(estimate, lob=15.0)),
+        ("Lob $50/kg", replace(estimate, lob=50.0)),
+        ("Argon $5/kg", replace(estimate, argon=5.0)),
+        ("Package $30", replace(estimate, package=LearningCurve.flat(30.0))),
+        ("Package $300", replace(estimate, package=LearningCurve.flat(300.0))),
+        ("Package $1000", replace(estimate, package=LearningCurve.flat(1000.0))),
+        ("Package $3000", replace(estimate, package=LearningCurve.flat(3000.0))),
+        ("Plate spray $8M", replace(estimate, plate_spray=8.0e6)),
+        ("Orion film (4%)", replace(estimate, film_fraction=0.04)),
+        ("Chamber spray $5M", replace(estimate, chamber_spray=5.0e6)),
+        ("Cryostats $1000/kg", replace(estimate, cryostats=1000.0)),
+        ("Plugs $10, pitch $5", replace(estimate, plugs=10.0, pitch=5.0)),
+        ("Paper's $20/kg fleet", replace(estimate, fleet_flat=20.0)),
+        ("Pessimistic", pessimistic),
     ]
     return _sweep(designs, cases)
 
@@ -360,7 +366,9 @@ def _sweep(
 
 
 def seed_routes(
-    designs: Sequence[DesignInputs], routes: Sequence[RouteSeed] = SEED_ROUTES
+    designs: Sequence[DesignInputs],
+    routes: Sequence[RouteSeed] = SEED_ROUTES,
+    estimate: PriceBook = ESTIMATE,
 ) -> str:
     """Steady break-even, ADR 0040's schedule, with the seed flown on each route.
 
@@ -376,13 +384,13 @@ def seed_routes(
     prices = seed_prices()
     rows = []
     for inputs in designs:
-        row = [inputs.label, _break_evens(inputs, ESTIMATE, risked(inputs))]
+        row = [inputs.label, _break_evens(inputs, estimate, risked(inputs))]
         for route in routes:
             row.append(
                 _fmt(
                     route_break_even(
                         inputs,
-                        ESTIMATE,
+                        estimate,
                         prices[1 if route.dear else 0],
                         route,
                         risked,
@@ -462,6 +470,50 @@ def plate_designs(prices: PriceBook = ESTIMATE) -> str:
     )
 
 
+def plate_report(plate: PlateDesign, quick: bool = False) -> None:
+    """Sections 2-9 of the report behind ``plate``, lob climbing (ADR 0041, 0042).
+
+    Every book's lob is charged for arriving at 400 km climbing at the
+    operating 1.1 km/s, against the 0.75 km/s ADR 0037 already priced.  This is
+    what the parent prints behind the spray cup (``tab:delivery_ledger``,
+    ``tab:seed_return``, ``tab:plate_designs_cost``).
+
+    Args:
+        plate: The plate every growth unit and delivery flies.
+        quick: Headline tables only.
+    """
+    books = [climbing_lob(b, OPERATING_RISE_SPEED) for b in SCENARIOS]
+    estimate = next(b for b in books if b.label == ESTIMATE.label)
+    pessimistic = next(b for b in books if b.label == PESSIMISTIC.label)
+    designs = [design_inputs(d, plate) for d in DESIGNS]
+    low, high = seed_prices()
+    print(
+        f"Plate {plate.label} (ADR 0041); lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
+        f"for a {OPERATING_RISE_SPEED / 1e3:g} km/s climb at 400 km (ADR 0042). "
+        f"Seed ${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed."
+    )
+    print("\n2. Hardware per launch unit, cycle 0")
+    print(hardware(designs))
+    for prices in books:
+        print(f"\n3. {prices.label}: 10% a year, 50% odds the cycle works (ADR 0040)")
+        print(headline(designs, prices))
+    if quick:
+        return
+    pick = [designs[0], designs[2], designs[4]]
+    print("\n4. Steady-state break-even by chance of success and cost of capital")
+    print(rates(designs, estimate))
+    print("\n5. Flat price at which a chamber's steady $/kg equals methalox's")
+    print(matching(designs, estimate))
+    print("\n6. Plates built before the price falls below $10M ($6M floor)")
+    print(plate_learning(designs, estimate))
+    print("\n7. Package price over volume or time: steady $/kg and BE")
+    print(packages(pick, estimate))
+    print("\n8. One line at a time from the Estimate: steady $/kg and BE")
+    print(sensitivities(pick, estimate, pessimistic))
+    print("\n9. Seed routes (ADR 0039): steady BE")
+    print(seed_routes(designs, estimate=estimate))
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the growth cost model's report.
 
@@ -475,7 +527,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="the plate designs with the climbing lob (ADR 0041) only",
     )
+    parser.add_argument(
+        "--plate",
+        choices=sorted(PLATE_DESIGNS_BY_NAME),
+        help="the whole report behind one plate design, lob climbing (ADR 0042)",
+    )
     args = parser.parse_args(argv)
+    if args.plate:
+        plate_report(PLATE_DESIGNS_BY_NAME[args.plate], quick=args.quick)
+        return
     if args.plates:
         low, high = seed_prices()
         growth = " / ".join(f"{booster_growth(v):.3f}" for v in RISE_SPEEDS)

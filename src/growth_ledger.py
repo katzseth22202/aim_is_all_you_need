@@ -800,6 +800,14 @@ SPRAY_CUP_UNMIXED = PlateDesign("spray cup 0.57", 0.57**2, 0.0, PAPER_SLUG_RATIO
 PLUG = PlateDesign("plug 0.70", 0.70**2, 0.0, PAPER_SLUG_RATIO)
 PAPER_PLATE = PlateDesign("paper 0.775", 0.775**2, 0.0, PAPER_SLUG_RATIO)
 PLATE_DESIGNS = (SPRAY_CUP, SPRAY_CUP_UNMIXED, PLUG, PAPER_PLATE, ADR_0033_PLATE)
+#: The designs by command-line name (``--plate``, ADR 0042).
+PLATE_DESIGNS_BY_NAME = {
+    "spray-cup": SPRAY_CUP,
+    "spray-cup-unmixed": SPRAY_CUP_UNMIXED,
+    "plug": PLUG,
+    "paper-0.775": PAPER_PLATE,
+    "adr-0033": ADR_0033_PLATE,
+}
 
 
 #: The ledger's efficiencies.  The plate's are net of its chemistry toll,
@@ -1170,6 +1178,221 @@ def plate_design_rows(
     return rows
 
 
+def _plate_chamber_growth(
+    cycles: Sequence[TwoWaveCycle],
+    plate: PlateDesign,
+    pairing: ChamberPairing,
+    eta: float,
+    cap: Optional[float],
+    slug: PlateSlug = DEFAULT_PLATE_SLUG,
+    efficiency: Optional[float] = None,
+    impactor_bond_energy: Optional[u.Quantity] = None,
+    cryostat_fraction: Optional[float] = None,
+    boil_off_per_day: Optional[float] = None,
+    pitch: u.Quantity = METHANE_PITCH,
+) -> List[CycleGrowth]:
+    """A chamber behind ``plate`` with the matrix's hold and pitch (ADR 0042)."""
+    hydrogen = pairing is HYDROGEN_5500K
+    if cryostat_fraction is None:
+        cryostat_fraction = HYDROGEN_CRYOSTAT if hydrogen else 0.0
+    if boil_off_per_day is None:
+        boil_off_per_day = HYDROGEN_BOIL_OFF_PER_DAY if hydrogen else 0.0
+    return chain_growth(
+        cycles,
+        plate.efficiency if efficiency is None else efficiency,
+        pairing,
+        eta,
+        0.0 if hydrogen else pitch_ratio(pitch),
+        max_slug_ratio=cap,
+        slug=slug,
+        impactor_bond_energy=(
+            plate.impactor_bond_energy
+            if impactor_bond_energy is None
+            else impactor_bond_energy
+        ),
+        cryostat_fraction=cryostat_fraction if hydrogen else 0.0,
+        boil_off=hydrogen_boil_off(cycles, boil_off_per_day) if hydrogen else 0.0,
+    )
+
+
+def design_grid_rows(
+    cycles: Sequence[TwoWaveCycle],
+    three_only: Sequence[TwoWaveCycle],
+    plate: PlateDesign,
+) -> List[Dict[str, object]]:
+    """The full matrix behind one plate design (ADR 0042).
+
+    Every chamber share of its ceiling plus the solved chamber, and methalox,
+    under the design's cap and with k <= 10 as the sensitivity.  The parent's
+    ``tab:growth_ledger_doubling`` and ``tab:growth_ledger_ten_year``.
+
+    Args:
+        cycles: The flown chain on the 20-day orbit.
+        three_only: The three-synodic-only chain methalox flies.
+        plate: The design.
+
+    Returns:
+        One row per departure.
+    """
+    periods = [c.period_years for c in cycles]
+    caps = (plate.max_slug_ratio, PLATE_MAX_SLUG_RATIO)
+    rows: List[Dict[str, object]] = []
+    for pairing in DEPARTURE_PAIRINGS:
+        gas = pairing.name.split()[0]
+        solved = SOLVED_EFFICIENCY[pairing.name]
+        departures = [
+            (absolute_efficiency(pairing, share), f"{gas} {share:.0%}")
+            for share in CEILING_SHARES
+        ] + [(solved, f"{gas} solved ({solved / pairing.chemistry_ceiling:.0%})")]
+        for eta, label in sorted(departures):
+            runs = [
+                _plate_chamber_growth(cycles, plate, pairing, eta, cap) for cap in caps
+            ]
+            summary = summarize_chain(periods, [g.growth for g in runs[0]])
+            rows.append(
+                {
+                    "departure": label,
+                    "doubling yr": summary.doubling_years,
+                    "k<=10 yr": summarize_chain(
+                        periods, [g.growth for g in runs[1]]
+                    ).doubling_years,
+                    "annual": summary.annual_growth,
+                    "10yr step": summary.ten_year_stepwise,
+                    "payload t": _mean(
+                        [
+                            g.departure.delivered_net * g.departing_stack.to_value(u.t)
+                            for g in runs[0]
+                        ]
+                    ),
+                    "G_0": runs[0][0].growth,
+                }
+            )
+    three_periods = [c.period_years for c in three_only]
+    flown = [
+        [
+            best_methalox_cycle(
+                c, plate.efficiency, max_slug_ratio=cap,
+                impactor_bond_energy=plate.impactor_bond_energy,
+            )
+            for c in three_only
+        ]
+        for cap in caps
+    ]  # fmt: skip
+    summary = summarize_chain(three_periods, [f.growth for f in flown[0]])
+    rows.append(
+        {
+            "departure": "methalox 380 s",
+            "doubling yr": summary.doubling_years,
+            "k<=10 yr": summarize_chain(
+                three_periods, [f.growth for f in flown[1]]
+            ).doubling_years,
+            "annual": summary.annual_growth,
+            "10yr step": summary.ten_year_stepwise,
+            "payload t": _mean(
+                [f.delivered_net * f.departing_stack.to_value(u.t) for f in flown[0]]
+            ),
+            "G_0": flown[0][0].growth,
+        }
+    )
+    return rows
+
+
+#: The impact sim's unmixed water band on the cup (its P6), all-in like argon.
+WATER_JET_EFFICIENCIES = (0.50, 0.53, 0.56)
+
+
+def design_sensitivities(
+    cycles: Sequence[TwoWaveCycle], plate: PlateDesign, split_days: float = 10.0
+) -> str:
+    """The ledger's smaller settings behind one plate design (ADR 0042).
+
+    Hydrogen's hold, methane's pitch range, water at its all-in jet
+    efficiency, and a shorter parking orbit flown consistently.
+
+    Args:
+        cycles: The flown chain on the 20-day orbit.
+        plate: The design.
+        split_days: The shorter orbit to compare.
+
+    Returns:
+        The tables.
+    """
+    periods = [c.period_years for c in cycles]
+
+    def doubling(grown: Sequence[CycleGrowth], per: Sequence[float] = periods) -> float:
+        return summarize_chain(per, [g.growth for g in grown]).doubling_years
+
+    cap = plate.max_slug_ratio
+    hold = []
+    for cryostat in (0.0, 0.01, 0.03, 0.05):
+        row: Dict[str, object] = {"cryostat": cryostat}
+        for per_day in (0.0, 0.001, 0.003, 0.005):
+            row[f"{100 * per_day:g}%/day"] = doubling(
+                _plate_chamber_growth(
+                    cycles, plate, HYDROGEN_5500K, SOLVED_EFFICIENCY[HYDROGEN_5500K.name],
+                    cap, cryostat_fraction=cryostat, boil_off_per_day=per_day,
+                )
+            )  # fmt: skip
+        hold.append(row)
+    pitch = [
+        {
+            "pitch kg": p.to_value(u.kg),
+            "CH4 solved yr": doubling(
+                _plate_chamber_growth(
+                    cycles, plate, METHANE_7000K, SOLVED_EFFICIENCY[METHANE_7000K.name],
+                    cap, pitch=p,
+                )
+            ),
+        }
+        for p in METHANE_PITCH_RANGE
+    ]  # fmt: skip
+    water = []
+    for eta_jet in WATER_JET_EFFICIENCIES:
+        row = {"water eta_jet": eta_jet}
+        for pairing in DEPARTURE_PAIRINGS:
+            row[f"{pairing.name.split()[0]} solved yr"] = doubling(
+                _plate_chamber_growth(
+                    cycles, plate, pairing, SOLVED_EFFICIENCY[pairing.name], cap,
+                    slug=WATER_SLUG, efficiency=eta_jet**2,
+                    impactor_bond_energy=NO_BONDS,
+                )
+            )  # fmt: skip
+        water.append(row)
+    short = adaptive_two_wave_cycles(split_days=split_days)
+    short_three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=split_days)
+    short_periods = [c.period_years for c in short]
+    orbit = {
+        f"{pairing.name.split()[0]} solved yr": doubling(
+            _plate_chamber_growth(
+                short, plate, pairing, SOLVED_EFFICIENCY[pairing.name], cap
+            ),
+            short_periods,
+        )
+        for pairing in DEPARTURE_PAIRINGS
+    }
+    orbit["methalox yr"] = summarize_chain(
+        [c.period_years for c in short_three],
+        [
+            best_methalox_cycle(
+                c, plate.efficiency, max_slug_ratio=cap,
+                impactor_bond_energy=plate.impactor_bond_energy,
+            ).growth
+            for c in short_three
+        ],
+    ).doubling_years  # fmt: skip
+    return (
+        "Solved hydrogen: doubling (yr) across cryostat mass and boil-off:\n"
+        + str(tabulate(hold, headers="keys", floatfmt=".3f"))
+        + "\n\nMethane's pitch per pulse:\n"
+        + str(tabulate(pitch, headers="keys", floatfmt=".3f"))
+        + "\n\nWater on the plate, all-in (the impact sim's unmixed band, P6), "
+        + "water's tank:\n"
+        + str(tabulate(water, headers="keys", floatfmt=".3f"))
+        + f"\n\nA {split_days:g}-day parking orbit flown consistently:\n"
+        + str(tabulate([orbit], headers="keys", floatfmt=".3f"))
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Run the growth ledger's scenario matrix over the flown chain and print it.
 
@@ -1194,8 +1417,32 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="the impact-sim's plate designs (ADR 0041) instead of the full matrix",
     )
+    parser.add_argument(
+        "--designs-grid",
+        choices=sorted(PLATE_DESIGNS_BY_NAME),
+        help="the full matrix and sensitivities behind one plate design (ADR 0042)",
+    )
     args = parser.parse_args(argv)
     cycles = adaptive_two_wave_cycles(split_days=args.split_days)
+    if args.designs_grid:
+        plate = PLATE_DESIGNS_BY_NAME[args.designs_grid]
+        three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)
+        print(
+            f"Plate {plate.label} (ADR 0041/0042) over the flown chain "
+            f"({len(cycles)} cycles, {args.split_days:g}-day orbit; methalox on "
+            f"{len(three)} three-synodic cycles).  k capped at {plate.max_slug_ratio:g}; "
+            "'k<=10 yr' lifts the cap to 10.  Chambers gated, methane at "
+            f"{METHANE_PITCH.to_value(u.kg):g} kg pitch, hydrogen with cryostats and "
+            "boil-off.  Shares are of each chamber's chemistry ceiling."
+        )
+        print(
+            tabulate(
+                design_grid_rows(cycles, three, plate), headers="keys", floatfmt=".4g"
+            )
+        )
+        print()
+        print(design_sensitivities(cycles, plate))
+        return
     if args.designs:
         three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)
         print(

@@ -387,3 +387,11 @@ def test_the_spray_cup_grows_slower_than_the_plug() -> None:
         ).growth  # fmt: skip
 
     assert 1.0 < growth(SPRAY_CUP) < growth(PLUG)
+
+
+def test_every_plate_design_has_a_command_line_name() -> None:
+    """ADR 0042: ``--plate`` and ``--designs-grid`` reach every design."""
+    from src.growth_ledger import PLATE_DESIGNS, PLATE_DESIGNS_BY_NAME
+
+    assert set(PLATE_DESIGNS_BY_NAME.values()) == set(PLATE_DESIGNS)
+    assert PLATE_DESIGNS_BY_NAME["spray-cup"].jet_efficiency == pytest.approx(0.60)

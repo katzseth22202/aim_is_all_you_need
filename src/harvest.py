@@ -47,10 +47,13 @@ from tabulate import tabulate
 from src.growth_ledger import (
     DEFAULT_PLATE_SLUG,
     LAUNCH_UNIT,
+    PLATE_DESIGNS_BY_NAME,
     PLATE_MASS,
     PUSH_ALTITUDE,
+    PlateDesign,
     wave_speed_at_altitude,
 )
+from src.lob_rise import OPERATING_RISE_SPEED, booster_growth
 from src.seed_cost import (
     COSTS_OF_CAPITAL,
     DESIGNS,
@@ -665,6 +668,48 @@ def _delivery_table(cycles: Sequence[TwoWaveCycle], label: str) -> str:
     return tabulate(rows, headers="keys", floatfmt=".4g")
 
 
+def _plate_delivery_table(cycles: Sequence[TwoWaveCycle], plate: PlateDesign) -> str:
+    """Deliveries to L1 behind ``plate``, lob climbing (ADR 0042).
+
+    The lob's dollars per cargo kilogram carry the 1.1 km/s climb charge, as
+    the cost model does.
+
+    Args:
+        cycles: The flown chain.
+        plate: The plate the delivery flies.
+
+    Returns:
+        One row per cycle: unloaded, and the schedule netting most at $500.
+    """
+    climb = booster_growth(OPERATING_RISE_SPEED)
+    rows = []
+    for c in cycles:
+        w = harvest_wave_speed(c)
+        front = delivery_front(
+            w, plate.efficiency, plate.impactor_bond_energy, plate.max_slug_ratio
+        )
+        best = max(
+            front, key=lambda d: d.net_per_puffsat(500.0, PLATE_PRICES["learned"])
+        )
+        row: Dict[str, object] = {
+            "cycle": f"{c.index} ({c.synodic_multiple}S)",
+            "wave km/s": float(w.to_value(u.km / u.s)),
+        }
+        for tag, flown in (("k=0", front[0]), ("opt $500", best)):
+            row[f"{tag} k"] = (
+                f"{flown.slug_ratio_start:.1f}->{flown.slug_ratio_end:.1f}"
+            )
+            row[f"{tag} cargo t"] = float(flown.cargo.to_value(u.t))
+            row[f"{tag} P"] = flown.cargo_per_puffsat
+            row[f"{tag} lob $/kg"] = flown.lob_per_kg * climb
+            for name, price in PLATE_PRICES.items():
+                row[f"{tag} c_del {name}"] = flown.cost_per_kg(price) + (
+                    flown.lob_per_kg * (climb - 1.0)
+                )
+        rows.append(row)
+    return str(tabulate(rows, headers="keys", floatfmt=".4g"))
+
+
 def _growth_table(designs: Sequence[DesignChain]) -> str:
     rows = []
     for chain in designs:
@@ -756,8 +801,26 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         argv: Command-line arguments; defaults to ``sys.argv[1:]``.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--plate",
+        choices=sorted(PLATE_DESIGNS_BY_NAME),
+        help="deliveries and grow-or-harvest behind one plate design (ADR 0042)",
+    )
+    args = parser.parse_args(argv)
     flown, three = chains()
+    if args.plate:
+        plate = PLATE_DESIGNS_BY_NAME[args.plate]
+        print(
+            f"Delivery behind {plate.label} (ADR 0041/0042): {LAUNCH_UNIT:g} unit, "
+            f"k <= {plate.max_slug_ratio:g}, lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
+            "for the climb.  'opt' nets the most per returning PuffSat at $500."
+        )
+        print(_plate_delivery_table(flown, plate))
+        print(
+            "\nGrow or harvest (P cancels); steady/liq uses the chain's mean G and T:"
+        )
+        print(_growth_table([design_chain(d, plate) for d in DESIGNS]))
+        return
     seed = seed_price_range(seed_excess_speed(flown[0]))
     print(
         f"Delivery: {LAUNCH_UNIT:g} unit from rest at 400 km to the L1 transfer "

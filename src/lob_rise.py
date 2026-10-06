@@ -1,4 +1,4 @@
-"""What a lob that is still climbing at the 400 km intercept costs (ADR 0041).
+"""What a lob that is still climbing at the 400 km intercept costs (ADR 0041, 0042).
 
 The growth push lasts about 300 s.  Unsupported, the launch unit falls about
 200 km over it while the stream, nearly straight at 60 km/s, rises about
@@ -11,7 +11,14 @@ is lofted mass the booster no longer carries.
 5000 t liftoff, 250 t dry, 75 MN, scaled together, burned to depletion, no
 drag and no braking reserve.  At fixed thrust-to-weight and propellant fraction
 the lofted mass scales with the vehicle, so the climb is charged as the ratio
-:func:`booster_growth`, independent of the booster's size.  This integration
+:func:`booster_growth`, independent of the booster's size.
+
+The ratio is taken against the lob ADR 0037 priced, not against an apex at
+400 km (ADR 0042).  The parent's ``sec:vertical_lob`` lofts its 1250-1430 t to
+a ~430 km top, so that lob already passes 400 km at ~0.75 km/s
+(:data:`BASELINE_RISE_SPEED`), and ADR 0037's 1.1-1.2x booster was sized from
+it.  Only the climb above that is new: x1.044 at the 1.1 km/s operating point
+(:data:`OPERATING_RISE_SPEED`), against ADR 0041's x1.085 from an apex.  This integration
 lofts 1575 t (380 s) where ADR 0037 quoted 1422 t for the same vehicle; only
 ratios are taken from it.
 """
@@ -35,6 +42,12 @@ ISP_PESSIMISTIC = 350.0
 INTERCEPT_ALTITUDE = 400.0e3  # m
 #: Climb rate at the intercept the push needs (ADR 0041).
 RISE_SPEEDS = (1.0e3, 1.2e3)  # m/s
+#: The climb that holds the unit within ~65 km of the stream (ADR 0041), the
+#: one the parent prices.
+OPERATING_RISE_SPEED = 1.1e3  # m/s
+#: What ADR 0037's lob already does at 400 km: the parent's lob tops out near
+#: 430 km (ADR 0042).
+BASELINE_RISE_SPEED = 0.75e3  # m/s
 
 
 def _speed_at_intercept(payload: float, scale: float, isp: float) -> float:
@@ -77,7 +90,9 @@ def lofted_mass(rise_speed: float, scale: float = 1.0, isp: float = ISP) -> floa
     )
 
 
-def booster_growth(rise_speed: float, isp: float = ISP) -> float:
+def booster_growth(
+    rise_speed: float, isp: float = ISP, baseline: float = BASELINE_RISE_SPEED
+) -> float:
     """How much bigger the booster must be to loft the same mass climbing.
 
     Also the rise in the lob's price per kilogram lofted, since ADR 0037 prices
@@ -86,11 +101,14 @@ def booster_growth(rise_speed: float, isp: float = ISP) -> float:
     Args:
         rise_speed: Vertical speed at 400 km, m/s.
         isp: Average specific impulse, s.
+        baseline: The climb rate at 400 km the existing lob price already
+            pays for (ADR 0042); 0.0 measures from an apex there, as ADR 0041
+            first did.
 
     Returns:
-        Lofted mass at an apex over lofted mass at ``rise_speed``.
+        Lofted mass at ``baseline`` over lofted mass at ``rise_speed``.
     """
-    return lofted_mass(0.0, isp=isp) / lofted_mass(rise_speed, isp=isp)
+    return lofted_mass(baseline, isp=isp) / lofted_mass(rise_speed, isp=isp)
 
 
 @dataclass(frozen=True)

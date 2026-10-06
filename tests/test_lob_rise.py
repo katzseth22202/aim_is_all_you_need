@@ -2,7 +2,14 @@
 
 import pytest
 
-from src.lob_rise import ISP_PESSIMISTIC, booster_growth, lofted_mass, push_track
+from src.lob_rise import (
+    BASELINE_RISE_SPEED,
+    ISP_PESSIMISTIC,
+    OPERATING_RISE_SPEED,
+    booster_growth,
+    lofted_mass,
+    push_track,
+)
 
 
 def test_lofted_mass_scales_with_the_booster() -> None:
@@ -13,10 +20,22 @@ def test_lofted_mass_scales_with_the_booster() -> None:
 
 
 @pytest.mark.parametrize("isp", [380.0, ISP_PESSIMISTIC])
-def test_climbing_at_1_to_1_2_km_s_costs_7_to_11_percent_of_the_lob(isp: float) -> None:
-    assert booster_growth(0.0, isp) == pytest.approx(1.0)
-    assert 1.06 < booster_growth(1.0e3, isp) < 1.08
-    assert 1.10 < booster_growth(1.2e3, isp) < 1.12
+def test_from_an_apex_climbing_at_1_to_1_2_km_s_costs_7_to_11_percent(
+    isp: float,
+) -> None:
+    """ADR 0041's first measure, kept as the ``baseline=0`` case."""
+    assert booster_growth(0.0, isp, baseline=0.0) == pytest.approx(1.0)
+    assert 1.06 < booster_growth(1.0e3, isp, baseline=0.0) < 1.08
+    assert 1.10 < booster_growth(1.2e3, isp, baseline=0.0) < 1.12
+
+
+@pytest.mark.parametrize("isp", [380.0, ISP_PESSIMISTIC])
+def test_only_the_climb_above_the_priced_lob_is_charged(isp: float) -> None:
+    """ADR 0042: the parent's lob already passes 400 km at ~0.75 km/s."""
+    assert booster_growth(BASELINE_RISE_SPEED, isp) == pytest.approx(1.0)
+    assert 1.02 < booster_growth(1.0e3, isp) < 1.04
+    assert 1.04 < booster_growth(OPERATING_RISE_SPEED, isp) < 1.05
+    assert 1.05 < booster_growth(1.2e3, isp) < 1.07
 
 
 def test_an_unsupported_push_falls_off_the_stream_and_a_climbing_one_tracks_it() -> (
