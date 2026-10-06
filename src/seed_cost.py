@@ -430,6 +430,7 @@ def design_chain(
                 plate.efficiency,
                 max_slug_ratio=plate.max_slug_ratio,
                 impactor_bond_energy=plate.impactor_bond_energy,
+                film_per_impulse=plate.film_per_impulse,
             )
             for c in three
         ]
@@ -456,6 +457,7 @@ def design_chain(
         pitch,
         max_slug_ratio=plate.max_slug_ratio,
         impactor_bond_energy=plate.impactor_bond_energy,
+        film_per_impulse=plate.film_per_impulse,
         cryostat_fraction=HYDROGEN_CRYOSTAT if hydrogen else 0.0,
         boil_off=(
             hydrogen_boil_off(flown, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0

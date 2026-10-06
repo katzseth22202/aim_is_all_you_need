@@ -489,7 +489,8 @@ def plate_report(plate: PlateDesign, quick: bool = False) -> None:
     low, high = seed_prices()
     print(
         f"Plate {plate.label} (ADR 0041); lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
-        f"for a {OPERATING_RISE_SPEED / 1e3:g} km/s climb at 400 km (ADR 0042). "
+        f"for a {OPERATING_RISE_SPEED / 1e3:g} km/s climb at 400 km, brake held "
+        "back (ADR 0042, 0043). "
         f"Seed ${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed."
     )
     print("\n2. Hardware per launch unit, cycle 0")
@@ -543,7 +544,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             f"Plate designs (ADR 0041), Estimate book, 10% a year, 50% odds. Seed "
             f"${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed. The lob "
             f"climbs at {RISE_SPEEDS[0] / 1e3:g} | {RISE_SPEEDS[1] / 1e3:g} km/s at "
-            f"400 km: booster and lob price x{growth}."
+            f"400 km, brake held back: booster and lob price x{growth} (ADR 0043)."
         )
         print(plate_designs())
         return

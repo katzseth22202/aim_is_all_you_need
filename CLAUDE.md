@@ -77,6 +77,8 @@ make plate-designs-cost # the same through the cost model, lob climbing at 400 k
 make plate-grid     # full ledger matrix + sensitivities behind the spray cup and plug (ADR 0042)
 make plate-cost     # whole cost report behind the spray cup; plug and ADR 0033 headlines (ADR 0042)
 make plate-seed     # seed amortization, L1 deliveries, grow-or-harvest behind the spray cup (ADR 0042)
+make plate-film     # the spray cup's film carried as launched mass, ledger and cost headline (ADR 0043)
+make lob-brake      # the booster's brake at each climb rate and the lob charge it sets (ADR 0043)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
@@ -171,7 +173,8 @@ chamber_departure.py         ← chamber_isp + finite_burn_loss + two_wave_growt
 water_plate.py               ← plume_thermal only: the overtake plate's push, water or
                                 argon slug (argon is the default; the name predates it),
                                 eq:eta_chem charged per pulse, and the Pontryagin-optimal
-                                per-pulse loading (k falls through the push, capped at 10)
+                                per-pulse loading (k falls through the push, capped at 10);
+                                the plate's film optionally burned per unit impulse (ADR 0043)
 
 growth_ledger.py             ← chamber_departure + water_plate: the 1500 t launch unit
                                 (pass split_days=DEFAULT_PARKING_DAYS (20) explicitly:
@@ -218,8 +221,10 @@ carbon_hydrogen_equilibrium.py ← leaf (Cantera + scipy): B', the carbon hot
 
 lob_rise.py                  ← leaf (numpy + scipy): what a lob still climbing at
                                 1.0-1.2 km/s at the 400 km intercept costs the
-                                booster (7-11%), and the push's track against
-                                the stream it must follow (ADR 0041)
+                                booster, charged above the priced 0.75 km/s lob
+                                with the booster's brake held back (x1.065 at
+                                1.1 km/s), and the push's track against the
+                                stream it must follow (ADR 0041-0043)
 
 learning_curve.py            ← leaf: Wright's law with a floor and an anchor,
                                 integrated at the unit midpoint (ADR 0037)

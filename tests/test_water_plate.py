@@ -8,6 +8,7 @@ from src.plume_thermal import chemistry_efficiency
 from src.water_plate import (
     ARGON_SLUG,
     NO_BONDS,
+    NO_FILM,
     PLATE_MAX_SLUG_RATIO,
     WATER_SLUG,
     PlatePush,
@@ -118,3 +119,55 @@ def test_argon_pays_only_the_bonds_the_impactor_brings() -> None:
         == 1.0
     )
     assert chemistry_ceiling(w, 10.0, WATER_SLUG) < on_ice[1]
+
+
+#: The spray cup's heavy vapor-shielded film: 6 kg per 12 MN s pulse.
+FILM = (6.0 * u.kg / (12.0 * u.MN * u.s)).to(u.kg / (u.N * u.s))
+
+
+def test_a_film_burned_per_pulse_leaves_the_craft_with_the_slug() -> None:
+    """ADR 0043: film is launched mass the push burns, so what is delivered,
+    sprayed and burned sums to the craft that started the push."""
+    for push in (
+        plate_push(60.0 * KM_S, 10.8 * KM_S, 0.36, 8.52, slug=ARGON_SLUG,
+                   impactor_bond_energy=NO_BONDS, film_per_impulse=FILM),
+        optimal_plate_push(60.0 * KM_S, 10.8 * KM_S, 0.36, 0.05, max_slug_ratio=8.52,
+                           slug=ARGON_SLUG, impactor_bond_energy=NO_BONDS,
+                           film_per_impulse=FILM),
+    ):  # fmt: skip
+        assert push.delivered_fraction + push.slug_fraction + push.film_fraction == (
+            pytest.approx(1.0, rel=1e-8)
+        )
+
+
+def test_the_film_is_its_rate_times_the_pushs_impulse() -> None:
+    """The film leaves at ``phi`` per newton-second, and the push's impulse per
+    kilogram of craft is the integral of its mass over the speed gained."""
+    gain = 10.8
+    film = plate_push(
+        60.0 * KM_S, gain * KM_S, 0.36, 8.52, slug=ARGON_SLUG,
+        impactor_bond_energy=NO_BONDS, film_per_impulse=FILM,
+    )  # fmt: skip
+    bare = plate_push(
+        60.0 * KM_S, gain * KM_S, 0.36, 8.52, slug=ARGON_SLUG,
+        impactor_bond_energy=NO_BONDS, film_per_impulse=NO_FILM,
+    )  # fmt: skip
+    # Bounded by the impulse at the craft's starting and ending mass.
+    phi = float(FILM.to_value(u.kg / (u.N * u.s))) * gain * 1.0e3
+    assert bare.delivered_fraction * phi < film.film_fraction < phi
+    assert bare.film_fraction == 0.0
+    assert film.delivered_fraction < bare.delivered_fraction
+
+
+def test_a_film_does_not_change_the_loading_the_schedule_opens_on() -> None:
+    """The film's loss is independent of ``k``, so the pointwise rule is not
+    moved; only the price's drift picks up ``c phi``."""
+    film, bare = (
+        optimal_plate_push(
+            60.0 * KM_S, 10.8 * KM_S, 0.36, 0.05, max_slug_ratio=None,
+            slug=ARGON_SLUG, impactor_bond_energy=NO_BONDS, film_per_impulse=rate,
+        )
+        for rate in (FILM, NO_FILM)
+    )  # fmt: skip
+    assert film.slug_ratio_start == pytest.approx(bare.slug_ratio_start)
+    assert film.final_water_price > bare.final_water_price

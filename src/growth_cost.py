@@ -76,6 +76,8 @@ class CycleHardware:
         pitch: Wall pitch the methane chamber spends.
         pulses: Rods the departure fires, one per pulse (reported, not priced:
             the rods are priced as fleet when they are built).
+        film: Plate film the push burns, when the ledger carries it (ADR
+            0043); None prices it from the book's ``film_fraction``.
     """
 
     consumed: float
@@ -91,6 +93,7 @@ class CycleHardware:
     plugs: float = 0.0
     pitch: float = 0.0
     pulses: float = 0.0
+    film: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -101,11 +104,13 @@ class DeliveryOption:
         puffsats: PuffSats the push consumes.
         cargo: Mass left at L1 for the customer.
         slug: Argon the plate sprays.
+        film: As in :class:`CycleHardware`.
     """
 
     puffsats: float
     cargo: float
     slug: float
+    film: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -428,13 +433,22 @@ def _tally(tally: Optional[Dict[str, float]], lines: Dict[str, float]) -> float:
     return sum(lines.values())
 
 
+def _film_mass(film: Optional[float], prices: PriceBook, puffsats: float) -> float:
+    """The film a push burns: the ledger's when it carries it, else the book's."""
+    return prices.film_fraction * puffsats if film is None else film
+
+
 def _plate_lines(
-    prices: PriceBook, program: Program, units: float, puffsats: float
+    prices: PriceBook,
+    program: Program,
+    units: float,
+    puffsats: float,
+    film: Optional[float] = None,
 ) -> Dict[str, float]:
     lines = {
         "plate": prices.plate.batch_cost(program.plates, units),
         "plate_spray": prices.plate_spray * units,
-        "film": prices.film_fraction * prices.film * puffsats,
+        "film": prices.film * _film_mass(film, prices, puffsats),
     }
     program.plates += units
     return lines
@@ -491,7 +505,15 @@ def _grow(
     if inputs.departure is not Departure.METHALOX:
         lines["chamber_spray"] = prices.chamber_spray * count
     program.departure_units += count
-    lines.update(_plate_lines(prices, program, units, cycle.plate_puffsats * units))
+    lines.update(
+        _plate_lines(
+            prices,
+            program,
+            units,
+            cycle.plate_puffsats * units,
+            None if cycle.film is None else cycle.film * units,
+        )
+    )
     lines.update(
         _fleet_lines(
             prices,
@@ -521,7 +543,7 @@ def _deliver(
             prices.lob * inputs.launch_unit
             + plate_now
             + prices.plate_spray
-            + prices.film_fraction * prices.film * option.puffsats
+            + prices.film * _film_mass(option.film, prices, option.puffsats)
             + prices.argon * option.slug
         )
 
@@ -535,7 +557,15 @@ def _deliver(
         "lob": prices.lob * inputs.launch_unit * units,
         "argon": prices.argon * best.slug * units,
     }
-    lines.update(_plate_lines(prices, program, units, puffsats))
+    lines.update(
+        _plate_lines(
+            prices,
+            program,
+            units,
+            puffsats,
+            None if best.film is None else best.film * units,
+        )
+    )
     return l1_price * cargo - _tally(tally, lines), cargo
 
 

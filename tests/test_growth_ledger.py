@@ -393,5 +393,46 @@ def test_every_plate_design_has_a_command_line_name() -> None:
     """ADR 0042: ``--plate`` and ``--designs-grid`` reach every design."""
     from src.growth_ledger import PLATE_DESIGNS, PLATE_DESIGNS_BY_NAME
 
-    assert set(PLATE_DESIGNS_BY_NAME.values()) == set(PLATE_DESIGNS)
+    assert set(PLATE_DESIGNS) <= set(PLATE_DESIGNS_BY_NAME.values())
     assert PLATE_DESIGNS_BY_NAME["spray-cup"].jet_efficiency == pytest.approx(0.60)
+
+
+def test_the_spray_cups_film_designs_carry_each_bands_heavy_end() -> None:
+    """ADR 0043 (parent S12): 6 kg vapor-shielded, 33 kg unshielded, per 12 MN s."""
+    from src.growth_ledger import (
+        PLATE_DESIGNS_BY_NAME,
+        SPRAY_CUP_SHIELDED,
+        SPRAY_CUP_UNSHIELDED,
+    )
+
+    assert not SPRAY_CUP.carries_film
+    assert PLATE_DESIGNS_BY_NAME["spray-cup-shielded"] is SPRAY_CUP_SHIELDED
+    assert SPRAY_CUP_SHIELDED.film_per_impulse.to_value(
+        u.kg / (u.N * u.s)
+    ) == pytest.approx(6.0 / 12.0e6)
+    assert SPRAY_CUP_UNSHIELDED.film_per_pulse_kg == 33.0
+    assert SPRAY_CUP_UNSHIELDED.efficiency == SPRAY_CUP.efficiency
+
+
+def test_the_film_is_launched_mass_the_push_spends() -> None:
+    """ADR 0043: about a thousand pulses a push, so 6 kg a pulse burns ~6 t of
+    the unit and 33 kg ~34 t, and growth falls with it."""
+    from src.growth_ledger import SPRAY_CUP_SHIELDED, SPRAY_CUP_UNSHIELDED
+
+    cycle = _cycle(3, 5.33, 55.4, 57.4)
+
+    def flown(plate):  # type: ignore[no-untyped-def]
+        return price_cycle_growth(
+            cycle, plate.efficiency, METHANE_7000K, 0.538, 0.05,
+            loss_model=square_law_loss, max_slug_ratio=plate.max_slug_ratio,
+            impactor_bond_energy=plate.impactor_bond_energy,
+            film_per_impulse=plate.film_per_impulse,
+        )  # fmt: skip
+
+    bare, shielded, unshielded = (
+        flown(p) for p in (SPRAY_CUP, SPRAY_CUP_SHIELDED, SPRAY_CUP_UNSHIELDED)
+    )
+    unit = LAUNCH_UNIT.to_value(u.t)
+    assert 4.0 < shielded.push.film_fraction * unit < 8.0
+    assert 25.0 < unshielded.push.film_fraction * unit < 45.0
+    assert unshielded.growth < shielded.growth < bare.growth

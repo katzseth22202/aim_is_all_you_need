@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -92,6 +92,14 @@ plate-cost:  ## The whole cost report behind the spray cup; headline and odds be
 plate-seed:  ## tab:seed_amortization, L1 deliveries and grow-or-harvest behind the spray cup (ADR 0042)
 	python -m src.seed_cost --plate spray-cup
 	python -m src.harvest --plate spray-cup
+
+plate-film:  ## The spray cup's film carried as launched mass: ledger at each band's ends, cost headline shielded / unshielded (ADR 0043)
+	python -m src.growth_ledger --film
+	python -m src.growth_cost_report --plate spray-cup-shielded --quick
+	python -m src.growth_cost_report --plate spray-cup-unshielded --quick
+
+lob-brake:  ## The booster's brake and reserve at each climb rate, and the lob charge it sets (ADR 0043)
+	python -m src.lob_rise
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
 	python -m src.growth_ledger --slugs

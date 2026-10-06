@@ -126,6 +126,17 @@ def test_a_growth_launch_unit_pays_every_line() -> None:
     assert flows[1] == (3.0, pytest.approx(-expected))
 
 
+def test_a_film_the_ledger_carries_is_priced_by_its_mass_not_the_books_share() -> None:
+    """ADR 0043: once the push burns the film out of the launch unit, its mass
+    comes from the ledger and the book's ``film_fraction`` no longer applies."""
+    carried = chain(harvest=1)
+    carried = replace(carried, cycles=(replace(CYCLE, film=6.3e3),) * 3)
+    bare = run_program(chain(harvest=1), FLAT, 337.0, 500.0, steady=False).flows
+    flown = run_program(carried, FLAT, 337.0, 500.0, steady=False).flows
+    book_film = 0.001 * 10.0 * 65.0e3
+    assert flown[1][1] - bare[1][1] == pytest.approx(book_film - 10.0 * 6.3e3)
+
+
 def test_the_seed_is_bought_and_built_at_the_start() -> None:
     flows = run_program(chain(), FLAT, 337.0, 500.0, steady=False).flows
     built = 0.8 * SEED * (100.0 * 2 / 60.0 + 3.0) + 0.2 * SEED * (100.0 * 3 / 2.5 + 4.0)

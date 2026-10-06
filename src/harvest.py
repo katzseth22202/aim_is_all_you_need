@@ -69,6 +69,7 @@ from src.seed_cost import (
 )
 from src.two_wave_growth import VE_METHALOX, TwoWaveCycle
 from src.water_plate import (
+    NO_FILM,
     PLATE_MAX_SLUG_RATIO,
     WATER_BOND_ENERGY,
     PlatePush,
@@ -238,6 +239,7 @@ def constant_k_delivery(
     slug_ratio: float,
     plate_efficiency: float = SEED_PLATE_EFFICIENCY,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> Delivery:
     """Deliver at a constant loading (:func:`src.water_plate.plate_push`).
 
@@ -246,6 +248,7 @@ def constant_k_delivery(
         slug_ratio: Argon per kilogram of PuffSat, held over the push.
         plate_efficiency: The plate's efficiency net of chemistry.
         impactor_bond_energy: The PuffSat's bond energy charged per pulse.
+        film_per_impulse: Plate film burned per unit of impulse (ADR 0043).
 
     Returns:
         The delivery.
@@ -257,16 +260,24 @@ def constant_k_delivery(
         slug_ratio,
         slug=DEFAULT_PLATE_SLUG,
         impactor_bond_energy=impactor_bond_energy,
+        film_per_impulse=film_per_impulse,
     )
     return deliver(push, slug_ratio, slug_ratio)
 
 
 @lru_cache(maxsize=64)
 def _front(
-    wave_km_s: float, plate_efficiency: float, bond_j_kg: float, max_slug_ratio: float
+    wave_km_s: float,
+    plate_efficiency: float,
+    bond_j_kg: float,
+    max_slug_ratio: float,
+    film_kg_per_n_s: float,
 ) -> Tuple[Delivery, ...]:
     bond = bond_j_kg * u.J / u.kg
-    pushes = [constant_k_delivery(wave_km_s * u.km / u.s, 0.0, plate_efficiency, bond)]
+    film = film_kg_per_n_s * u.kg / (u.N * u.s)
+    pushes = [
+        constant_k_delivery(wave_km_s * u.km / u.s, 0.0, plate_efficiency, bond, film)
+    ]
     for price in _START_PRICES:
         push = optimal_plate_push(
             wave_km_s * u.km / u.s,
@@ -276,6 +287,7 @@ def _front(
             max_slug_ratio=max_slug_ratio,
             slug=DEFAULT_PLATE_SLUG,
             impactor_bond_energy=bond,
+            film_per_impulse=film,
         )
         pushes.append(deliver(push, push.slug_ratio_start, push.slug_ratio_end))
     return tuple(pushes)
@@ -286,6 +298,7 @@ def delivery_front(
     plate_efficiency: float = SEED_PLATE_EFFICIENCY,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
     max_slug_ratio: float = PLATE_MAX_SLUG_RATIO,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> Tuple[Delivery, ...]:
     """Capped Pontryagin schedules across starting slug prices, plus k = 0.
 
@@ -297,6 +310,7 @@ def delivery_front(
         plate_efficiency: The plate's efficiency net of chemistry.
         impactor_bond_energy: The PuffSat's bond energy charged per pulse.
         max_slug_ratio: Cap on the per-pulse loading.
+        film_per_impulse: Plate film burned per unit of impulse (ADR 0043).
 
     Returns:
         The candidate deliveries.
@@ -306,6 +320,7 @@ def delivery_front(
         plate_efficiency,
         float(impactor_bond_energy.to_value(u.J / u.kg)),
         max_slug_ratio,
+        float(film_per_impulse.to_value(u.kg / (u.N * u.s))),
     )
 
 
@@ -686,7 +701,11 @@ def _plate_delivery_table(cycles: Sequence[TwoWaveCycle], plate: PlateDesign) ->
     for c in cycles:
         w = harvest_wave_speed(c)
         front = delivery_front(
-            w, plate.efficiency, plate.impactor_bond_energy, plate.max_slug_ratio
+            w,
+            plate.efficiency,
+            plate.impactor_bond_energy,
+            plate.max_slug_ratio,
+            plate.film_per_impulse,
         )
         best = max(
             front, key=lambda d: d.net_per_puffsat(500.0, PLATE_PRICES["learned"])
@@ -813,7 +832,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print(
             f"Delivery behind {plate.label} (ADR 0041/0042): {LAUNCH_UNIT:g} unit, "
             f"k <= {plate.max_slug_ratio:g}, lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
-            "for the climb.  'opt' nets the most per returning PuffSat at $500."
+            "for the climb, brake held back (ADR 0043).  'opt' nets the most per returning PuffSat at $500."
         )
         print(_plate_delivery_table(flown, plate))
         print(

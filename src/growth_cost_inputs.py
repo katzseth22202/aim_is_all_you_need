@@ -20,7 +20,7 @@ consumes them, wrapping to cycle 0 as the chain repeats.
 """
 
 from functools import lru_cache
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 from astropy import units as u
@@ -49,6 +49,7 @@ from src.seed_cost import (
     seed_price_range,
 )
 from src.two_wave_growth import VE_METHALOX, TwoWaveCycle
+from src.water_plate import PlatePush
 
 
 def _kg(mass: u.Quantity) -> float:
@@ -69,7 +70,14 @@ def _consumption(ledger: CycleGrowth, cycle: TwoWaveCycle) -> Tuple[float, float
     )
 
 
-def _methalox_cycles(chain: DesignChain) -> Tuple[CycleHardware, ...]:
+def _film(push: PlatePush, plate: PlateDesign) -> Optional[float]:
+    """The film a unit's push burns, if the plate carries it (ADR 0043)."""
+    return _kg(push.film_fraction * LAUNCH_UNIT) if plate.carries_film else None
+
+
+def _methalox_cycles(
+    chain: DesignChain, plate: PlateDesign
+) -> Tuple[CycleHardware, ...]:
     hardware = []
     for ledger, cycle in zip(chain.ledgers, chain.cycles):
         assert isinstance(ledger, MethaloxCycle)
@@ -89,12 +97,15 @@ def _methalox_cycles(chain: DesignChain) -> Tuple[CycleHardware, ...]:
                 departure_units=ledger.engines,
                 tanks=METHALOX_TANK_FRACTION * propellant,
                 gas=propellant,
+                film=_film(ledger.push, plate),
             )
         )
     return tuple(hardware)
 
 
-def _chamber_cycles(chain: DesignChain) -> Tuple[CycleHardware, ...]:
+def _chamber_cycles(
+    chain: DesignChain, plate: PlateDesign
+) -> Tuple[CycleHardware, ...]:
     hydrogen = chain.design.pairing is HYDROGEN_5500K
     pitch_ratio = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
     boil_off = (
@@ -132,6 +143,7 @@ def _chamber_cycles(chain: DesignChain) -> Tuple[CycleHardware, ...]:
                 plugs=PLUG_RATIO * rods,
                 pitch=pitch_ratio * rods,
                 pulses=departure.pulses,
+                film=_film(ledger.push, plate),
             )
         )
     return tuple(hardware)
@@ -142,12 +154,15 @@ def _deliveries(
 ) -> Tuple[Tuple[DeliveryOption, ...], ...]:
     return tuple(
         tuple(
-            DeliveryOption(_kg(d.puffsats), _kg(d.cargo), _kg(d.slug))
+            DeliveryOption(
+                _kg(d.puffsats), _kg(d.cargo), _kg(d.slug), _film(d.push, plate)
+            )
             for d in delivery_front(
                 harvest_wave_speed(cycle),
                 plate.efficiency,
                 plate.impactor_bond_energy,
                 plate.max_slug_ratio,
+                plate.film_per_impulse,
             )
         )
         for cycle in chain.cycles
@@ -169,7 +184,7 @@ def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> Design
     returns = chain_returns(chain)
     if design.pairing is None:
         departure = Departure.METHALOX
-        cycles = _methalox_cycles(chain)
+        cycles = _methalox_cycles(chain, plate)
         seed_puffsats, seed_rods = _kg(chain.seed), 0.0
     else:
         departure = (
@@ -177,7 +192,7 @@ def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> Design
             if design.pairing is HYDROGEN_5500K
             else Departure.METHANE
         )
-        cycles = _chamber_cycles(chain)
+        cycles = _chamber_cycles(chain, plate)
         first = chain.ledgers[0]
         assert isinstance(first, CycleGrowth)
         seed_puffsats, seed_rods = _consumption(first, chain.cycles[0])

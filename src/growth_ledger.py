@@ -10,7 +10,7 @@ the methalox apoapsis reversal (ADR 0009) that every design pays.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
@@ -42,6 +42,7 @@ from src.two_wave_growth import VE_METHALOX, TwoWaveCycle, adaptive_two_wave_cyc
 from src.water_plate import (
     ARGON_SLUG,
     NO_BONDS,
+    NO_FILM,
     PLATE_MAX_SLUG_RATIO,
     WATER_BOND_ENERGY,
     WATER_SLUG,
@@ -235,12 +236,14 @@ def _launch_and_push(
     slug: PlateSlug,
     impactor_bond_energy: u.Quantity,
     period: u.Quantity,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> Tuple[OptimalPlatePush, u.Quantity]:
     """Push the launch unit at 400 km and park it, ready to depart from 600 km.
 
     The wave pushes it from rest to the parking orbit's 400 km periapsis speed.
     At apoapsis it raises periapsis to 600 km and reverses the ellipse (ADR 0009),
     both in methalox, and it drops the plate and the slug's empty drop tank.
+    The plate's film, if carried, is part of the unit and burns off in the push.
 
     Returns:
         The push, and the mass left to depart (before any cryostats or boil-off).
@@ -254,6 +257,7 @@ def _launch_and_push(
         max_slug_ratio=max_slug_ratio,
         slug=slug,
         impactor_bond_energy=impactor_bond_energy,
+        film_per_impulse=film_per_impulse,
     )
     methalox = (periapsis_raise(period) + apoapsis_reversal_dv(period)).to_value(
         u.km / u.s
@@ -280,6 +284,7 @@ def price_cycle_growth(
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> CycleGrowth:
     """Carry one launch unit through a flown cycle at a given water schedule.
 
@@ -299,6 +304,8 @@ def price_cycle_growth(
         cryostat_fraction: Cryostat mass per kilogram of gas launched; zero
             for methane, which the parent holds passively.
         boil_off: Share of the launched gas lost over the parking-orbit hold.
+        film_per_impulse: Plate film burned per unit of push impulse, carried
+            as launched mass (ADR 0043); none by default.
 
     Returns:
         The cycle's ledger.
@@ -311,6 +318,7 @@ def price_cycle_growth(
         slug,
         impactor_bond_energy,
         parking_period(cycle),
+        film_per_impulse,
     )
     departure_burn = departure_at_altitude(
         cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
@@ -414,6 +422,7 @@ def best_cycle_growth(
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> CycleGrowth:
     """Carry the launch unit through a cycle on the water schedule that grows it most.
 
@@ -436,6 +445,7 @@ def best_cycle_growth(
         impactor_bond_energy: As in :func:`price_cycle_growth`.
         cryostat_fraction: As in :func:`price_cycle_growth`.
         boil_off: As in :func:`price_cycle_growth`.
+        film_per_impulse: As in :func:`price_cycle_growth`.
 
     Returns:
         The cycle's ledger at the best schedule.
@@ -456,6 +466,7 @@ def best_cycle_growth(
             boil_off=boil_off,
             slug=slug,
             impactor_bond_energy=impactor_bond_energy,
+            film_per_impulse=film_per_impulse,
         )
 
     return _best_over_price(fly)
@@ -516,6 +527,7 @@ def chain_growth(
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> List[CycleGrowth]:
     """Carry the launch unit through every flown cycle, each on its best schedule.
 
@@ -532,6 +544,7 @@ def chain_growth(
         impactor_bond_energy: As in :func:`price_cycle_growth`.
         cryostat_fraction: As in :func:`price_cycle_growth`.
         boil_off: As in :func:`price_cycle_growth`.
+        film_per_impulse: As in :func:`price_cycle_growth`.
 
     Returns:
         One ledger per cycle, in order.
@@ -549,6 +562,7 @@ def chain_growth(
             boil_off=boil_off,
             slug=slug,
             impactor_bond_energy=impactor_bond_energy,
+            film_per_impulse=film_per_impulse,
         )
         for cycle in cycles
     ]
@@ -655,6 +669,7 @@ def price_methalox_cycle(
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
     loss_model: Optional[LossModel] = None,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> MethaloxCycle:
     """Carry the launch unit through a cycle with Raptor 3s departing.
 
@@ -671,6 +686,7 @@ def price_methalox_cycle(
         impactor_bond_energy: As in :func:`price_cycle_growth`.
         loss_model: Finite-burn loss; None uses the steered table on the
             cycle's own parking orbit.
+        film_per_impulse: As in :func:`price_cycle_growth`.
 
     Returns:
         The cycle's ledger.
@@ -683,6 +699,7 @@ def price_methalox_cycle(
         slug,
         impactor_bond_energy,
         parking_period(cycle),
+        film_per_impulse,
     )
     burn = departure_at_altitude(
         cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
@@ -724,6 +741,7 @@ def best_methalox_cycle(
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = DEFAULT_PLATE_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> MethaloxCycle:
     """:func:`price_methalox_cycle` on the water schedule that grows it most.
 
@@ -733,6 +751,7 @@ def best_methalox_cycle(
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.
+        film_per_impulse: As in :func:`price_cycle_growth`.
 
     Returns:
         The cycle's ledger at the best schedule.
@@ -745,6 +764,7 @@ def best_methalox_cycle(
             max_slug_ratio=max_slug_ratio,
             slug=slug,
             impactor_bond_energy=impactor_bond_energy,
+            film_per_impulse=film_per_impulse,
         )
     )
 
@@ -752,6 +772,10 @@ def best_methalox_cycle(
 #: The paper's injection ratio (``sec:water_injected_overtake``), the cap the
 #: plate designs fly under (ADR 0041).  The schedule still falls below it.
 PAPER_SLUG_RATIO = 8.52
+#: One pulse of the spray cup: 134 t sprung at 4 Hz on a 2.8 m stroke
+#: (parent ``eq:plate_pulse_size``).  Sets how film per pulse becomes film per
+#: unit of impulse (ADR 0043).
+PULSE_IMPULSE = 12.0 * u.MN * u.s
 
 
 @dataclass(frozen=True)
@@ -766,12 +790,26 @@ class PlateDesign:
             Zero for the impact-sim's solved designs, whose ``eta_jet`` already
             charges the PuffSat's water as lost.
         max_slug_ratio: Cap on the per-pulse loading.
+        film_per_pulse_kg: Plate film burned per :data:`PULSE_IMPULSE` pulse,
+            carried as launched mass (ADR 0043).  Zero leaves it to the cost
+            book's film line, as every design did before.
     """
 
     label: str
     efficiency: float
     impactor_bond_j_kg: float
     max_slug_ratio: float
+    film_per_pulse_kg: float = 0.0
+
+    @property
+    def film_per_impulse(self) -> u.Quantity:
+        """Film burned per newton-second of push."""
+        return (self.film_per_pulse_kg * u.kg / PULSE_IMPULSE).to(u.kg / (u.N * u.s))
+
+    @property
+    def carries_film(self) -> bool:
+        """Whether the ledger, rather than the cost book, carries the film."""
+        return self.film_per_pulse_kg > 0.0
 
     @property
     def jet_efficiency(self) -> float:
@@ -800,9 +838,26 @@ SPRAY_CUP_UNMIXED = PlateDesign("spray cup 0.57", 0.57**2, 0.0, PAPER_SLUG_RATIO
 PLUG = PlateDesign("plug 0.70", 0.70**2, 0.0, PAPER_SLUG_RATIO)
 PAPER_PLATE = PlateDesign("paper 0.775", 0.775**2, 0.0, PAPER_SLUG_RATIO)
 PLATE_DESIGNS = (SPRAY_CUP, SPRAY_CUP_UNMIXED, PLUG, PAPER_PLATE, ADR_0033_PLATE)
-#: The designs by command-line name (``--plate``, ADR 0042).
+#: The spray cup's film per 12 MN s pulse (impact sim P5, parent S12): 4-6 kg
+#: of pitch when its own vapor shields the face, 28-33 kg when it does not.
+SPRAY_CUP_FILM_PER_PULSE = {"vapor-shielded": (4.0, 6.0), "unshielded": (28.0, 33.0)}
+#: The spray cup with its film carried as launched mass, at the heavy end of
+#: each band (ADR 0043).
+SPRAY_CUP_SHIELDED = replace(
+    SPRAY_CUP,
+    label="spray cup 0.60, film 6 kg",
+    film_per_pulse_kg=SPRAY_CUP_FILM_PER_PULSE["vapor-shielded"][1],
+)
+SPRAY_CUP_UNSHIELDED = replace(
+    SPRAY_CUP,
+    label="spray cup 0.60, film 33 kg",
+    film_per_pulse_kg=SPRAY_CUP_FILM_PER_PULSE["unshielded"][1],
+)
+#: The designs by command-line name (``--plate``, ADR 0042, 0043).
 PLATE_DESIGNS_BY_NAME = {
     "spray-cup": SPRAY_CUP,
+    "spray-cup-shielded": SPRAY_CUP_SHIELDED,
+    "spray-cup-unshielded": SPRAY_CUP_UNSHIELDED,
     "spray-cup-unmixed": SPRAY_CUP_UNMIXED,
     "plug": PLUG,
     "paper-0.775": PAPER_PLATE,
@@ -1124,6 +1179,7 @@ def plate_design_rows(
                     0.0 if hydrogen else pitch_ratio(METHANE_PITCH),
                     max_slug_ratio=cap,
                     impactor_bond_energy=plate.impactor_bond_energy,
+                film_per_impulse=plate.film_per_impulse,
                     cryostat_fraction=HYDROGEN_CRYOSTAT if hydrogen else 0.0,
                     boil_off=(
                         hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY)
@@ -1156,6 +1212,7 @@ def plate_design_rows(
             best_methalox_cycle(
                 c, plate.efficiency, max_slug_ratio=plate.max_slug_ratio,
                 impactor_bond_energy=plate.impactor_bond_energy,
+                film_per_impulse=plate.film_per_impulse,
             )
             for c in three_only
         ]  # fmt: skip
@@ -1212,6 +1269,7 @@ def _plate_chamber_growth(
         ),
         cryostat_fraction=cryostat_fraction if hydrogen else 0.0,
         boil_off=hydrogen_boil_off(cycles, boil_off_per_day) if hydrogen else 0.0,
+        film_per_impulse=plate.film_per_impulse,
     )
 
 
@@ -1273,6 +1331,7 @@ def design_grid_rows(
             best_methalox_cycle(
                 c, plate.efficiency, max_slug_ratio=cap,
                 impactor_bond_energy=plate.impactor_bond_energy,
+                film_per_impulse=plate.film_per_impulse,
             )
             for c in three_only
         ]
@@ -1376,6 +1435,7 @@ def design_sensitivities(
             best_methalox_cycle(
                 c, plate.efficiency, max_slug_ratio=cap,
                 impactor_bond_energy=plate.impactor_bond_energy,
+                film_per_impulse=plate.film_per_impulse,
             ).growth
             for c in short_three
         ],
@@ -1391,6 +1451,63 @@ def design_sensitivities(
         + f"\n\nA {split_days:g}-day parking orbit flown consistently:\n"
         + str(tabulate([orbit], headers="keys", floatfmt=".3f"))
     )
+
+
+def film_rows(
+    cycles: Sequence[TwoWaveCycle],
+    three_only: Sequence[TwoWaveCycle],
+    plate: PlateDesign = SPRAY_CUP,
+) -> List[Dict[str, object]]:
+    """Doubling with the plate's film carried as launched mass (ADR 0043).
+
+    The parent's S12: each end of the spray cup's vapor-shielded and unshielded
+    film bands, against the film left to the cost book.  The film is part of
+    the 1500 t unit and burns off pulse by pulse, so it is paid for in what
+    the push delivers.
+
+    Args:
+        cycles: The flown chain on the 20-day orbit.
+        three_only: The three-synodic-only chain methalox flies.
+        plate: The design; its own film is replaced by each band's.
+
+    Returns:
+        One row per film per pulse.
+    """
+    periods = [c.period_years for c in cycles]
+    three_periods = [c.period_years for c in three_only]
+    films = [("not carried", 0.0)] + [
+        (band, kg) for band, ends in SPRAY_CUP_FILM_PER_PULSE.items() for kg in ends
+    ]
+    rows: List[Dict[str, object]] = []
+    for band, kg in films:
+        flown = replace(plate, film_per_pulse_kg=kg)
+        row: Dict[str, object] = {"film": band, "kg/pulse": kg}
+        for pairing in DEPARTURE_PAIRINGS:
+            grown = _plate_chamber_growth(
+                cycles, flown, pairing, SOLVED_EFFICIENCY[pairing.name],
+                flown.max_slug_ratio,
+            )  # fmt: skip
+            gas = pairing.name.split()[0]
+            if pairing is HYDROGEN_5500K:
+                row["film t/push"] = _mean(
+                    [g.push.film_fraction * LAUNCH_UNIT.to_value(u.t) for g in grown]
+                )
+            row[f"{gas} solved yr"] = summarize_chain(
+                periods, [g.growth for g in grown]
+            ).doubling_years
+        row["methalox yr"] = summarize_chain(
+            three_periods,
+            [
+                best_methalox_cycle(
+                    c, flown.efficiency, max_slug_ratio=flown.max_slug_ratio,
+                    impactor_bond_energy=flown.impactor_bond_energy,
+                    film_per_impulse=flown.film_per_impulse,
+                ).growth
+                for c in three_only
+            ],
+        ).doubling_years  # fmt: skip
+        rows.append(row)
+    return rows
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -1422,8 +1539,25 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         choices=sorted(PLATE_DESIGNS_BY_NAME),
         help="the full matrix and sensitivities behind one plate design (ADR 0042)",
     )
+    parser.add_argument(
+        "--film",
+        action="store_true",
+        help="the spray cup's film carried as launched mass (ADR 0043)",
+    )
     args = parser.parse_args(argv)
     cycles = adaptive_two_wave_cycles(split_days=args.split_days)
+    if args.film:
+        three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)
+        print(
+            f"Spray cup ({SPRAY_CUP.label}, k <= {SPRAY_CUP.max_slug_ratio:g}) with "
+            "its film carried as launched mass (ADR 0043, parent S12): film per "
+            f"{PULSE_IMPULSE.to_value(u.MN * u.s):g} MN s pulse, burned pulse by "
+            f"pulse from the {LAUNCH_UNIT:g} unit.  {args.split_days:g}-day orbit; "
+            "solved chambers as in --designs-grid; methalox on "
+            f"{len(three)} three-synodic cycles."
+        )
+        print(tabulate(film_rows(cycles, three), headers="keys", floatfmt=".4g"))
+        return
     if args.designs_grid:
         plate = PLATE_DESIGNS_BY_NAME[args.designs_grid]
         three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)

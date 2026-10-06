@@ -34,6 +34,13 @@ ending at ``lambda``.  So one number, the starting price, fixes the whole
 schedule, and ``k`` falls pulse by pulse: water is sprayed most freely early,
 when the wave is fastest.
 
+The plate's sprayed film is launched mass too (parent S12, ADR 0043).  It is
+burned at a fixed mass per pulse, and pulses are a fixed impulse, so it leaves
+at ``phi`` kilograms per newton-second of impulse delivered:
+``dM/dv`` gains ``-phi M``.  The loss does not depend on ``k``, so the
+pointwise rule is unchanged; the price gains ``c phi``, since a kilogram of
+craft carried further burns film on the way.
+
 Left free, the schedule opens at k = 50-100.  The ideal-ceiling ``beta`` is
 unvalidated that far above the parent's k = 9-10 candidates, and a cooler,
 heavier mixture probably converts worse, so the schedule is clamped at
@@ -58,6 +65,8 @@ from src.plume_thermal import WATER_ATOMISATION_ENTHALPY, WATER_MOLAR_MASS
 PLATE_MAX_SLUG_RATIO = 10.0
 #: A PuffSat or slug with no bonds to pay: argon, or the parent's ideal ceiling.
 NO_BONDS = 0.0 * u.J / u.kg
+#: A plate whose film is not carried: every push before ADR 0043.
+NO_FILM = 0.0 * u.kg / (u.N * u.s)
 #: Water's atomisation enthalpy per kilogram, the bond energy ``eq:eta_chem``
 #: charges (50.9 MJ/kg), from :mod:`src.plume_thermal`'s constants.
 WATER_BOND_ENERGY = (WATER_ATOMISATION_ENTHALPY / WATER_MOLAR_MASS).to(u.J / u.kg)
@@ -147,11 +156,13 @@ class PlatePush:
         delivered_fraction: Craft mass after the push over mass before it.
         puffsat_fraction: Growth-wave PuffSat mass the push consumes.
         slug_fraction: Slug (water or argon) the push sprays.
+        film_fraction: Plate film the push burns (ADR 0043).
     """
 
     delivered_fraction: float
     puffsat_fraction: float
     slug_fraction: float
+    film_fraction: float
 
     @property
     def delivered_per_puffsat(self) -> float:
@@ -188,6 +199,11 @@ def _bonds(slug: PlateSlug, impactor_bond_energy: u.Quantity) -> Tuple[float, fl
     )
 
 
+def _film_per_km_s(film_per_impulse: u.Quantity) -> float:
+    """Film burned per kilogram of craft per km/s gained."""
+    return float(film_per_impulse.to_value(u.kg / (u.N * u.s))) * 1.0e3
+
+
 def _push_ode(
     closing_km_s: float,
     gain: float,
@@ -207,6 +223,7 @@ def plate_push(
     slug_ratio: float,
     slug: PlateSlug = WATER_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> PlatePush:
     """Integrate an overtake push at a constant loading.
 
@@ -219,6 +236,7 @@ def plate_push(
         slug_ratio: Slug per kilogram of PuffSat, ``k``.
         slug: What the plate sprays.
         impactor_bond_energy: The PuffSat's bond energy per kilogram.
+        film_per_impulse: Plate film burned per unit of impulse delivered.
 
     Returns:
         The push's ledger.
@@ -227,17 +245,20 @@ def plate_push(
     gain = float(speed_gain.to_value(u.km / u.s))
     jet = float(np.sqrt(efficiency))
     bonds = _bonds(slug, impactor_bond_energy)
+    phi = _film_per_km_s(film_per_impulse)
 
     def rhs(v: float, y: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         beta = float(_impulse_factor(slug_ratio, w0 - v, jet, bonds))
         rate = y[0] / (beta * (w0 - v))
-        return np.array([-slug_ratio * rate, rate, slug_ratio * rate])
+        film = phi * y[0]
+        return np.array([-slug_ratio * rate - film, rate, slug_ratio * rate, film])
 
-    end = _push_ode(w0, gain, rhs, np.array([1.0, 0.0, 0.0]))
+    end = _push_ode(w0, gain, rhs, np.array([1.0, 0.0, 0.0, 0.0]))
     return PlatePush(
         delivered_fraction=float(end[0]),
         puffsat_fraction=float(end[1]),
         slug_fraction=float(end[2]),
+        film_fraction=float(end[3]),
     )
 
 
@@ -325,6 +346,7 @@ def optimal_plate_push(
     max_slug_ratio: Optional[float] = PLATE_MAX_SLUG_RATIO,
     slug: PlateSlug = WATER_SLUG,
     impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
+    film_per_impulse: u.Quantity = NO_FILM,
 ) -> OptimalPlatePush:
     """Integrate an overtake push on the Pontryagin-optimal loading schedule.
 
@@ -337,6 +359,7 @@ def optimal_plate_push(
         max_slug_ratio: Upper bound on ``k``; None leaves it free.
         slug: What the plate sprays.
         impactor_bond_energy: The PuffSat's bond energy per kilogram.
+        film_per_impulse: Plate film burned per unit of impulse delivered.
 
     Returns:
         The push's ledger, with its schedule's end points.
@@ -345,24 +368,32 @@ def optimal_plate_push(
     gain = float(speed_gain.to_value(u.km / u.s))
     jet = float(np.sqrt(efficiency))
     bonds = _bonds(slug, impactor_bond_energy)
+    phi = _film_per_km_s(film_per_impulse)
 
     def loading(price: float, closing: float) -> float:
         return _best_loading(price, closing, jet, max_slug_ratio, bonds)
 
     def rhs(v: float, y: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        mass, _, _, price = y
+        mass, _, _, price, _ = y
         k = loading(price, w0 - v)
         beta = float(_impulse_factor(k, w0 - v, jet, bonds))
         rate = 1.0 / (beta * (w0 - v))
         return np.array(
-            [-k * mass * rate, mass * rate, k * mass * rate, (1.0 + price * k) * rate]
+            [
+                -k * mass * rate - phi * mass,
+                mass * rate,
+                k * mass * rate,
+                (1.0 + price * k) * rate + price * phi,
+                phi * mass,
+            ]
         )
 
-    end = _push_ode(w0, gain, rhs, np.array([1.0, 0.0, 0.0, initial_water_price]))
+    end = _push_ode(w0, gain, rhs, np.array([1.0, 0.0, 0.0, initial_water_price, 0.0]))
     return OptimalPlatePush(
         delivered_fraction=float(end[0]),
         puffsat_fraction=float(end[1]),
         slug_fraction=float(end[2]),
+        film_fraction=float(end[4]),
         slug_ratio_start=loading(initial_water_price, w0),
         slug_ratio_end=loading(float(end[3]), w0 - gain),
         final_water_price=float(end[3]),
