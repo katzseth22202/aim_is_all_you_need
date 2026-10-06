@@ -749,6 +749,59 @@ def best_methalox_cycle(
     )
 
 
+#: The paper's injection ratio (``sec:water_injected_overtake``), the cap the
+#: plate designs fly under (ADR 0041).  The schedule still falls below it.
+PAPER_SLUG_RATIO = 8.52
+
+
+@dataclass(frozen=True)
+class PlateDesign:
+    """A plate the ledger and the cost model can fly (ADR 0041).
+
+    Attributes:
+        label: Short label.
+        efficiency: The energy efficiency ``eta = eta_jet^2`` the ledger takes,
+            net of whatever chemistry it charges per pulse.
+        impactor_bond_j_kg: The PuffSat's bond energy charged per pulse, J/kg.
+            Zero for the impact-sim's solved designs, whose ``eta_jet`` already
+            charges the PuffSat's water as lost.
+        max_slug_ratio: Cap on the per-pulse loading.
+    """
+
+    label: str
+    efficiency: float
+    impactor_bond_j_kg: float
+    max_slug_ratio: float
+
+    @property
+    def jet_efficiency(self) -> float:
+        """``eta_jet``, the impact-sim's convention."""
+        return float(np.sqrt(self.efficiency))
+
+    @property
+    def impactor_bond_energy(self) -> u.Quantity:
+        """The PuffSat's bond energy as a quantity."""
+        return self.impactor_bond_j_kg * u.J / u.kg
+
+
+_WATER_BOND_J_KG = float(WATER_BOND_ENERGY.to_value(u.J / u.kg))
+#: ADR 0033's plate, which every figure before ADR 0041 flew: eta 0.7 net of
+#: the ice PuffSat's bonds, charged per pulse, k <= 10.
+ADR_0033_PLATE = PlateDesign(
+    "ADR 0033 (eta 0.7, bonds per pulse)", 0.7, _WATER_BOND_J_KG, PLATE_MAX_SLUG_RATIO
+)
+#: The impact-sim's spray-plate designs (its ADR-0055, handoff Draft 2,
+#: 2026-10-05, P11), given as eta_jet: the spray cup flies first at 0.6, 0.57
+#: unmixed is its downside, the plug reaches ~0.70 once perfected, and the
+#: paper's 0.775 is a reference.  Each is all-in, so the PuffSat's bonds are
+#: not charged again.
+SPRAY_CUP = PlateDesign("spray cup 0.60", 0.60**2, 0.0, PAPER_SLUG_RATIO)
+SPRAY_CUP_UNMIXED = PlateDesign("spray cup 0.57", 0.57**2, 0.0, PAPER_SLUG_RATIO)
+PLUG = PlateDesign("plug 0.70", 0.70**2, 0.0, PAPER_SLUG_RATIO)
+PAPER_PLATE = PlateDesign("paper 0.775", 0.775**2, 0.0, PAPER_SLUG_RATIO)
+PLATE_DESIGNS = (SPRAY_CUP, SPRAY_CUP_UNMIXED, PLUG, PAPER_PLATE, ADR_0033_PLATE)
+
+
 #: The ledger's efficiencies.  The plate's are net of its chemistry toll,
 #: charged pulse by pulse; the chambers' are shares of their chemistry ceiling
 #: (:func:`src.chamber_isp.absolute_efficiency`), with each solved chamber added
@@ -1038,6 +1091,85 @@ def _slug_comparison(cycles: Sequence[TwoWaveCycle]) -> str:
     return tabulate(rows, headers="keys", floatfmt=".3g")
 
 
+def plate_design_rows(
+    cycles: Sequence[TwoWaveCycle], three_only: Sequence[TwoWaveCycle]
+) -> List[Dict[str, object]]:
+    """Each plate design behind the solved chambers and methalox (ADR 0041).
+
+    Args:
+        cycles: The flown chain.
+        three_only: The three-synodic-only chain methalox flies.
+
+    Returns:
+        One row per plate and departure: doubling under the design's cap, and
+        with k held to 10 instead.
+    """
+    periods = [c.period_years for c in cycles]
+    rows: List[Dict[str, object]] = []
+    for plate in PLATE_DESIGNS:
+        for pairing in DEPARTURE_PAIRINGS:
+            hydrogen = pairing is HYDROGEN_5500K
+            eta = SOLVED_EFFICIENCY[pairing.name]
+            runs = [
+                chain_growth(
+                    cycles, plate.efficiency, pairing, eta,
+                    0.0 if hydrogen else pitch_ratio(METHANE_PITCH),
+                    max_slug_ratio=cap,
+                    impactor_bond_energy=plate.impactor_bond_energy,
+                    cryostat_fraction=HYDROGEN_CRYOSTAT if hydrogen else 0.0,
+                    boil_off=(
+                        hydrogen_boil_off(cycles, HYDROGEN_BOIL_OFF_PER_DAY)
+                        if hydrogen else 0.0
+                    ),
+                )
+                for cap in (plate.max_slug_ratio, PLATE_MAX_SLUG_RATIO)
+            ]  # fmt: skip
+            grown = runs[0]
+            summary = summarize_chain(periods, [g.growth for g in grown])
+            rows.append(
+                {
+                    "plate": plate.label,
+                    "departure": f"{pairing.name.split()[0]} {eta:g}",
+                    "k": f"{_mean([g.push.slug_ratio_start for g in grown]):.2f}"
+                    f"->{_mean([g.push.slug_ratio_end for g in grown]):.1f}",
+                    "push": _mean(
+                        [float((g.departing_stack / g.puffsats).to_value(u.one)) for g in grown]
+                    ),
+                    "growth": _mean([g.growth for g in grown]),
+                    "doubling yr": summary.doubling_years,
+                    "k<=10 yr": summarize_chain(
+                        periods, [g.growth for g in runs[1]]
+                    ).doubling_years,
+                    "10yr step": summary.ten_year_stepwise,
+                }
+            )  # fmt: skip
+        three_periods = [c.period_years for c in three_only]
+        flown = [
+            best_methalox_cycle(
+                c, plate.efficiency, max_slug_ratio=plate.max_slug_ratio,
+                impactor_bond_energy=plate.impactor_bond_energy,
+            )
+            for c in three_only
+        ]  # fmt: skip
+        summary = summarize_chain(three_periods, [f.growth for f in flown])
+        rows.append(
+            {
+                "plate": plate.label,
+                "departure": "methalox 380 s",
+                "k": f"{_mean([f.push.slug_ratio_start for f in flown]):.2f}"
+                f"->{_mean([f.push.slug_ratio_end for f in flown]):.1f}",
+                "push": _mean(
+                    [float((f.departing_stack / f.puffsats).to_value(u.one)) for f in flown]
+                ),
+                "growth": _mean([f.growth for f in flown]),
+                "doubling yr": summary.doubling_years,
+                "k<=10 yr": float("nan"),
+                "10yr step": summary.ten_year_stepwise,
+            }
+        )  # fmt: skip
+    return rows
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Run the growth ledger's scenario matrix over the flown chain and print it.
 
@@ -1057,8 +1189,27 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         help="split gap, which is also the parking orbit (default "
         f"{DEFAULT_PARKING_DAYS:g})",
     )
+    parser.add_argument(
+        "--designs",
+        action="store_true",
+        help="the impact-sim's plate designs (ADR 0041) instead of the full matrix",
+    )
     args = parser.parse_args(argv)
     cycles = adaptive_two_wave_cycles(split_days=args.split_days)
+    if args.designs:
+        three = adaptive_two_wave_cycles(threshold_m_s=0.0, split_days=args.split_days)
+        print(
+            f"Plate designs (ADR 0041) over the flown chain ({len(cycles)} cycles; "
+            f"methalox on {len(three)} three-synodic cycles).  Argon spray; the "
+            "impact-sim's eta_jet is all-in, so its PuffSat bonds are not charged "
+            f"again.  k capped at the paper's {PAPER_SLUG_RATIO:g} (ADR 0033's plate "
+            "at 10); 'k<=10 yr' lifts the cap to 10.  Solved chambers, gated, "
+            "methane at 5.6 kg pitch, hydrogen with cryostats and boil-off."
+        )
+        print(
+            tabulate(plate_design_rows(cycles, three), headers="keys", floatfmt=".3g")
+        )
+        return
     if args.slugs:
         print(
             f"Plate slug comparison over the flown chain ({len(cycles)} cycles).  "

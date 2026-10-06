@@ -11,13 +11,18 @@ from boinor.bodies import Earth
 from src.chamber_departure import best_departure, growth_per_cycle, square_law_loss
 from src.chamber_isp import GATE_THRUST_COST, HYDROGEN_5500K, METHANE_7000K, PLUG_RATIO
 from src.growth_ledger import (
+    ADR_0033_PLATE,
     DEFAULT_PARKING_DAYS,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
     METHANE_PITCH,
     METHANE_PITCH_RANGE,
+    PAPER_SLUG_RATIO,
+    PLATE_DESIGNS,
     PLATE_MASS,
+    PLUG,
     RAPTOR3_MASS,
+    SPRAY_CUP,
     best_cycle_growth,
     chain_growth,
     departure_at_altitude,
@@ -32,7 +37,13 @@ from src.growth_ledger import (
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.nozzle_analysis import apoapsis_reversal_dv
 from src.two_wave_growth import VE_METHALOX, TwoWaveCycle, adaptive_two_wave_cycles
-from src.water_plate import ARGON_SLUG, WATER_SLUG, optimal_plate_push
+from src.water_plate import (
+    ARGON_SLUG,
+    NO_BONDS,
+    WATER_BOND_ENERGY,
+    WATER_SLUG,
+    optimal_plate_push,
+)
 
 KM_S = u.km / u.s
 
@@ -347,3 +358,32 @@ def test_the_pitch_sweep_brackets_the_pitch_the_matrix_carries() -> None:
     periods = [c.period_years for c in cycles]
     expected = summarize_chain(periods, [g.growth for g in grown]).doubling_years
     assert solved["5.6 kg yr"] == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_impact_sims_plates_are_all_in_and_capped_at_the_papers_k() -> None:
+    """ADR 0041: the handoff's eta_jet already charges the PuffSat's bonds, so
+    the ledger takes eta = eta_jet^2 with no bonds; ADR 0033's plate keeps its
+    0.7 net of bonds charged per pulse, at k <= 10."""
+    assert SPRAY_CUP.efficiency == pytest.approx(0.36)
+    assert PLUG.efficiency == pytest.approx(0.49)
+    for plate in PLATE_DESIGNS:
+        if plate is ADR_0033_PLATE:
+            continue
+        assert plate.impactor_bond_energy == NO_BONDS
+        assert plate.max_slug_ratio == PAPER_SLUG_RATIO
+    assert ADR_0033_PLATE.efficiency == 0.7
+    assert ADR_0033_PLATE.impactor_bond_energy == WATER_BOND_ENERGY
+    assert ADR_0033_PLATE.max_slug_ratio == 10.0
+
+
+def test_the_spray_cup_grows_slower_than_the_plug() -> None:
+    cycle = _cycle(3, 5.33, 55.4, 57.4)
+
+    def growth(plate) -> float:  # type: ignore[no-untyped-def]
+        return price_cycle_growth(
+            cycle, plate.efficiency, METHANE_7000K, 0.538, 0.05,
+            loss_model=square_law_loss, max_slug_ratio=plate.max_slug_ratio,
+            impactor_bond_energy=plate.impactor_bond_energy,
+        ).growth  # fmt: skip
+
+    assert 1.0 < growth(SPRAY_CUP) < growth(PLUG)

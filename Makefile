@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -73,6 +73,12 @@ seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1
 
 growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1: 10%, 50% odds (ADR 0037/0040), seed routes (ADR 0039)
 	python -m src.growth_cost_report
+
+plate-designs:  ## The impact-sim's plate designs (spray cup 0.60/0.57, plug 0.70, paper 0.775) through the growth ledger (ADR 0041)
+	python -m src.growth_ledger --designs
+
+plate-designs-cost:  ## The same plates through the growth cost model, lob charged for climbing at 400 km (ADR 0041)
+	python -m src.growth_cost_report --plates
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
 	python -m src.growth_ledger --slugs

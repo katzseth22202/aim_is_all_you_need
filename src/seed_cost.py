@@ -44,6 +44,7 @@ from src.chamber_isp import (
 )
 from src.finite_burn_loss import finite_burn_loss
 from src.growth_ledger import (
+    ADR_0033_PLATE,
     DEFAULT_PARKING_DAYS,
     HYDROGEN_BOIL_OFF_PER_DAY,
     HYDROGEN_CRYOSTAT,
@@ -53,6 +54,7 @@ from src.growth_ledger import (
     ChainSummary,
     CycleGrowth,
     MethaloxCycle,
+    PlateDesign,
     best_methalox_cycle,
     chain_growth,
     hydrogen_boil_off,
@@ -406,14 +408,14 @@ def chains(
 @lru_cache(maxsize=16)
 def design_chain(
     design: Design,
-    plate_efficiency: float = SEED_PLATE_EFFICIENCY,
+    plate: PlateDesign = ADR_0033_PLATE,
     split_days: float = DEFAULT_PARKING_DAYS,
 ) -> DesignChain:
     """Fly one design over its chain, as the growth ledger's matrix does (cached).
 
     Args:
         design: The design.
-        plate_efficiency: The plate's efficiency.
+        plate: The plate; ADR 0033's by default (ADR 0041 adds the others).
         split_days: Split gap, which is also the parking orbit.
 
     Returns:
@@ -421,7 +423,15 @@ def design_chain(
     """
     flown, three = chains(split_days)
     if design.pairing is None:
-        ledgers = [best_methalox_cycle(c, plate_efficiency) for c in three]
+        ledgers = [
+            best_methalox_cycle(
+                c,
+                plate.efficiency,
+                max_slug_ratio=plate.max_slug_ratio,
+                impactor_bond_energy=plate.impactor_bond_energy,
+            )
+            for c in three
+        ]
         first = ledgers[0]
         seed = (first.puffsats / _arrival(three[0].nozzle_wave_dsm)).to(u.t)
         growths = tuple(m.growth for m in ledgers)
@@ -439,10 +449,12 @@ def design_chain(
     assert design.efficiency is not None
     grown = chain_growth(
         flown,
-        plate_efficiency,
+        plate.efficiency,
         design.pairing,
         design.efficiency,
         pitch,
+        max_slug_ratio=plate.max_slug_ratio,
+        impactor_bond_energy=plate.impactor_bond_energy,
         cryostat_fraction=HYDROGEN_CRYOSTAT if hydrogen else 0.0,
         boil_off=(
             hydrogen_boil_off(flown, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0

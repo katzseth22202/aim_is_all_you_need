@@ -234,6 +234,7 @@ def constant_k_delivery(
     wave_speed: u.Quantity,
     slug_ratio: float,
     plate_efficiency: float = SEED_PLATE_EFFICIENCY,
+    impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
 ) -> Delivery:
     """Deliver at a constant loading (:func:`src.water_plate.plate_push`).
 
@@ -241,6 +242,7 @@ def constant_k_delivery(
         wave_speed: The returning wave's speed at the intercept.
         slug_ratio: Argon per kilogram of PuffSat, held over the push.
         plate_efficiency: The plate's efficiency net of chemistry.
+        impactor_bond_energy: The PuffSat's bond energy charged per pulse.
 
     Returns:
         The delivery.
@@ -251,30 +253,36 @@ def constant_k_delivery(
         plate_efficiency,
         slug_ratio,
         slug=DEFAULT_PLATE_SLUG,
-        impactor_bond_energy=WATER_BOND_ENERGY,
+        impactor_bond_energy=impactor_bond_energy,
     )
     return deliver(push, slug_ratio, slug_ratio)
 
 
 @lru_cache(maxsize=64)
-def _front(wave_km_s: float, plate_efficiency: float) -> Tuple[Delivery, ...]:
-    pushes = [constant_k_delivery(wave_km_s * u.km / u.s, 0.0, plate_efficiency)]
+def _front(
+    wave_km_s: float, plate_efficiency: float, bond_j_kg: float, max_slug_ratio: float
+) -> Tuple[Delivery, ...]:
+    bond = bond_j_kg * u.J / u.kg
+    pushes = [constant_k_delivery(wave_km_s * u.km / u.s, 0.0, plate_efficiency, bond)]
     for price in _START_PRICES:
         push = optimal_plate_push(
             wave_km_s * u.km / u.s,
             l1_transfer_speed(),
             plate_efficiency,
             float(price),
-            max_slug_ratio=PLATE_MAX_SLUG_RATIO,
+            max_slug_ratio=max_slug_ratio,
             slug=DEFAULT_PLATE_SLUG,
-            impactor_bond_energy=WATER_BOND_ENERGY,
+            impactor_bond_energy=bond,
         )
         pushes.append(deliver(push, push.slug_ratio_start, push.slug_ratio_end))
     return tuple(pushes)
 
 
 def delivery_front(
-    wave_speed: u.Quantity, plate_efficiency: float = SEED_PLATE_EFFICIENCY
+    wave_speed: u.Quantity,
+    plate_efficiency: float = SEED_PLATE_EFFICIENCY,
+    impactor_bond_energy: u.Quantity = WATER_BOND_ENERGY,
+    max_slug_ratio: float = PLATE_MAX_SLUG_RATIO,
 ) -> Tuple[Delivery, ...]:
     """Capped Pontryagin schedules across starting slug prices, plus k = 0.
 
@@ -284,11 +292,18 @@ def delivery_front(
     Args:
         wave_speed: The returning wave's speed at the intercept.
         plate_efficiency: The plate's efficiency net of chemistry.
+        impactor_bond_energy: The PuffSat's bond energy charged per pulse.
+        max_slug_ratio: Cap on the per-pulse loading.
 
     Returns:
         The candidate deliveries.
     """
-    return _front(float(wave_speed.to_value(u.km / u.s)), plate_efficiency)
+    return _front(
+        float(wave_speed.to_value(u.km / u.s)),
+        plate_efficiency,
+        float(impactor_bond_energy.to_value(u.J / u.kg)),
+        max_slug_ratio,
+    )
 
 
 def optimal_delivery(

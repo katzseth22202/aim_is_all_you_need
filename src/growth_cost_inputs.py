@@ -28,6 +28,7 @@ from astropy import units as u
 from src.chamber_isp import HYDROGEN_5500K, PLUG_RATIO, ROD_MASS
 from src.growth_cost import CycleHardware, DeliveryOption, Departure, DesignInputs
 from src.growth_ledger import (
+    ADR_0033_PLATE,
     HYDROGEN_BOIL_OFF_PER_DAY,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
@@ -35,11 +36,11 @@ from src.growth_ledger import (
     RAPTOR3_MASS,
     CycleGrowth,
     MethaloxCycle,
+    PlateDesign,
     hydrogen_boil_off,
 )
 from src.harvest import chain_returns, delivery_front, harvest_wave_speed
 from src.seed_cost import (
-    SEED_PLATE_EFFICIENCY,
     Design,
     DesignChain,
     chains,
@@ -136,27 +137,35 @@ def _chamber_cycles(chain: DesignChain) -> Tuple[CycleHardware, ...]:
     return tuple(hardware)
 
 
-def _deliveries(chain: DesignChain) -> Tuple[Tuple[DeliveryOption, ...], ...]:
+def _deliveries(
+    chain: DesignChain, plate: PlateDesign
+) -> Tuple[Tuple[DeliveryOption, ...], ...]:
     return tuple(
         tuple(
             DeliveryOption(_kg(d.puffsats), _kg(d.cargo), _kg(d.slug))
-            for d in delivery_front(harvest_wave_speed(cycle), SEED_PLATE_EFFICIENCY)
+            for d in delivery_front(
+                harvest_wave_speed(cycle),
+                plate.efficiency,
+                plate.impactor_bond_energy,
+                plate.max_slug_ratio,
+            )
         )
         for cycle in chain.cycles
     )
 
 
-@lru_cache(maxsize=8)
-def design_inputs(design: Design) -> DesignInputs:
+@lru_cache(maxsize=32)
+def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> DesignInputs:
     """One design's chain, priced per seed of one launch unit (cached).
 
     Args:
         design: The departure design.
+        plate: The plate every growth unit and delivery flies (ADR 0041).
 
     Returns:
         The inputs.
     """
-    chain = design_chain(design)
+    chain = design_chain(design, plate)
     returns = chain_returns(chain)
     if design.pairing is None:
         departure = Departure.METHALOX
@@ -182,7 +191,7 @@ def design_inputs(design: Design) -> DesignInputs:
         times=returns.times,
         arrivals=returns.arrivals,
         harvest=returns.harvest,
-        deliveries=_deliveries(chain),
+        deliveries=_deliveries(chain, plate),
     )
 
 

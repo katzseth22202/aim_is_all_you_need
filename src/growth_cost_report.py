@@ -34,8 +34,10 @@ from src.growth_cost import (
     value_per_seed_dollar,
 )
 from src.growth_cost_inputs import design_inputs, seed_prices
+from src.growth_ledger import PLATE_DESIGNS
 from src.harvest import PLATE_PRICES, solve_rate
 from src.learning_curve import LearningCurve
+from src.lob_rise import RISE_SPEEDS, booster_growth
 from src.seed_cost import DESIGNS
 
 #: ADR 0040's headline: time at 10% a year (about a risky bond's yield) and a
@@ -393,6 +395,73 @@ def seed_routes(
     return tabulate(rows, headers)
 
 
+def climbing_lob(prices: PriceBook, rise_speed: float) -> PriceBook:
+    """The book with the lob charged for arriving at 400 km still climbing.
+
+    ADR 0037 prices a flight in proportion to the booster's size, so the lob's
+    price per kilogram lofted rises by :func:`src.lob_rise.booster_growth`.
+
+    Args:
+        prices: The book.
+        rise_speed: Climb rate at the intercept, m/s.
+
+    Returns:
+        The book with the dearer lob.
+    """
+    return replace(prices, lob=prices.lob * booster_growth(rise_speed))
+
+
+def plate_designs(prices: PriceBook = ESTIMATE) -> str:
+    """Every plate design behind the solved chambers and methalox (ADR 0041).
+
+    Each row's lob is charged for a 1.0-1.2 km/s climb at the intercept; the
+    steady $/kg at an apex lob (ADR 0037's) is given for comparison.
+
+    Args:
+        prices: The book; the Estimate by default.
+
+    Returns:
+        The table.
+    """
+    picked = [DESIGNS[0], DESIGNS[2], DESIGNS[4]]
+    books = [climbing_lob(prices, v) for v in RISE_SPEEDS]
+    rows = []
+    for plate in PLATE_DESIGNS:
+        for design in picked:
+            inputs = design_inputs(design, plate)
+            schedule = risked(inputs)
+            apex, _ = steady_state_cost(inputs, prices)
+            steady = [steady_state_cost(inputs, b)[0] for b in books]
+            rows.append(
+                [
+                    plate.label,
+                    inputs.label,
+                    f"{apex:.0f}",
+                    f"{steady[0]:.0f}-{steady[1]:.0f}",
+                    " | ".join(
+                        _break_evens(inputs, b, schedule, steady=False) for b in books
+                    ),
+                    " | ".join(_break_evens(inputs, b, schedule) for b in books),
+                    " / ".join(
+                        f"{value_per_seed_dollar(inputs, books[0], s, 500.0, schedule):.1f}"
+                        for s in seed_prices()
+                    ),
+                ]
+            )
+    return tabulate(
+        rows,
+        [
+            "Plate",
+            "Design",
+            "Steady, apex lob",
+            "Steady, climbing",
+            "BE liquid. (1.0 | 1.2 km/s)",
+            "BE steady (1.0 | 1.2 km/s)",
+            "Value @500 (1.0)",
+        ],
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the growth cost model's report.
 
@@ -401,7 +470,23 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="headline tables only")
+    parser.add_argument(
+        "--plates",
+        action="store_true",
+        help="the plate designs with the climbing lob (ADR 0041) only",
+    )
     args = parser.parse_args(argv)
+    if args.plates:
+        low, high = seed_prices()
+        growth = " / ".join(f"{booster_growth(v):.3f}" for v in RISE_SPEEDS)
+        print(
+            f"Plate designs (ADR 0041), Estimate book, 10% a year, 50% odds. Seed "
+            f"${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed. The lob "
+            f"climbs at {RISE_SPEEDS[0] / 1e3:g} | {RISE_SPEEDS[1] / 1e3:g} km/s at "
+            f"400 km: booster and lob price x{growth}."
+        )
+        print(plate_designs())
+        return
     designs = [design_inputs(d) for d in DESIGNS]
     low, high = seed_prices()
     print(

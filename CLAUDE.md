@@ -72,6 +72,8 @@ make dsm-bound      # free the split's correction burn in time and place (ADR 00
 make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
 make growth-cost    # every growth launch unit charged, stepped cost of capital (ADR 0037)
+make plate-designs  # the impact-sim's spray cup / plug through the growth ledger (ADR 0041)
+make plate-designs-cost # the same through the cost model, lob climbing at 400 km (ADR 0041)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
@@ -208,6 +210,11 @@ carbon_hydrogen_equilibrium.py ← leaf (Cantera + scipy): B', the carbon hot
                                 equilibrium; NASA Glenn data, ideal gas. Sets the
                                 hydrogen hot band's chemical loss (companion
                                 reply 2026-10-04, make carbon-equilibrium)
+
+lob_rise.py                  ← leaf (numpy + scipy): what a lob still climbing at
+                                1.0-1.2 km/s at the 400 km intercept costs the
+                                booster (7-11%), and the push's track against
+                                the stream it must follow (ADR 0041)
 
 learning_curve.py            ← leaf: Wright's law with a floor and an anchor,
                                 integrated at the unit midpoint (ADR 0037)
