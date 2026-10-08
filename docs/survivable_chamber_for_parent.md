@@ -132,3 +132,26 @@ labelled superseded. Rerunning them on the 800 t stack would only repeat the led
 The hydrogen chamber (S18). The AR 100 chemistry ceiling. A per-tonne chamber price. The
 plug priced as frozen methane: it is still at the foam's $5/kg, which is conservative. The
 plug's tankage, about 0.7 kg a pulse, which is negligible.
+
+## Addendum (parent S21): the rows above leave out the film
+
+Every table above flies `SPRAY_CUP`, which carries no film. The parent's tables fly
+`SPRAY_CUP_SHIELDED`, with 6 kg of film per pulse carried as launched mass (parent `353e1a1`).
+The "$120 for hydrogen" above therefore does not match the parent's printed $122. The module now
+flies the shielded cup, and `make survivable-chamber` reproduces the parent's hydrogen ($122,
+$192 / $377), methalox ($294, $776) and seed ($149-4110, $12-329) rows exactly. The methane rows
+with the film carried:
+
+| departure | doubling | 10-yr | steady $/kg, BE (per unit) | steady $/kg, BE (by mass) |
+|---|---|---|---|---|
+| **CH4 AR 300, 24 kg** | **2.78 yr** | **10.5x** | $138, $251 / $723 | **$162, $340 / $810** |
+| CH4 AR 300, 3.5 kg | 2.70 yr | 11.4x | $134, $239 / $673 | $156, $322 / $754 |
+| CH4 AR 100, 24 kg | 3.06 yr | 8.1x | $151, $293 / $901 | $173, $376 / $983 |
+| CH4 AR 100, 3.5 kg | 2.98 yr | 8.7x | $147, $279 / $844 | $168, $357 / $921 |
+
+AR 300 still beats AR 100 by 0.28 yr. Two 2.5 kg chambers cost 0.04 yr at AR 100 and 0.001 yr
+at AR 300. The parent prices the chamber by mass (decided 2026-10-08).
+
+One correction to "`tab:delivery_ledger` ... do[es] not change" above: its rows are the cost
+book's steady $/kg columns, and its "Departure hardware" line is the chamber that each reinvested
+growth unit expends. It changes with the chamber, and `tab:l1_comparison` with it.

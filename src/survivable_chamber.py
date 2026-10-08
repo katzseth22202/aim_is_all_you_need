@@ -11,9 +11,10 @@ is the one that reproduces the impact sim's 906 / 971 kN s per pulse at 75 km/s
 with the gate charged (:func:`src.chamber_isp.efficiency_for_impulse`): 0.488 at
 A/A* = 100 and 0.539 at 300, the latter the old solved 0.538.
 
-Everything flies behind the spray cup (ADR 0041/0042, film left to the cost
-book), on the 20-day orbit, with the integrated fixed-direction finite-burn
-loss charged and solved with the burn, as every chamber row since ADR 0032.
+Everything flies behind the vapor-shielded spray cup (ADR 0041/0042), its film
+carried as launched mass as the parent's tables carry it (ADR 0043), on the
+20-day orbit, with the integrated fixed-direction finite-burn loss charged and
+solved with the burn, as every chamber row since ADR 0032.
 The impact sim's +3.1-4.8% assumed thrust held along the velocity; that is the
 ``steered`` sensitivity here, which a head-on chamber cannot fly.
 
@@ -52,7 +53,7 @@ from src.growth_ledger import (
     DEPARTURE_ALTITUDE,
     LAUNCH_UNIT,
     SOLVED_EFFICIENCY,
-    SPRAY_CUP,
+    SPRAY_CUP_SHIELDED,
     CycleGrowth,
     PlateDesign,
     _orbit_loss,
@@ -85,6 +86,8 @@ AREA_RATIOS = (100, 300)
 CEILING_SHARES = (0.50, 0.70, 0.90, 1.00)
 #: Worker processes; each holds a few hundred MB.
 WORKERS = 4
+#: The plate every row flies behind: the parent's tables carry its film (S21).
+PLATE = SPRAY_CUP_SHIELDED
 
 
 def survivable_efficiency(area_ratio: int) -> float:
@@ -154,7 +157,7 @@ class Case:
     steered: bool = False
 
 
-def _fly(case: Case, plate: PlateDesign = SPRAY_CUP) -> List[CycleGrowth]:
+def _fly(case: Case, plate: PlateDesign = PLATE) -> List[CycleGrowth]:
     flown, _ = chains(DEFAULT_PARKING_DAYS)
     pairing = case.design.pairing
     assert pairing is not None and case.design.efficiency is not None
@@ -352,7 +355,7 @@ def cost_designs() -> List[Design]:
 def _priced(index: int) -> Tuple[DesignChain, DesignInputs]:
     """The chain and cost inputs of ``cost_designs()[index]`` (in a worker)."""
     design = cost_designs()[index]
-    return design_chain(design, SPRAY_CUP), design_inputs(design, SPRAY_CUP)
+    return design_chain(design, PLATE), design_inputs(design, PLATE)
 
 
 def _by_mass(prices: PriceBook, design: Design) -> PriceBook:
@@ -381,7 +384,7 @@ def cost_report() -> str:
     books = [climbing_lob(b, OPERATING_RISE_SPEED) for b in SCENARIOS]
     low, high = seed_prices()
     out = [
-        f"Spray cup, film in the book; lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
+        f"Spray cup, film carried as launched mass; lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
         f"(1.1 km/s climb, brake held back).  Seed ${low:.0f} / ${high:.0f} per kg; "
         "'a / b' is cheap / dear seed.  Hydrogen's wall is unverified (S18).",
         "Hardware per launch unit, cycle 0\n" + hardware(inputs),
@@ -430,7 +433,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parser.parse_args(argv)
     both = not (args.ledger or args.cost)
     print(
-        f"Survivable methane chamber (ADR 0044, parent S17) behind {SPRAY_CUP.label}, "
+        f"Survivable methane chamber (ADR 0044, parent S17) behind {PLATE.label}, "
         f"{LAUNCH_UNIT:g} unit, {DEFAULT_PARKING_DAYS:g}-day orbit, gate charged, "
         "fixed-direction loss integrated and solved with the burn.  "
         + ", ".join(

@@ -87,3 +87,27 @@ The book prices a methane chamber per unit, not per tonne. Priced by mass agains
   copy, and the ledger tells hydrogen from methane by identity.
 - Open: the hydrogen chamber's wall (S18, impact sim); a per-tonne chamber price; the plug's
   price as frozen methane; the A/A* = 100 chemistry ceiling.
+
+## Addendum, 2026-10-08: the rows carry the film (parent S21)
+
+The Results above fly `SPRAY_CUP`, whose film is priced in the book and never launched. The
+parent's tables fly `SPRAY_CUP_SHIELDED`, with 6 kg of film a pulse carried as launched mass
+(ADR 0043), so the parent's hydrogen row read $122 against the $120 above. The module now flies
+the shielded cup (`survivable_chamber.PLATE`). `make survivable-chamber` reproduces the parent's
+hydrogen ($122, $192 / $377), methalox ($294, $776) and seed ($149-4110, $12-329) rows exactly,
+and prints the rows below rather than the ones above, which stand as the record without the film.
+
+| departure | doubling | 10-yr | steady $/kg, BE (per unit) | steady $/kg, BE (by mass) |
+|---|---|---|---|---|
+| **AR 300, 24 kg** | **2.78 yr** | **10.5x** | $138, $251 / $723 | **$162, $340 / $810** |
+| AR 300, 3.5 kg | 2.70 yr | 11.4x | $134, $239 / $673 | $156, $322 / $754 |
+| AR 100, 24 kg | 3.06 yr | 8.1x | $151, $293 / $901 | $173, $376 / $983 |
+| AR 100, 3.5 kg | 2.98 yr | 8.7x | $147, $279 / $844 | $168, $357 / $921 |
+
+The conclusions hold. A/A* = 300 beats 100 by 0.28 yr at both pitch edges. Two 2.5 kg chambers
+cost 0.04 yr at AR 100 and 0.001 yr at AR 300. The parent prices the chamber by mass (decided
+2026-10-08), so the bold row is its headline.
+
+The handback's claim that `tab:delivery_ledger` and `tab:l1_comparison` do not change was wrong:
+the delivery ledger's rows are the cost book's steady $/kg, whose departure-hardware line is the
+chamber each reinvested growth unit expends.

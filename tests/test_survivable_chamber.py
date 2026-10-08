@@ -9,9 +9,10 @@ from astropy import units as u
 
 from src.chamber_isp import HYDROGEN_5500K, METHANE_7000K
 from src.growth_cost import ESTIMATE, Program, _fleet_lines
-from src.growth_ledger import METHANE_PITCH
+from src.growth_ledger import METHANE_PITCH, SPRAY_CUP_SHIELDED
 from src.seed_cost import DESIGNS, Design
 from src.survivable_chamber import (
+    PLATE,
     SURVIVABLE_PITCH_RANGE,
     ledger_cases,
     survivable_design,
@@ -55,3 +56,10 @@ def test_a_heavier_rod_carries_fewer_packages_per_kilogram() -> None:
     heavy = _fleet_lines(ESTIMATE, Program(), 0.0, 1000.0, 0.0, rod_mass=5.0)
     bodies = ESTIMATE.rod_body * 1000.0
     assert heavy["fleet"] - bodies < 0.6 * (light["fleet"] - bodies)
+
+
+def test_every_row_carries_the_film_the_parents_tables_carry() -> None:
+    # Parent S21: the S17 rows flew the film-free cup while the parent's
+    # tables fly the shielded one, so their hydrogen rows disagreed by $2/kg.
+    assert PLATE is SPRAY_CUP_SHIELDED
+    assert PLATE.carries_film
