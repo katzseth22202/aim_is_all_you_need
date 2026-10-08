@@ -25,14 +25,19 @@ from typing import Optional, Tuple
 import numpy as np
 from astropy import units as u
 
-from src.chamber_isp import HYDROGEN_5500K, PLUG_RATIO, ROD_MASS
-from src.growth_cost import CycleHardware, DeliveryOption, Departure, DesignInputs
+from src.chamber_isp import HYDROGEN_5500K
+from src.growth_cost import (
+    ROD_MASS,
+    CycleHardware,
+    DeliveryOption,
+    Departure,
+    DesignInputs,
+)
 from src.growth_ledger import (
     ADR_0033_PLATE,
     HYDROGEN_BOIL_OFF_PER_DAY,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
-    METHANE_PITCH,
     RAPTOR3_MASS,
     CycleGrowth,
     MethaloxCycle,
@@ -106,8 +111,10 @@ def _methalox_cycles(
 def _chamber_cycles(
     chain: DesignChain, plate: PlateDesign
 ) -> Tuple[CycleHardware, ...]:
-    hydrogen = chain.design.pairing is HYDROGEN_5500K
-    pitch_ratio = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
+    pairing = chain.design.pairing
+    assert pairing is not None
+    hydrogen = pairing is HYDROGEN_5500K
+    pitch_ratio = chain.design.pitch_ratio
     boil_off = (
         hydrogen_boil_off(chain.cycles, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
     )
@@ -123,7 +130,7 @@ def _chamber_cycles(
         stack = _kg(ledger.departing_stack)
         rods = departure.rod_mass_fraction * stack
         burned = (1.0 - departure.delivered_fraction) * stack - (
-            PLUG_RATIO + pitch_ratio
+            pairing.plug_ratio + pitch_ratio
         ) * rods
         onward = departure.delivered_net * stack
         puffsats_next, rods_next = consumption[(n + 1) % len(ledgers)]
@@ -140,7 +147,7 @@ def _chamber_cycles(
                 tanks=departure.tank_share * stack,
                 gas=burned / (1.0 - boil_off),
                 cryostats=_kg(ledger.cryostats),
-                plugs=PLUG_RATIO * rods,
+                plugs=pairing.plug_ratio * rods,
                 pitch=pitch_ratio * rods,
                 pulses=departure.pulses,
                 film=_film(ledger.push, plate),
@@ -207,6 +214,9 @@ def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> Design
         arrivals=returns.arrivals,
         harvest=returns.harvest,
         deliveries=_deliveries(chain, plate),
+        rod_mass=(
+            _kg(design.pairing.rod_mass) if design.pairing is not None else ROD_MASS
+        ),
     )
 
 

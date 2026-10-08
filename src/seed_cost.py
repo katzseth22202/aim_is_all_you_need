@@ -38,7 +38,6 @@ from src.astro_constants import LEO_ALTITUDE
 from src.chamber_isp import (
     HYDROGEN_5500K,
     METHANE_7000K,
-    ROD_MASS,
     ChamberPairing,
     absolute_efficiency,
 )
@@ -330,11 +329,25 @@ class Design:
         label: Short label.
         pairing: The chamber, or None for the methalox incumbent.
         efficiency: The chamber's absolute energy efficiency (None for methalox).
+        pitch_per_pulse: The wall pitch each pulse spends; None takes
+            :data:`src.growth_ledger.METHANE_PITCH` for methane, none for
+            hydrogen's bare copper.
+        chambers: Fly exactly this many chambers; None picks the best count.
     """
 
     label: str
     pairing: Optional[ChamberPairing]
     efficiency: Optional[float]
+    pitch_per_pulse: Optional[u.Quantity] = None
+    chambers: Optional[int] = None
+
+    @property
+    def pitch_ratio(self) -> float:
+        """The pitch per kilogram of rod, as the ledger takes it."""
+        if self.pairing is None or self.pairing is HYDROGEN_5500K:
+            return 0.0
+        pitch = METHANE_PITCH if self.pitch_per_pulse is None else self.pitch_per_pulse
+        return float((pitch / self.pairing.rod_mass).to_value(u.one))
 
 
 DESIGNS = (
@@ -447,14 +460,13 @@ def design_chain(
             tuple(ledgers),
         )
     hydrogen = design.pairing is HYDROGEN_5500K
-    pitch = 0.0 if hydrogen else float((METHANE_PITCH / ROD_MASS).to_value(u.one))
     assert design.efficiency is not None
     grown = chain_growth(
         flown,
         plate.efficiency,
         design.pairing,
         design.efficiency,
-        pitch,
+        design.pitch_ratio,
         max_slug_ratio=plate.max_slug_ratio,
         impactor_bond_energy=plate.impactor_bond_energy,
         film_per_impulse=plate.film_per_impulse,
@@ -462,6 +474,7 @@ def design_chain(
         boil_off=(
             hydrogen_boil_off(flown, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
         ),
+        chambers=design.chambers,
     )
     g0, c0 = grown[0], flown[0]
     rods = g0.departure.rod_mass_fraction * g0.departing_stack

@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -100,6 +100,14 @@ plate-film:  ## The spray cup's film carried as launched mass: ledger at each ba
 
 lob-brake:  ## The booster's brake and reserve at each climb rate, and the lob charge it sets (ADR 0043)
 	python -m src.lob_rise
+
+survivable-chamber: survivable-ledger survivable-cost  ## The survivable 5 kg methane chamber (parent S17): ledger, AR100/300, redundancy, cost book and seed (ADR 0044)
+
+survivable-ledger:  ## The survivable chamber through the growth ledger: both area ratios and pitch edges, redundancy, sensitivities (ADR 0044)
+	python -m src.survivable_chamber --ledger
+
+survivable-cost:  ## The survivable chamber through the cost book and tab:seed_amortization behind the spray cup (ADR 0044)
+	python -m src.survivable_chamber --cost
 
 plate-slug:  ## Water against argon on the plate, chemistry toll charged per pulse, behind each solved chamber
 	python -m src.growth_ledger --slugs

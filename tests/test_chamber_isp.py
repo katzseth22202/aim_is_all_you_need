@@ -17,12 +17,15 @@ from src.chamber_isp import (
     METHANE_7000K,
     PLUG_RATIO,
     ROD_MASS,
+    SURVIVABLE_IMPULSE,
     ChamberPairing,
     absolute_efficiency,
     chamber_departure_burn,
     effective_isp,
+    efficiency_for_impulse,
     momentum_debit_share,
     slug_ratio_at,
+    survivable_methane,
 )
 
 W_REF = 75.0 * u.km / u.s
@@ -219,4 +222,53 @@ def test_efficiency_is_quoted_as_a_share_of_that_ceiling(
     assert solved / pairing.chemistry_ceiling == pytest.approx(share, abs=1e-3)
     assert absolute_efficiency(pairing, 0.5) == pytest.approx(
         0.5 * pairing.chemistry_ceiling
+    )
+
+
+@pytest.mark.parametrize(
+    "area_ratio, impulse_kn_s, isp_s", [(100, 906.0, 788.0), (300, 971.0, 845.0)]
+)
+def test_the_survivable_chambers_eta_gives_the_impact_sims_pulse(
+    area_ratio: int, impulse_kn_s: float, isp_s: float
+) -> None:
+    """Parent S17: 906 / 971 kN s per 5 kg pulse is 788 / 845 s on the 117 kg
+    of charge and plug, and A/A* = 300 lands on the sphere's solved 0.538."""
+    pairing = survivable_methane(area_ratio)
+    eta = efficiency_for_impulse(SURVIVABLE_IMPULSE[area_ratio], pairing)
+    isp = effective_isp(
+        W_REF,
+        eta,
+        pairing.reference_slug_ratio,
+        plug_ratio=pairing.plug_ratio,
+        gate_thrust_cost=GATE_THRUST_COST,
+    )
+    carried = (pairing.reference_slug_ratio + pairing.plug_ratio) * pairing.rod_mass
+    assert carried.to_value(u.kg) == pytest.approx(117.0)
+    assert (isp * carried * 9.80665 * u.m / u.s**2).to_value(
+        u.kN * u.s
+    ) == pytest.approx(impulse_kn_s, rel=1e-9)
+    assert isp.to_value(u.s) == pytest.approx(isp_s, abs=2.0)
+    if area_ratio == 300:
+        assert eta == pytest.approx(0.538, abs=0.001)
+
+
+def test_a_split_survivable_chamber_shares_the_rod_wall_and_extension() -> None:
+    whole = survivable_methane(100)
+    half = survivable_methane(100, 49.8 * u.t, rods_split=2)
+    assert half.rod_mass == whole.rod_mass / 2
+    assert half.wall_mass == 24.9 * u.t
+    assert half.extension_mass == whole.extension_mass / 2
+    assert half.pulse_rate == whole.pulse_rate
+    assert (half.plug_ratio, half.reference_slug_ratio) == (
+        whole.plug_ratio,
+        whole.reference_slug_ratio,
+    )
+
+
+def test_the_slug_ratio_holds_each_pairings_own_plug() -> None:
+    """k(w) keeps k + 1 + P proportional to w^2 with the pairing's own P."""
+    pairing = survivable_methane(300)
+    k = slug_ratio_at(2.0 * W_REF, pairing)
+    assert k + 1.0 + pairing.plug_ratio == pytest.approx(
+        4.0 * (pairing.reference_slug_ratio + 1.0 + pairing.plug_ratio)
     )

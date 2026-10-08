@@ -37,7 +37,8 @@ reference value across speeds, which is an assumption: the companion solved it
 only at 75 km/s.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -52,6 +53,8 @@ GATE_THRUST_COST = 0.01
 BURN_STEPS = 401
 #: Rod mass the per-pulse figures are quoted against.
 ROD_MASS = 2.5 * u.kg
+#: Pulse rate of one 20 m^3 chamber (``fig:methane_wall_detail``: a 250 ms cycle).
+PULSE_RATE = 4.0 / u.s
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,12 @@ class ChamberPairing:
             could turn into directed exhaust: one minus the energy held in
             bonds at peak that the A/A* = 300 nozzle never returns, even in
             equilibrium.  Efficiencies are quoted as a share of it.
+        rod_mass: The rod one pulse fires; the 2.5 kg rod by default.
+        plug_ratio: Plug mass per kilogram of rod, ``P``.
+        pulse_rate: Pulses per second one chamber fires.
+        extension_mass: The nozzle extension; None takes
+            :data:`src.chamber_departure.NOZZLE_EXTENSION_MASS`, the RL10B-2's
+            scaled to the 20 m^3 sphere's 8.7 m exit.
     """
 
     name: str
@@ -79,6 +88,10 @@ class ChamberPairing:
     wall_mass: u.Quantity
     tank_fraction: float
     chemistry_ceiling: float
+    rod_mass: u.Quantity = field(default_factory=lambda: ROD_MASS)
+    plug_ratio: float = PLUG_RATIO
+    pulse_rate: u.Quantity = field(default_factory=lambda: PULSE_RATE)
+    extension_mass: Optional[u.Quantity] = None
 
 
 #: Closing speed ``tab:wall_pairings`` sizes the charges at: the 2.5 kg rod's.
@@ -101,6 +114,87 @@ HYDROGEN_5500K = ChamberPairing(
 METHANE_7000K = ChamberPairing(
     "CH4 7000 K", 7000.0 * u.K, 27.5, 19.0 * u.t, 0.034, 1.0 - 0.69 * (1.0 - 0.52)
 )
+
+#: The survivable methane chamber (parent S17, impact sim @ 69d1f40, its
+#: ``walled_nozzle_chamber_blast.md`` section 3h, decided 2026-10-08).  The 20 m^3
+#: sphere's bonded overwrap delaminates under the stopped rod's line blast, so
+#: the chamber is bulged to 212 m^3 at ~94 bar and wrapped dry: 48.2 t of
+#: Kevlar 49 over a 10 mm Cr-Mo shell.  It fires a 5 kg rod at 2 Hz (4 Hz cannot
+#: refill) behind a 20 kg frozen-methane plug, ``P`` = 4.  The charge and plug
+#: together are ~117 kg per rod, so ``k + P`` = 23.4 at 75 km/s: taken as given.
+#: (Holding the old chamber's energy per kilogram would need 29.3.)
+SURVIVABLE_ROD_MASS = 5.0 * u.kg
+SURVIVABLE_PULSE_RATE = 2.0 / u.s
+SURVIVABLE_PLUG_RATIO = 4.0
+SURVIVABLE_CARRIED_PER_ROD = 117.0 / 5.0
+SURVIVABLE_WALL_MASS = 48.2 * u.t
+#: The impact sim's fallback wall: a maraging-steel band.
+SURVIVABLE_FALLBACK_WALL_MASS = 68.8 * u.t
+#: The impact sim's net impulse per pulse, head-on debit taken, gate charged.
+SURVIVABLE_IMPULSE = {100: 906.0 * u.kN * u.s, 300: 971.0 * u.kN * u.s}
+#: Its nozzle extensions: the 2.19 t scaled by exit area, 13.0 m and 22.5 m exits.
+SURVIVABLE_EXTENSION_MASS = {100: 4.9 * u.t, 300: 14.7 * u.t}
+
+
+def survivable_methane(
+    area_ratio: int,
+    wall_mass: u.Quantity = SURVIVABLE_WALL_MASS,
+    rods_split: int = 1,
+) -> ChamberPairing:
+    """The survivable methane chamber at one nozzle area ratio.
+
+    Args:
+        area_ratio: 100 or 300.
+        wall_mass: The wall of one 5 kg chamber, or of all ``rods_split``.
+        rods_split: Split the 5 kg rod's flow across this many smaller
+            chambers, each firing ``5 / rods_split`` kg at 2 Hz with the same
+            ``k`` and ``P``, sharing ``wall_mass`` evenly, and each with an
+            extension of its share of the exit area (parent S17 item 3).
+
+    Returns:
+        The pairing; its ``eta`` is :func:`efficiency_for_impulse` at
+        :data:`SURVIVABLE_IMPULSE`.
+    """
+    share = 1.0 / rods_split
+    return ChamberPairing(
+        f"CH4 survivable AR{area_ratio}"
+        + (f" x{rods_split}" if rods_split > 1 else ""),
+        7000.0 * u.K,
+        SURVIVABLE_CARRIED_PER_ROD - SURVIVABLE_PLUG_RATIO,
+        (wall_mass * share).to(u.t),
+        METHANE_7000K.tank_fraction,
+        METHANE_7000K.chemistry_ceiling,
+        rod_mass=SURVIVABLE_ROD_MASS * share,
+        plug_ratio=SURVIVABLE_PLUG_RATIO,
+        pulse_rate=SURVIVABLE_PULSE_RATE,
+        extension_mass=(SURVIVABLE_EXTENSION_MASS[area_ratio] * share).to(u.t),
+    )
+
+
+def efficiency_for_impulse(
+    impulse_per_pulse: u.Quantity,
+    pairing: ChamberPairing,
+    closing_speed: u.Quantity = REFERENCE_CLOSING_SPEED,
+    gate_thrust_cost: float = GATE_THRUST_COST,
+) -> float:
+    """The ``eta`` that gives one pulse a net impulse, ``eq:eta_isp`` inverted.
+
+    Without pitch, a pulse's net impulse per kilogram of rod is
+    ``w ((1 - gate) sqrt(eta (k + 1 + P)) - 1)``.
+
+    Args:
+        impulse_per_pulse: Net impulse of one pulse, head-on debit taken.
+        pairing: The chamber, at its reference charge.
+        closing_speed: The closing speed the impulse was quoted at.
+        gate_thrust_cost: Share of exhaust momentum lost at the port.
+
+    Returns:
+        The energy efficiency ``eta``.
+    """
+    w = float(closing_speed.to_value(u.m / u.s))
+    per_rod = float((impulse_per_pulse / pairing.rod_mass).to_value(u.m / u.s))
+    root = (per_rod / w + 1.0) / (1.0 - gate_thrust_cost)
+    return float(root**2 / (pairing.reference_slug_ratio + 1.0 + pairing.plug_ratio))
 
 
 def absolute_efficiency(pairing: ChamberPairing, share_of_ceiling: float) -> float:
@@ -140,8 +234,9 @@ def slug_ratio_at(closing_speed: u.Quantity, pairing: ChamberPairing) -> float:
             temperature at this speed, so no charge would do.
     """
     ratio = float((closing_speed / REFERENCE_CLOSING_SPEED).to_value(u.one))
-    exhausted = (pairing.reference_slug_ratio + 1.0 + PLUG_RATIO) * ratio * ratio
-    slug_ratio = exhausted - 1.0 - PLUG_RATIO
+    plug = pairing.plug_ratio
+    exhausted = (pairing.reference_slug_ratio + 1.0 + plug) * ratio * ratio
+    slug_ratio = exhausted - 1.0 - plug
     if slug_ratio < 0.0:
         raise ValueError(
             f"{pairing.name} cannot reach {pairing.temperature} at {closing_speed}: "
@@ -200,7 +295,7 @@ def effective_isp(
             ``GATE_THRUST_COST`` for the gated chamber, zero for the raw
             ``tab:nozzle_area_ratio`` figures.
         pitch_ratio: Wall lining lost per kilogram of rod (pitch per pulse
-            over ``ROD_MASS``); zero for hydrogen's bare copper.
+            over the rod); zero for hydrogen's bare copper.
 
     Returns:
         Effective specific impulse (astropy Quantity, s).
@@ -236,7 +331,8 @@ class ChamberBurn:
     Attributes:
         delivered_fraction: Mass after the burn over mass before it.
         rod_mass_fraction: Rod mass the departure wave must deliver, per
-            kilogram of craft at ignition.  Divide by ``ROD_MASS`` for pulses.
+            kilogram of craft at ignition.  Divide by the pairing's
+            ``rod_mass`` for pulses.
     """
 
     delivered_fraction: float
@@ -289,11 +385,12 @@ def chamber_departure_burn(
     # that can be too slow to reach the chamber temperature.
     slug_ratio_at(float(closing[0]) * u.km / u.s, pairing)
     reference = float(REFERENCE_CLOSING_SPEED.to_value(u.km / u.s))
-    slug_ratios = (pairing.reference_slug_ratio + 1.0 + PLUG_RATIO) * (
+    plug = pairing.plug_ratio
+    slug_ratios = (pairing.reference_slug_ratio + 1.0 + plug) * (
         closing / reference
-    ) ** 2 - (1.0 + PLUG_RATIO)
+    ) ** 2 - (1.0 + plug)
     exhaust = _effective_exhaust(
-        closing, efficiency, slug_ratios, PLUG_RATIO, gate_thrust_cost, pitch_ratio
+        closing, efficiency, slug_ratios, plug, gate_thrust_cost, pitch_ratio
     )
     steps = np.diff(speeds)
     integrand = 1.0 / exhaust
@@ -301,7 +398,7 @@ def chamber_departure_burn(
         ([0.0], np.cumsum(0.5 * (integrand[:-1] + integrand[1:]) * steps))
     )
     # Each kilogram of propellant spent is (k + P + pitch) kilograms per rod.
-    rod_rate = np.exp(-log_mass) * integrand / (slug_ratios + PLUG_RATIO + pitch_ratio)
+    rod_rate = np.exp(-log_mass) * integrand / (slug_ratios + plug + pitch_ratio)
     rods = float(np.sum(0.5 * (rod_rate[:-1] + rod_rate[1:]) * steps))
     return ChamberBurn(
         delivered_fraction=float(np.exp(-log_mass[-1])), rod_mass_fraction=rods

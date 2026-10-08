@@ -79,6 +79,7 @@ make plate-cost     # whole cost report behind the spray cup; plug and ADR 0033 
 make plate-seed     # seed amortization, L1 deliveries, grow-or-harvest behind the spray cup (ADR 0042)
 make plate-film     # the spray cup's film carried as launched mass, ledger and cost headline (ADR 0043)
 make lob-brake      # the booster's brake at each climb rate and the lob charge it sets (ADR 0043)
+make survivable-chamber # the 5 kg bulged methane chamber: ledger, AR100/300, redundancy, cost, seed (ADR 0044)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
@@ -212,6 +213,13 @@ harvest.py                   ← seed_cost + growth_ledger + water_plate: the se
                                 valued as cargo at L1, k optimised for dollars
                                 under the k <= 10 cap; liquidation, steady state,
                                 IRR and break-even price (ADR 0036)
+
+survivable_chamber.py        ← growth_ledger + growth_cost_report + seed_cost: the
+                                parent's S17. The bulged 5 kg methane chamber
+                                (chamber_isp.survivable_methane: 2 Hz, P = 4, 48.2 t
+                                wall, AR 100/300 extension) through the ledger, cost
+                                book and seed, in worker processes passed by index
+                                (pickled pairings break `is HYDROGEN_5500K`) (ADR 0044)
 
 carbon_hydrogen_equilibrium.py ← leaf (Cantera + scipy): B', the carbon hot
                                 hydrogen carries off a graphite wall at

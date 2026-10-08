@@ -131,6 +131,7 @@ class DesignInputs:
         start_years: When the chain's first cycle departs, in years from the
             seed's purchase: zero, unless the seed flew a slower route
             (:func:`delayed`).
+        rod_mass: The departure rod, kg; three packages ride each one.
     """
 
     label: str
@@ -144,6 +145,7 @@ class DesignInputs:
     harvest: int
     deliveries: Tuple[Tuple[DeliveryOption, ...], ...]
     start_years: float = 0.0
+    rod_mass: float = ROD_MASS
 
     @property
     def seed(self) -> float:
@@ -460,13 +462,14 @@ def _fleet_lines(
     puffsats: float,
     rods: float,
     elapsed: float,
+    rod_mass: float = ROD_MASS,
 ) -> Dict[str, float]:
     """Build ``puffsats`` and ``rods`` new, ``elapsed`` years after the proof."""
     if prices.fleet_flat is not None:
         return {"fleet": prices.fleet_flat * (puffsats + rods)}
     count = (
         puffsats * PACKAGES_PER_PUFFSAT / PUFFSAT_MASS
-        + rods * PACKAGES_PER_ROD / ROD_MASS
+        + rods * PACKAGES_PER_ROD / rod_mass
     )
     if isinstance(prices.package, HalvingPrice):
         packages = prices.package.unit(elapsed) * count
@@ -521,6 +524,7 @@ def _grow(
             cycle.onward_puffsats * units,
             cycle.onward_rods * units,
             years - inputs.proof_years,
+            inputs.rod_mass,
         )
     )
     return _tally(tally, lines)
@@ -593,7 +597,12 @@ def run_program(
     built = 0.0
     if prices.charge_growth:
         lines = _fleet_lines(
-            prices, program, inputs.seed_puffsats, inputs.seed_rods, -inputs.proof_years
+            prices,
+            program,
+            inputs.seed_puffsats,
+            inputs.seed_rods,
+            -inputs.proof_years,
+            inputs.rod_mass,
         )
         built = sum(lines.values())
     program.flows.append((0.0, -(seed_price * inputs.seed + built)))

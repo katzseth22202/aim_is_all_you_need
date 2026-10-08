@@ -30,7 +30,6 @@ from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_5500K,
     METHANE_7000K,
-    PLUG_RATIO,
     ROD_MASS,
     ChamberPairing,
     absolute_efficiency,
@@ -285,6 +284,7 @@ def price_cycle_growth(
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
     film_per_impulse: u.Quantity = NO_FILM,
+    chambers: Optional[int] = None,
 ) -> CycleGrowth:
     """Carry one launch unit through a flown cycle at a given water schedule.
 
@@ -306,6 +306,7 @@ def price_cycle_growth(
         boil_off: Share of the launched gas lost over the parking-orbit hold.
         film_per_impulse: Plate film burned per unit of push impulse, carried
             as launched mass (ADR 0043); none by default.
+        chambers: Fly exactly this many chambers; None picks the best count.
 
     Returns:
         The cycle's ledger.
@@ -338,6 +339,7 @@ def price_cycle_growth(
             gate_thrust_cost=gate_thrust_cost,
             pitch_ratio=pitch_ratio,
             loss_model=model,
+            chambers=chambers,
         )
 
     # The gas launched is what the burn spends over (1 - boil-off), and its
@@ -345,7 +347,8 @@ def price_cycle_growth(
     # self-consistently with the burn it has to fly.
     def launched_gas(stack: u.Quantity, departure: DepartureLedger) -> u.Quantity:
         spent = 1.0 - departure.delivered_fraction
-        burned = spent - (PLUG_RATIO + pitch_ratio) * departure.rod_mass_fraction
+        plug = pairing.plug_ratio
+        burned = spent - (plug + pitch_ratio) * departure.rod_mass_fraction
         return (burned * stack / (1.0 - boil_off)).to(u.t)
 
     stack = available
@@ -423,6 +426,7 @@ def best_cycle_growth(
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
     film_per_impulse: u.Quantity = NO_FILM,
+    chambers: Optional[int] = None,
 ) -> CycleGrowth:
     """Carry the launch unit through a cycle on the water schedule that grows it most.
 
@@ -446,6 +450,7 @@ def best_cycle_growth(
         cryostat_fraction: As in :func:`price_cycle_growth`.
         boil_off: As in :func:`price_cycle_growth`.
         film_per_impulse: As in :func:`price_cycle_growth`.
+        chambers: As in :func:`price_cycle_growth`.
 
     Returns:
         The cycle's ledger at the best schedule.
@@ -467,6 +472,7 @@ def best_cycle_growth(
             slug=slug,
             impactor_bond_energy=impactor_bond_energy,
             film_per_impulse=film_per_impulse,
+            chambers=chambers,
         )
 
     return _best_over_price(fly)
@@ -528,6 +534,7 @@ def chain_growth(
     cryostat_fraction: float = 0.0,
     boil_off: float = 0.0,
     film_per_impulse: u.Quantity = NO_FILM,
+    chambers: Optional[int] = None,
 ) -> List[CycleGrowth]:
     """Carry the launch unit through every flown cycle, each on its best schedule.
 
@@ -545,6 +552,7 @@ def chain_growth(
         cryostat_fraction: As in :func:`price_cycle_growth`.
         boil_off: As in :func:`price_cycle_growth`.
         film_per_impulse: As in :func:`price_cycle_growth`.
+        chambers: As in :func:`price_cycle_growth`.
 
     Returns:
         One ledger per cycle, in order.
@@ -563,6 +571,7 @@ def chain_growth(
             slug=slug,
             impactor_bond_energy=impactor_bond_energy,
             film_per_impulse=film_per_impulse,
+            chambers=chambers,
         )
         for cycle in cycles
     ]
@@ -879,9 +888,9 @@ METHANE_PITCH_RANGE = (1.4 * u.kg, 5.6 * u.kg)
 METHANE_PITCH = METHANE_PITCH_RANGE[1]
 
 
-def pitch_ratio(pitch: u.Quantity) -> float:
+def pitch_ratio(pitch: u.Quantity, rod_mass: u.Quantity = ROD_MASS) -> float:
     """A pitch per pulse as a share of the rod, as :func:`chain_growth` takes it."""
-    return float((pitch / ROD_MASS).to_value(u.one))
+    return float((pitch / rod_mass).to_value(u.one))
 
 
 def _mean(values: Sequence[float]) -> float:

@@ -6,7 +6,9 @@ import pytest
 from astropy import units as u
 
 from src.chamber_departure import (
+    NOZZLE_EXTENSION_MASS,
     best_departure,
+    chamber_unit_mass,
     doubling_time,
     growth_per_cycle,
     price_chain_departures,
@@ -20,6 +22,7 @@ from src.chamber_isp import (
     ROD_MASS,
     ChamberPairing,
     chamber_departure_burn,
+    survivable_methane,
 )
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.two_wave_growth import TwoWaveCycle, adaptive_two_wave_cycles
@@ -192,3 +195,26 @@ def test_the_integrated_loss_still_leaves_a_best_chamber_count() -> None:
                 stack, V_PERI, BURN, WAVE, METHANE_7000K, 0.7, chambers=neighbour
             )
             assert other.delivered_net < best.delivered_net
+
+
+def test_a_fixed_chamber_count_is_flown_as_given() -> None:
+    stack = 600.0 * u.t
+    forced = best_departure(stack, V_PERI, BURN, WAVE, METHANE_7000K, 0.5, chambers=3)
+    assert forced.chambers == 3
+    assert forced == price_departure(
+        stack, V_PERI, BURN, WAVE, METHANE_7000K, 0.5, chambers=3
+    )
+
+
+def test_the_pairing_sets_the_rod_rate_and_extension() -> None:
+    """The survivable chamber's 5 kg rod at 2 Hz and its own extension."""
+    pairing = survivable_methane(100)
+    assert chamber_unit_mass(pairing).to_value(u.t) == pytest.approx(53.1)
+    assert chamber_unit_mass(METHANE_7000K).to_value(u.t) == pytest.approx(
+        (METHANE_7000K.wall_mass + NOZZLE_EXTENSION_MASS).to_value(u.t)
+    )
+    stack = 600.0 * u.t
+    dep = price_departure(stack, V_PERI, BURN, WAVE, pairing, 0.488, chambers=1)
+    rods = dep.rod_mass_fraction * stack
+    assert dep.pulses == pytest.approx((rods / (5.0 * u.kg)).to_value(u.one))
+    assert dep.burn_time.to_value(u.s) == pytest.approx(dep.pulses / 2.0)

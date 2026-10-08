@@ -18,7 +18,7 @@ chamber back for free.
 The departure wave arrives along one fixed line, so the chamber cannot steer
 the burn along the velocity as it turns.  It pays the fixed-direction loss of
 :mod:`src.finite_burn_loss`, integrated for the cycle's own burn and burn time.
-The burn time is the pulse count over the chambers' combined 4 Hz, and the loss
+The burn time is the pulse count over the chambers' combined pulse rate, and the loss
 adds to the burn, which adds pulses, so the priced burn is solved as a fixed
 point.  The parent instead scales one figure, 27 m/s over 320 s, as the burn
 time squared (:func:`square_law_loss`, kept for comparison).  That law holds to
@@ -38,7 +38,7 @@ from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_5500K,
     METHANE_7000K,
-    PLUG_RATIO,
+    PULSE_RATE,
     ROD_MASS,
     ChamberBurn,
     ChamberPairing,
@@ -49,8 +49,6 @@ from src.finite_burn_loss import fixed_direction_loss
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.two_wave_growth import TwoWaveCycle, adaptive_two_wave_cycles
 
-#: Pulse rate of one chamber (``fig:methane_wall_detail``: a 250 ms cycle).
-PULSE_RATE = 4.0 / u.s
 #: The parent's one fixed-direction figure, and the burn length it was
 #: integrated for (``sec:jovian_meeting_altitudes``), for :func:`square_law_loss`.
 FIXED_DIRECTION_LOSS = 27.0 * u.m / u.s
@@ -109,6 +107,21 @@ class DepartureLedger:
     chambers: int
 
 
+def chamber_unit_mass(pairing: ChamberPairing) -> u.Quantity:
+    """One chamber's wall plus its nozzle extension.
+
+    Args:
+        pairing: The chamber.
+
+    Returns:
+        The mass (t).
+    """
+    extension = pairing.extension_mass
+    if extension is None:
+        extension = NOZZLE_EXTENSION_MASS
+    return (pairing.wall_mass + extension).to(u.t)
+
+
 def square_law_loss(burn: u.Quantity, burn_time: u.Quantity) -> u.Quantity:
     """The parent's fixed-direction loss, scaled as the burn time squared.
 
@@ -158,8 +171,8 @@ def price_departure(
             chambers are far too few for the stack.
         ValueError: If the burn runs past what the loss model covers.
     """
-    rods_per_stack = float((stack_mass / ROD_MASS).to_value(u.one))
-    rate = float((chambers * PULSE_RATE).to_value(1 / u.s))
+    rods_per_stack = float((stack_mass / pairing.rod_mass).to_value(u.one))
+    rate = float((chambers * pairing.pulse_rate).to_value(1 / u.s))
 
     def fly(loss: u.Quantity) -> ChamberBurn:
         return chamber_departure_burn(
@@ -188,9 +201,9 @@ def price_departure(
     result = fly(loss)
     pulses = result.rod_mass_fraction * rods_per_stack
     spent = 1.0 - result.delivered_fraction
-    gas = spent - (PLUG_RATIO + pitch_ratio) * result.rod_mass_fraction
+    gas = spent - (pairing.plug_ratio + pitch_ratio) * result.rod_mass_fraction
     tank_share = pairing.tank_fraction * gas
-    unit = (pairing.wall_mass + NOZZLE_EXTENSION_MASS).to(u.t)
+    unit = chamber_unit_mass(pairing)
     chamber_share = float((chambers * unit / stack_mass).to_value(u.one))
     return DepartureLedger(
         delivered_fraction=result.delivered_fraction,
@@ -216,6 +229,7 @@ def best_departure(
     gate_thrust_cost: float = 0.0,
     pitch_ratio: float = 0.0,
     loss_model: LossModel = fixed_direction_loss,
+    chambers: Optional[int] = None,
 ) -> DepartureLedger:
     """Price the departure at the chamber count that delivers the most stack.
 
@@ -234,6 +248,7 @@ def best_departure(
         gate_thrust_cost: As in :func:`src.chamber_isp.effective_isp`.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
         loss_model: As in :func:`price_departure`.
+        chambers: Fly exactly this many chambers instead of searching.
 
     Returns:
         The ledger at the best chamber count.
@@ -241,9 +256,22 @@ def best_departure(
     Raises:
         RuntimeError: If no count up to the search ceiling converges.
     """
+    if chambers is not None:
+        return price_departure(
+            stack_mass,
+            start_speed,
+            burn,
+            impactor_speed,
+            pairing,
+            efficiency,
+            chambers=chambers,
+            gate_thrust_cost=gate_thrust_cost,
+            pitch_ratio=pitch_ratio,
+            loss_model=loss_model,
+        )
     best = None
     falls = 0
-    for chambers in range(1, _MAX_CHAMBERS + 1):
+    for count in range(1, _MAX_CHAMBERS + 1):
         try:
             ledger = price_departure(
                 stack_mass,
@@ -252,7 +280,7 @@ def best_departure(
                 impactor_speed,
                 pairing,
                 efficiency,
-                chambers=chambers,
+                chambers=count,
                 gate_thrust_cost=gate_thrust_cost,
                 pitch_ratio=pitch_ratio,
                 loss_model=loss_model,
