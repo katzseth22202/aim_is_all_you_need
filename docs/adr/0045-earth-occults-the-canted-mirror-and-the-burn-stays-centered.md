@@ -223,6 +223,29 @@ delivered mass falls 6.4% relatively, from 46.86% to 43.86%.  The front-side res
 delivers only 0.87% more than the 2,500 s visible-side alternative, so the reversal
 is real but small on this model.
 
+Doubling duration again to **5,000 seconds** remains feasible rather than hitting a
+sharp lower-thrust limit.  The generic short-burn optimizer seed crosses a
+zero-angular-momentum trial route at this duration, so continue numerically from
+the verified 2,500-second solution; this changes only the initial guess, not the
+objective or constraints.  Both mirror families then converge on the exact 3S
+vector:
+
+| miss-safe duration | winning mirror | parking periapsis | burn before/after | `k` | H2 propellant / delivered | external impactor / H2 | total / impulse delta-v | finite penalty |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1,200 s | visible side | 2,670 km | 1,200 / 0 s | 34.62-40.74 | 53.14% / 46.86% | 2.65% | 5.798 / 5.576 km/s | 222 m/s |
+| 2,500 s | front side | 5,566 km | 0 / 2,500 s | 31.34-37.26 | 56.14% / 43.86% | 2.92% | 6.526 / 6.068 km/s | 458 m/s |
+| 5,000 s | front side | **6,905 km** | 0 / 5,000 s | 30.54-36.70 | **58.84% / 41.16%** | **2.975%** | **7.004 / 6.255 km/s** | **748 m/s** |
+
+The 5,000-second front-side solution uses external impactor mass equal to 2.975%
+of onboard hydrogen (one impactor kilogram per 33.62 kg H2), or 1.750% of ignition
+mass.  Relative to 2,500 seconds, integrated delta-v rises by **0.477 km/s**:
+0.187 km/s is the higher-periapsis impulsive requirement and 0.290 km/s is added
+finite-burn penalty.  Hydrogen rises 2.70 percentage points and delivered mass
+falls 6.16% relatively, from 43.86% to 41.16%.  The visible-side alternative at
+9,321 km delivers only 39.45%, so the front-side choice is now 4.34% better.  Every
+miss still retains exactly the 600 km floor.  Lower thrust therefore still works
+at 5,000 seconds, but the penalty is material and smoothly worsening.
+
 ### A high-thrust overtake-only plate still cannot make the turn
 
 A pusher plate can plausibly thrust much harder than the thermal chamber, so test

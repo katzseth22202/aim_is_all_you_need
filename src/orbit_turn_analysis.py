@@ -1111,6 +1111,7 @@ def uncanted_thermal_burn(
     temperature: u.Quantity = UNCANTED_CHAMBER_TEMPERATURE,
     exhaust_velocity_efficiency: float = UNCANTED_EXHAUST_VELOCITY_EFFICIENCY,
     missed_periapsis_floor: u.Quantity | None = None,
+    initial_guess: UncantedThermalBurn | None = None,
 ) -> UncantedThermalBurn:
     """Optimize a finite-duration axial-nozzle burn onto the exact 3S asymptote.
 
@@ -1129,6 +1130,9 @@ def uncanted_thermal_burn(
         missed_periapsis_floor: If set, every unconsumed projectile must retain
             at least this eventual Earth-periapsis altitude.  The optimizer may
             raise the parking periapsis to satisfy it.
+        initial_guess: A solved shorter burn used only to seed the numerical
+            optimizer.  If omitted above 2,500 seconds, the matching 2,500-second
+            solution is generated automatically as a continuation seed.
 
     Returns:
         Optimized burn, including closure, loading and clearance diagnostics.
@@ -1153,6 +1157,16 @@ def uncanted_thermal_burn(
     hot_energy = float(hot_energy_quantity.to_value(u.km**2 / u.s**2))
     exhaust_speed = exhaust_velocity_efficiency * float(np.sqrt(2.0 * hot_energy))
     variable_altitude = front_side or missed_periapsis_floor is not None
+    if initial_guess is None and duration > 2500.0:
+        initial_guess = uncanted_thermal_burn(
+            front_side,
+            burn_time=2500.0 * u.s,
+            temperature=temperature,
+            exhaust_velocity_efficiency=exhaust_velocity_efficiency,
+            missed_periapsis_floor=missed_periapsis_floor,
+        )
+    if initial_guess is not None and initial_guess.front_side != front_side:
+        raise ValueError("initial_guess must use the same mirror")
     seed_altitude = (
         5000.0 if variable_altitude else float(DEPARTURE_ALTITUDE.to_value(u.km))
     )
@@ -1166,6 +1180,25 @@ def uncanted_thermal_burn(
     if variable_altitude:
         parameters.append(seed_altitude / 10000.0)
         bounds.append((0.06, 2.0))
+    if initial_guess is not None:
+        guess_duration = float(
+            (
+                initial_guess.seconds_before_reference_periapsis
+                + initial_guess.seconds_after_reference_periapsis
+            ).to_value(u.s)
+        )
+        parameters[:3] = [
+            float(initial_guess.periapsis_position_angle.to_value(u.rad)),
+            float(
+                initial_guess.seconds_before_reference_periapsis.to_value(u.s)
+                / guess_duration
+            ),
+            initial_guess.hydrogen_spent_fraction,
+        ]
+        if variable_altitude:
+            parameters[3] = float(
+                initial_guess.reference_periapsis_altitude.to_value(u.km) / 10000.0
+            )
     initial = np.asarray(parameters, dtype=np.float64)
     cache: dict[Tuple[float, ...], _UncantedEvaluation] = {}
 
@@ -1711,11 +1744,24 @@ def _print_report() -> None:
         print_thermal(label, thermal)
 
     print("\n  low-thrust sensitivity: 2,500 s with the 600 km missed-shot floor")
+    long_safe_results: dict[bool, UncantedThermalBurn] = {}
     for front_side in (False, True):
         thermal = uncanted_thermal_burn(
             front_side,
             burn_time=2500.0 * u.s,
             missed_periapsis_floor=600.0 * u.km,
+        )
+        long_safe_results[front_side] = thermal
+        label = "front-side safe" if front_side else "visible-side safe"
+        print_thermal(label, thermal)
+
+    print("\n  very-low-thrust sensitivity: 5,000 s with the 600 km missed-shot floor")
+    for front_side in (False, True):
+        thermal = uncanted_thermal_burn(
+            front_side,
+            burn_time=5000.0 * u.s,
+            missed_periapsis_floor=600.0 * u.km,
+            initial_guess=long_safe_results[front_side],
         )
         label = "front-side safe" if front_side else "visible-side safe"
         print_thermal(label, thermal)
