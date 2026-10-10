@@ -728,7 +728,7 @@ def uncanted_thermal_burn(
     exhaust_velocity_efficiency: float = UNCANTED_EXHAUST_VELOCITY_EFFICIENCY,
     missed_periapsis_floor: u.Quantity | None = None,
 ) -> UncantedThermalBurn:
-    """Optimize a 20-minute axial-nozzle burn onto the exact 3S asymptote.
+    """Optimize a finite-duration axial-nozzle burn onto the exact 3S asymptote.
 
     Hydrogen flow is constant, the projectile is externally supplied, and the
     hydrogen/projectile loading changes pulse by pulse to hold ``temperature``.
@@ -1257,11 +1257,12 @@ def _print_report() -> None:
             f"{thermal.off_head_on_maximum.to_value(u.deg):.2f} deg"
         )
         print(
-            "    H2 propellant / delivered / m0/mf / external impactor: "
+            "    H2 propellant / delivered / m0/mf / external impactor / impactor:H2: "
             f"{100.0 * thermal.hydrogen_spent_fraction:.2f}% / "
             f"{100.0 * thermal.delivered_fraction:.2f}% / "
             f"{thermal.initial_to_delivered_mass_ratio:.3f} / "
-            f"{100.0 * thermal.impactor_mass_fraction:.2f}% of initial mass"
+            f"{100.0 * thermal.impactor_mass_fraction:.2f}% of initial mass / "
+            f"{100.0 * thermal.impactor_mass_fraction / thermal.hydrogen_spent_fraction:.2f}%"
         )
         print(
             "    required dv total / impulse / finite-burn penalty: "
@@ -1290,6 +1291,16 @@ def _print_report() -> None:
     print("\n  fail-safe: every missed projectile keeps a 600 km periapsis")
     for front_side in (False, True):
         thermal = uncanted_thermal_burn(front_side, missed_periapsis_floor=600.0 * u.km)
+        label = "front-side safe" if front_side else "visible-side safe"
+        print_thermal(label, thermal)
+
+    print("\n  low-thrust sensitivity: 2,500 s with the 600 km missed-shot floor")
+    for front_side in (False, True):
+        thermal = uncanted_thermal_burn(
+            front_side,
+            burn_time=2500.0 * u.s,
+            missed_periapsis_floor=600.0 * u.km,
+        )
         label = "front-side safe" if front_side else "visible-side safe"
         print_thermal(label, thermal)
 

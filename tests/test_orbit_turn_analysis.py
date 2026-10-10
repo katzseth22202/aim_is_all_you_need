@@ -41,6 +41,21 @@ def miss_safe_results():
     ), uncanted_thermal_burn(front_side=True, missed_periapsis_floor=600.0 * u.km)
 
 
+@pytest.fixture(scope="module")
+def long_miss_safe_results():
+    """Optimize both miss-safe mirrors for a lower-thrust 2,500 s burn."""
+
+    return uncanted_thermal_burn(
+        front_side=False,
+        burn_time=2500.0 * u.s,
+        missed_periapsis_floor=600.0 * u.km,
+    ), uncanted_thermal_burn(
+        front_side=True,
+        burn_time=2500.0 * u.s,
+        missed_periapsis_floor=600.0 * u.km,
+    )
+
+
 def test_earth_occults_the_apparently_favorable_departure_mirror():
     """The impulse-only ledger's canted mirror passes through Earth."""
 
@@ -241,6 +256,41 @@ def test_a_600_km_missed_projectile_floor_moves_the_optimum(miss_safe_results):
     )
     assert front.delivered_fraction == pytest.approx(0.46151, abs=1e-5)
     assert visible.delivered_fraction > front.delivered_fraction
+
+
+@pytest.mark.slow
+def test_lower_thrust_reverses_the_miss_safe_mirror_choice(long_miss_safe_results):
+    """At 2,500 s the safe front side narrowly beats the visible-side family."""
+
+    visible, front = long_miss_safe_results
+    assert visible.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
+        4640.0, abs=0.2
+    )
+    assert visible.delivered_fraction == pytest.approx(0.43481, abs=1e-5)
+
+    assert front.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
+        5566.2, abs=0.2
+    )
+    assert front.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
+        0.0, abs=0.01
+    )
+    assert front.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
+        600.0, abs=0.01
+    )
+    assert front.hydrogen_spent_fraction == pytest.approx(0.56140, abs=1e-5)
+    assert front.impactor_mass_fraction == pytest.approx(0.01639, abs=1e-5)
+    assert (
+        front.impactor_mass_fraction / front.hydrogen_spent_fraction
+        == pytest.approx(0.02919, abs=1e-5)
+    )
+    assert front.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
+        6.52635, abs=0.00002
+    )
+    assert front.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
+        458.29, abs=0.05
+    )
+    assert front.delivered_fraction == pytest.approx(0.43860, abs=1e-5)
+    assert front.delivered_fraction > visible.delivered_fraction
 
 
 @pytest.mark.parametrize(

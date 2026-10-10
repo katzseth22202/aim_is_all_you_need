@@ -314,7 +314,10 @@ unit ignition mass. Opening the less-head-on front side over the whole burn need
 projectile mass would continue onto Earth. Requiring every miss to keep a 600 km
 periapsis moves the winning visible-side solution to 2,670 km, all before periapsis,
 5.798 km/s integrated delta-v and 0.4686 delivered (`m0/mf = 2.134`); its vehicle
-and intended stream stay above 3,082 km. _Avoid_: equating visibility before
+and intended stream stay above 3,082 km. At 2,500 seconds the miss-safe optimum
+switches narrowly to the front side: 5,566 km periapsis, all after periapsis,
+6.526 km/s integrated delta-v, 0.5614 H2 fraction and 0.4386 delivered; external
+impactor mass is 2.92% of onboard hydrogen. _Avoid_: equating visibility before
 interception with a safe continuation after a miss; derating projectile momentum
 with nozzle efficiency, since it is a full signed control-volume term separate
 from the 0.85 exhaust-velocity factor.

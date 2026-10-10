@@ -202,6 +202,27 @@ Earth-impact miss corridor.  It still beats the safe front-side mirror by 1.5% i
 delivered mass.  If harmless misses are an architecture requirement, the 2,670 km,
 all-before-periapsis solution is the recommendation from this model.
 
+### Lower thrust reverses the miss-safe mirror choice
+
+Stretching the same burn from 1,200 to **2,500 seconds**, while retaining the 600 km
+missed-projectile floor, raises the periapsis demanded by both mirror families.  The
+front-side family now wins narrowly:
+
+| 2,500 s miss-safe solution | parking periapsis | burn before/after | `k` | H2 propellant / delivered | external impactor / H2 | total / impulse delta-v | finite penalty | missed-shot minimum |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| visible-side safe | 4,640 km | 2,500 / 0 s | 32.72-39.17 | 56.52% / 43.48% | 2.76% | 6.363 / 5.925 km/s | 438 m/s | 600 km |
+| front-side safe | **5,566 km** | 0 / 2,500 s | 31.34-37.26 | **56.14% / 43.86%** | **2.92%** | **6.526 / 6.068 km/s** | **458 m/s** | **600 km** |
+
+Thus the optimum is an all-after-periapsis front-side burn.  It uses external
+impactor mass equal to **2.92% of onboard hydrogen** (one impactor kilogram per
+34.26 kg H2), or 1.639% of ignition mass.  Relative to the 1,200 s recommended
+solution, total integrated delta-v rises by **0.728 km/s**: 0.492 km/s comes from
+the higher-periapsis impulsive requirement and 0.236 km/s from the larger
+finite-burn penalty.  Hydrogen fraction rises by 3.00 percentage points and
+delivered mass falls 6.4% relatively, from 46.86% to 43.86%.  The front-side result
+delivers only 0.87% more than the 2,500 s visible-side alternative, so the reversal
+is real but small on this model.
+
 ## Limitations and next decision
 
 - The circular ADR 0012 optimizer still applies its algebraic mirror and therefore
