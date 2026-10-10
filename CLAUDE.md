@@ -172,7 +172,8 @@ orbit_turn_analysis.py       ← finite_burn_loss conventions + two-body hyperbo
                                 impact angle over a 20-minute burn; also closes the
                                 uncanted, variable-loading 3000 K chamber's full
                                 momentum vector, front-side altitude trade and
-                                600 km missed-projectile safety corridor (ADR 0045)
+                                600 km missed-projectile safety corridor, and bounds
+                                a 4-g overtake-only plate's Earth turn (ADR 0045)
 
 chamber_departure.py         ← chamber_isp + finite_burn_loss + two_wave_growth: the chamber's departure
                                 over the flown chain with tanks, chamber wall + nozzle

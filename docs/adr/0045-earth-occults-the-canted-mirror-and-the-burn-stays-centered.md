@@ -223,6 +223,43 @@ delivered mass falls 6.4% relatively, from 46.86% to 43.86%.  The front-side res
 delivers only 0.87% more than the 2,500 s visible-side alternative, so the reversal
 is real but small on this model.
 
+### A high-thrust overtake-only plate still cannot make the turn
+
+A pusher plate can plausibly thrust much harder than the thermal chamber, so test
+the limiting alternative at a constant **4 g** rather than stretching it over
+2,500 seconds.  Rotate the 20-day parking orbit until the locally focused stream
+is a perfect overtake at ignition, point the plate continuously into the relative
+flow, and stop when the vehicle reaches the exact 3S excess energy.  Give the plate
+perfect momentum and energy transfer, no carried-mass penalty and freedom to pick
+its ignition point.  Search ignition from periapsis to 10,000 seconds before it.
+
+The best safe solution ignites 1,104.5 seconds before the reference periapsis.  It
+runs for 147.5 seconds and integrates **5.786 km/s**.  The collision stays genuinely
+overtaking, moving only from 0.00 to 2.32 degrees off the vehicle velocity.  Earth
+then supplies all the turn available to the cutoff hyperbola:
+
+| turn diagnostic | angle |
+|---|---:|
+| required incoming-stream to 3S-outgoing separation | **144.90 deg** |
+| achieved incoming-stream to outgoing separation | **25.14 deg** |
+| remaining direction error | **119.76 deg** |
+| absolute 600 km ballistic-flyby ceiling at 3S `v_inf` | 34.83 deg |
+
+This is not an occultation failure.  The intended projectile corridor remains at
+least **3,237 km** above Earth and a missed projectile retains a **2,166 km**
+periapsis.  The powered vehicle stays above 3,237 km and its cutoff hyperbola has a
+1,769 km periapsis.  Thus all four paths clear the 600 km rule.  They simply point
+the wrong way.
+
+For scale, an unpowered 11.564 km/s-excess Earth flyby would need a periapsis only
+**145.5 km from Earth's center**, or **6,233 km below the surface**, to bend through
+144.90 degrees.  Raising thrust toward an impulse removes still more time for
+gravity to act; it cannot turn a 25-degree result into the required 145 degrees.
+Rotating the computed trajectory onto the Jupiter departure direction necessarily
+rotates its ignition velocity away from the incoming stream, destroying the
+overtake condition.  The pusher-plate-only departure is therefore ruled out by
+direction closure even though its projectile route is visible and miss-safe.
+
 ## Limitations and next decision
 
 - The circular ADR 0012 optimizer still applies its algebraic mirror and therefore

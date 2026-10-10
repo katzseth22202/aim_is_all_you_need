@@ -18,6 +18,9 @@ This module resolves both pieces of geometry that an impulsive burn hides:
 * It separately optimizes an uncanted 3000 K axial nozzle with pulse-dependent
   hydrogen loading, retains the projectile's full momentum vector and requires
   the final speed and direction to close on the exact 3S departure asymptote.
+* It gives a 4-g overtake-only pusher every favorable assumption, verifies its
+  projectile corridor against Earth and measures the departure-direction
+  shortfall after gravity has supplied all the turn it can.
 
 The reference trajectory is the minimum-departure 3S circular closure from
 ADR 0012 (91 x 121 verification grid followed by continuous refinement):
@@ -35,6 +38,7 @@ from typing import List, Tuple
 import numpy as np
 import numpy.typing as npt
 from astropy import units as u
+from astropy.constants import g0
 from boinor.bodies import Earth
 from scipy.integrate import OdeSolution, solve_ivp
 from scipy.optimize import brentq, minimize, minimize_scalar
@@ -52,6 +56,7 @@ REFERENCE_SLUG_RATIO = 3.0
 REFERENCE_COLLIMATION = 0.8
 UNCANTED_CHAMBER_TEMPERATURE = 3000.0 * u.K
 UNCANTED_EXHAUST_VELOCITY_EFFICIENCY = 0.85
+PUSHER_PLATE_ACCELERATION = 4.0 * g0
 
 # The 5500 K chamber's reference loading pins mixed hot-gas energy without
 # inventing a new hydrogen heat capacity.  Scale that energy linearly with
@@ -177,6 +182,62 @@ class FiniteBurnTurn:
     exhaust_cant_mean: u.Quantity
     exhaust_cant_impulse_mean: u.Quantity
     angle_gain_over_head_on: float
+
+
+@dataclass(frozen=True)
+class PusherPlateTurn:
+    """Best safe Earth turn available to an overtake-only pusher plate.
+
+    Attributes:
+        acceleration: Constant pusher acceleration during the burn.
+        seconds_before_reference_periapsis: Ignition time before the 20-day
+            parking orbit's unpowered periapsis.
+        burn_duration: Time required to reach the exact 3S excess energy.
+        integrated_delta_v: Acceleration integrated over the powered arc.
+        initial_overtake_offset: Vehicle direction from the projectile's
+            incoming asymptote at ignition.  Earth focusing makes it nonzero
+            even for a perfectly aligned local overtake.
+        local_velocity_turn: Outgoing excess direction from the vehicle's
+            local ignition velocity.
+        available_asymptote_turn: Outgoing vehicle excess direction from the
+            projectile's incoming asymptote.  Its mirror turns toward the 3S
+            target by the same magnitude.
+        required_asymptote_turn: Fixed 3S aim separation at infinity.
+        direction_shortfall: Required minus available turn.
+        maximum_safe_ballistic_turn: Full deflection of an unpowered vehicle
+            hyperbola at the 600 km floor and target excess speed.
+        required_ballistic_periapsis_altitude: Periapsis a ballistic flyby
+            would need to supply the full 3S separation.
+        vehicle_minimum_altitude: Lowest vehicle altitude during the burn.
+        vehicle_eventual_periapsis_altitude: Periapsis of the cutoff
+            hyperbola after the vehicle completes the burn.
+        minimum_projectile_clearance: Lowest clearance before interception.
+        missed_projectile_periapsis_altitude: Lowest eventual periapsis if a
+            projectile misses the plate.
+        impact_angle_start: Angle from vehicle velocity to projectile-relative
+            velocity at ignition; zero is perfect overtaking.
+        impact_angle_end: The same angle at cutoff.
+        outgoing_vinf: Vehicle excess speed after the burn.
+    """
+
+    acceleration: u.Quantity
+    seconds_before_reference_periapsis: u.Quantity
+    burn_duration: u.Quantity
+    integrated_delta_v: u.Quantity
+    initial_overtake_offset: u.Quantity
+    local_velocity_turn: u.Quantity
+    available_asymptote_turn: u.Quantity
+    required_asymptote_turn: u.Quantity
+    direction_shortfall: u.Quantity
+    maximum_safe_ballistic_turn: u.Quantity
+    required_ballistic_periapsis_altitude: u.Quantity
+    vehicle_minimum_altitude: u.Quantity
+    vehicle_eventual_periapsis_altitude: u.Quantity
+    minimum_projectile_clearance: u.Quantity
+    missed_projectile_periapsis_altitude: u.Quantity
+    impact_angle_start: u.Quantity
+    impact_angle_end: u.Quantity
+    outgoing_vinf: u.Quantity
 
 
 @dataclass(frozen=True)
@@ -557,6 +618,23 @@ class _UncantedEvaluation:
     states: npt.NDArray[np.float64]
 
 
+@dataclass(frozen=True)
+class _PusherEvaluation:
+    """One aligned overtake-only pusher trajectory."""
+
+    asymptote_turn: float
+    local_turn: float
+    initial_offset: float
+    duration: float
+    outgoing_vinf: float
+    vehicle_minimum_altitude: float
+    vehicle_periapsis_altitude: float
+    projectile_clearance: float
+    projectile_periapsis_altitude: float
+    impact_angle_start: float
+    impact_angle_end: float
+
+
 def _uncanted_route(routes: List[IncomingRoute], front_side: bool) -> IncomingRoute:
     """Select the impact-parameter branch continuous with one 3S mirror."""
 
@@ -611,6 +689,312 @@ def _outgoing_asymptote(
         / eccentricity
     )
     return excess, float(np.arctan2(outgoing[1], outgoing[0]))
+
+
+def _wrapped_angle(angle: float) -> float:
+    """Wrap one angle to ``[-pi, pi)``."""
+
+    return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+
+def _state_periapsis_radius(mu: float, state: npt.NDArray[np.float64]) -> float:
+    """Return the osculating conic's periapsis radius in kilometres."""
+
+    position = state[:2]
+    velocity = state[2:4]
+    radius = float(np.linalg.norm(position))
+    energy = 0.5 * float(velocity @ velocity) - mu / radius
+    angular_momentum = float(position[0] * velocity[1] - position[1] * velocity[0])
+    eccentricity = float(np.sqrt(1.0 + 2.0 * energy * angular_momentum**2 / mu**2))
+    return angular_momentum**2 / (mu * (1.0 + eccentricity))
+
+
+def _pusher_evaluation(
+    seconds_before: float,
+    acceleration: float,
+    mu: float,
+    earth_radius: float,
+    parking_radius: float,
+    parking_speed: float,
+    departure_vinf: float,
+    projectile_vinf: float,
+    fine: bool,
+) -> _PusherEvaluation:
+    """Propagate one 4-g-class plate burn that starts in perfect overtake."""
+
+    base = _coast_with_sense(
+        mu,
+        parking_radius,
+        parking_speed,
+        seconds_before,
+        1,
+    )
+    incoming = np.array([1.0, 0.0], dtype=np.float64)
+    guess = -float(np.arctan2(base[3], base[2]))
+
+    def aligned_angle(rotation_angle: float) -> float:
+        rotation = _rotation(rotation_angle)
+        position = rotation @ base[:2]
+        velocity = rotation @ base[2:4]
+        route = max(
+            _incoming_routes(
+                mu,
+                earth_radius,
+                position,
+                projectile_vinf,
+                incoming,
+            ),
+            key=lambda item: item.impact_parameter,
+        )
+        relative = route.velocity - velocity
+        cross = float(velocity[0] * relative[1] - velocity[1] * relative[0])
+        return float(np.arctan2(cross, float(velocity @ relative)))
+
+    orientation = float(brentq(aligned_angle, guess - 0.2, guess + 0.2))
+    rotation = _rotation(orientation)
+    start = base.copy()
+    start[:2] = rotation @ start[:2]
+    start[2:4] = rotation @ start[2:4]
+    target_energy = 0.5 * departure_vinf**2
+
+    def rhs(_: float, state: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        position = state[:2]
+        velocity = state[2:4]
+        route = max(
+            _incoming_routes(
+                mu,
+                earth_radius,
+                position,
+                projectile_vinf,
+                incoming,
+            ),
+            key=lambda item: item.impact_parameter,
+        )
+        relative = route.velocity - velocity
+        gravity = -mu * position / np.linalg.norm(position) ** 3
+        return np.concatenate((velocity, gravity + acceleration * _unit(relative)))
+
+    def target_energy_event(_: float, state: npt.NDArray[np.float64]) -> float:
+        return (
+            0.5 * float(state[2:4] @ state[2:4])
+            - mu / np.linalg.norm(state[:2])
+            - target_energy
+        )
+
+    target_energy_event.terminal = True  # type: ignore[attr-defined]
+    target_energy_event.direction = 1.0  # type: ignore[attr-defined]
+    horizon = max(1000.0, 40.0 / acceleration)
+    solution = solve_ivp(
+        rhs,
+        (0.0, horizon),
+        start,
+        events=target_energy_event,
+        rtol=_RTOL if fine else 3.0e-8,
+        atol=_ATOL if fine else 3.0e-8,
+        dense_output=True,
+        max_step=0.25 if fine else 2.0,
+    )
+    if not solution.success or len(solution.t_events[0]) == 0:
+        raise RuntimeError("pusher plate did not reach the 3S departure energy")
+    duration = float(solution.t_events[0][0])
+    dense = solution.sol
+    if dense is None:
+        raise RuntimeError("pusher propagation did not return a dense solution")
+    times = np.linspace(0.0, duration, 301 if fine else 61)
+    states = np.asarray(dense(times), dtype=np.float64)
+    final = states[:, -1]
+    outgoing_vinf, outgoing_angle = _outgoing_asymptote(mu, final)
+    initial_angle = float(np.arctan2(start[3], start[2]))
+    vehicle_altitudes = np.linalg.norm(states[:2].T, axis=1) - earth_radius
+    projectile_clearance = float("inf")
+    projectile_periapsis = float("inf")
+    impact_angles = np.zeros(len(times))
+    for index, (position, velocity) in enumerate(zip(states[:2].T, states[2:4].T)):
+        route = max(
+            _incoming_routes(
+                mu,
+                earth_radius,
+                position,
+                projectile_vinf,
+                incoming,
+            ),
+            key=lambda item: item.impact_parameter,
+        )
+        relative = route.velocity - velocity
+        impact_angles[index] = float(
+            np.arccos(
+                np.clip(
+                    float(relative @ velocity)
+                    / (np.linalg.norm(relative) * np.linalg.norm(velocity)),
+                    -1.0,
+                    1.0,
+                )
+            )
+        )
+        state_altitude = float(np.linalg.norm(position)) - earth_radius
+        route_periapsis = route.periapsis_radius - earth_radius
+        route_clearance = (
+            state_altitude if route.radial_velocity <= 0.0 else route_periapsis
+        )
+        projectile_clearance = min(projectile_clearance, route_clearance)
+        projectile_periapsis = min(projectile_periapsis, route_periapsis)
+    return _PusherEvaluation(
+        asymptote_turn=abs(_wrapped_angle(outgoing_angle)),
+        local_turn=abs(_wrapped_angle(outgoing_angle - initial_angle)),
+        initial_offset=abs(_wrapped_angle(initial_angle)),
+        duration=duration,
+        outgoing_vinf=outgoing_vinf,
+        vehicle_minimum_altitude=float(np.min(vehicle_altitudes)),
+        vehicle_periapsis_altitude=(_state_periapsis_radius(mu, final) - earth_radius),
+        projectile_clearance=projectile_clearance,
+        projectile_periapsis_altitude=projectile_periapsis,
+        impact_angle_start=float(impact_angles[0]),
+        impact_angle_end=float(impact_angles[-1]),
+    )
+
+
+def pusher_plate_turn_check(
+    acceleration: u.Quantity = PUSHER_PLATE_ACCELERATION,
+    altitude: u.Quantity = DEPARTURE_ALTITUDE,
+    period: u.Quantity = PUFFSAT_CYCLE_ORBIT_PERIOD,
+    departure_vinf: u.Quantity = THREE_SYNODIC_DEPARTURE_VINF,
+    return_vinf: u.Quantity = THREE_SYNODIC_RETURN_VINF,
+    aim_separation: u.Quantity = THREE_SYNODIC_AIM_SEPARATION,
+) -> PusherPlateTurn:
+    """Maximize safe Earth turning for a pure overtake pusher plate.
+
+    The projectile stream is fixed at zero inertial angle.  At ignition the
+    vehicle orbit is rotated until the locally focused projectile velocity is
+    exactly parallel to the vehicle velocity.  The plate then supplies a
+    constant acceleration along the projectile-relative direction and stops
+    at the exact 3S departure energy.  This is favorable to the proposal: the
+    plate may continuously face the stream, carries no mass penalty and loses
+    no momentum or energy in the impact.
+
+    Ignition is searched from periapsis to 10,000 seconds before it.  A coarse
+    grid brackets the continuous maximum.  Both the intended intercept and a
+    missed projectile are required to clear the requested altitude floor.
+
+    Args:
+        acceleration: Constant pusher acceleration.
+        altitude: Parking-orbit periapsis and safety-floor altitude.
+        period: Parking-orbit period.
+        departure_vinf: Required outgoing Earth-relative excess speed.
+        return_vinf: Incoming projectile excess speed.
+        aim_separation: Required angle from projectile incoming asymptote to
+            vehicle outgoing asymptote.
+
+    Returns:
+        Best safe turn and its occultation, timing and direction diagnostics.
+
+    Raises:
+        ValueError: If an input is nonphysical.
+        RuntimeError: If no safe maximum is found.
+    """
+
+    acceleration_value = float(acceleration.to_value(u.km / u.s**2))
+    if acceleration_value <= 0.0:
+        raise ValueError("acceleration must be positive")
+    if altitude < 0.0 * u.km:
+        raise ValueError("altitude must be nonnegative")
+    separation = float(aim_separation.to_value(u.rad))
+    if not 0.0 < separation < np.pi:
+        raise ValueError("aim_separation must be between zero and 180 degrees")
+    mu, earth_radius, radius, parking_speed = _orbit(altitude, period)
+    departure = float(departure_vinf.to_value(u.km / u.s))
+    projectile = float(return_vinf.to_value(u.km / u.s))
+    altitude_floor = float(altitude.to_value(u.km))
+    cache: dict[float, _PusherEvaluation] = {}
+
+    def evaluate(seconds_before: float) -> _PusherEvaluation:
+        key = float(seconds_before)
+        if key not in cache:
+            cache[key] = _pusher_evaluation(
+                key,
+                acceleration_value,
+                mu,
+                earth_radius,
+                radius,
+                parking_speed,
+                departure,
+                projectile,
+                fine=False,
+            )
+        return cache[key]
+
+    def score(seconds_before: float) -> float:
+        evaluation = evaluate(seconds_before)
+        if (
+            evaluation.vehicle_minimum_altitude < altitude_floor
+            or evaluation.vehicle_periapsis_altitude < altitude_floor
+            or evaluation.projectile_clearance < altitude_floor
+            or evaluation.projectile_periapsis_altitude < altitude_floor
+        ):
+            return 10.0
+        return -evaluation.asymptote_turn
+
+    grid = np.linspace(0.0, 10000.0, 41)
+    scores = np.asarray([score(float(value)) for value in grid])
+    best_index = int(np.argmin(scores))
+    if best_index in (0, len(grid) - 1) or scores[best_index] >= 0.0:
+        raise RuntimeError("pusher turn search did not bracket a safe maximum")
+    optimum = minimize_scalar(
+        score,
+        bounds=(float(grid[best_index - 1]), float(grid[best_index + 1])),
+        method="bounded",
+        options={"xatol": 1.0e-6},
+    )
+    if not optimum.success:
+        raise RuntimeError(f"pusher turn optimization failed: {optimum.message}")
+    seconds_before = float(optimum.x)
+    solved = _pusher_evaluation(
+        seconds_before,
+        acceleration_value,
+        mu,
+        earth_radius,
+        radius,
+        parking_speed,
+        departure,
+        projectile,
+        fine=True,
+    )
+    if (
+        min(
+            solved.vehicle_minimum_altitude,
+            solved.vehicle_periapsis_altitude,
+            solved.projectile_clearance,
+            solved.projectile_periapsis_altitude,
+        )
+        < altitude_floor - 1.0e-3
+    ):
+        raise RuntimeError("optimized pusher route violates the altitude floor")
+
+    departure_eccentricity = 1.0 + radius * departure**2 / mu
+    ballistic_turn = 2.0 * float(np.arcsin(1.0 / departure_eccentricity))
+    required_eccentricity = 1.0 / float(np.sin(0.5 * separation))
+    required_periapsis = mu / departure**2 * (required_eccentricity - 1.0)
+    return PusherPlateTurn(
+        acceleration=acceleration,
+        seconds_before_reference_periapsis=seconds_before * u.s,
+        burn_duration=solved.duration * u.s,
+        integrated_delta_v=(acceleration_value * solved.duration) * u.km / u.s,
+        initial_overtake_offset=(solved.initial_offset * u.rad).to(u.deg),
+        local_velocity_turn=(solved.local_turn * u.rad).to(u.deg),
+        available_asymptote_turn=(solved.asymptote_turn * u.rad).to(u.deg),
+        required_asymptote_turn=aim_separation.to(u.deg),
+        direction_shortfall=((separation - solved.asymptote_turn) * u.rad).to(u.deg),
+        maximum_safe_ballistic_turn=(ballistic_turn * u.rad).to(u.deg),
+        required_ballistic_periapsis_altitude=(required_periapsis - earth_radius)
+        * u.km,
+        vehicle_minimum_altitude=solved.vehicle_minimum_altitude * u.km,
+        vehicle_eventual_periapsis_altitude=solved.vehicle_periapsis_altitude * u.km,
+        minimum_projectile_clearance=solved.projectile_clearance * u.km,
+        missed_projectile_periapsis_altitude=solved.projectile_periapsis_altitude
+        * u.km,
+        impact_angle_start=(solved.impact_angle_start * u.rad).to(u.deg),
+        impact_angle_end=(solved.impact_angle_end * u.rad).to(u.deg),
+        outgoing_vinf=solved.outgoing_vinf * u.km / u.s,
+    )
 
 
 def _uncanted_evaluation(
@@ -1225,6 +1609,38 @@ def _print_report() -> None:
             "  delivered-mass gain over exactly head-on: "
             f"{100.0 * (result.angle_gain_over_head_on - 1.0):.3f}%"
         )
+
+    pusher = pusher_plate_turn_check()
+    print("\n4-g overtake-only pusher plate")
+    print(
+        "  ignition before reference periapsis / duration / integrated dv: "
+        f"{pusher.seconds_before_reference_periapsis.to_value(u.s):.1f} s / "
+        f"{pusher.burn_duration.to_value(u.s):.1f} s / "
+        f"{pusher.integrated_delta_v.to_value(u.km / u.s):.3f} km/s"
+    )
+    print(
+        "  stream-to-outgoing turn available / required / shortfall: "
+        f"{pusher.available_asymptote_turn.to_value(u.deg):.2f} / "
+        f"{pusher.required_asymptote_turn.to_value(u.deg):.2f} / "
+        f"{pusher.direction_shortfall.to_value(u.deg):.2f} deg"
+    )
+    print(
+        "  impact angle start -> end / safe ballistic turn ceiling: "
+        f"{pusher.impact_angle_start.to_value(u.deg):.2f} -> "
+        f"{pusher.impact_angle_end.to_value(u.deg):.2f} / "
+        f"{pusher.maximum_safe_ballistic_turn.to_value(u.deg):.2f} deg"
+    )
+    print(
+        "  vehicle powered / eventual periapsis / intercept / missed-shot minima: "
+        f"{pusher.vehicle_minimum_altitude.to_value(u.km):.1f} / "
+        f"{pusher.vehicle_eventual_periapsis_altitude.to_value(u.km):.1f} / "
+        f"{pusher.minimum_projectile_clearance.to_value(u.km):.1f} / "
+        f"{pusher.missed_projectile_periapsis_altitude.to_value(u.km):.1f} km"
+    )
+    print(
+        "  periapsis needed for a ballistic 144.90-deg turn: "
+        f"{pusher.required_ballistic_periapsis_altitude.to_value(u.km):.1f} km"
+    )
 
     print("\n3000 K uncanted axial nozzle, exact 3S vector closure")
     print(

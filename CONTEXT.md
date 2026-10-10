@@ -322,6 +322,16 @@ interception with a safe continuation after a miss; derating projectile momentum
 with nozzle efficiency, since it is a full signed control-volume term separate
 from the 0.85 exhaust-velocity factor.
 
+**Overtake-only pusher at Earth**:
+A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S
+energy in 147.5 s, but Earth turns its incoming-stream-aligned trajectory only
+25.14° toward the required 144.90° outgoing direction: it remains 119.76° off.
+This is not occultation—the intended corridor stays above 3,237 km and every miss
+above 2,166 km. Even the absolute 600 km ballistic-flyby ceiling is only 34.83°;
+a 144.90° bend would require periapsis 6,233 km below Earth's surface (ADR 0045).
+_Avoid_: treating high thrust as extra gravitational turning; shortening the burn
+makes the maneuver more nearly impulsive and leaves Earth less time to rotate it.
+
 **Free-aim ceiling**:
 What the impact angle would be worth if it carried *no* delta-v charge: ×1.166 (2S) /
 ×1.131 (3S) at `k = 3`, ×1.105 / ×1.079 at ADR 0009's `k* = 7.057`, ×1.072 / ×1.050

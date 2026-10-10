@@ -4,12 +4,14 @@ import pytest
 from astropy import units as u
 
 from src.orbit_turn_analysis import (
+    PUSHER_PLATE_ACCELERATION,
     UNCANTED_EXHAUST_SPEED,
     UNCANTED_IDEAL_EXHAUST_SPEED,
     UNCANTED_MIXED_SPECIFIC_ENERGY,
     blocked_mirror_clearance_angle,
     finite_burn_turn,
     occultation_half_angle,
+    pusher_plate_turn_check,
     three_synodic_periapsis_mirrors,
     uncanted_slug_ratio,
     uncanted_thermal_burn,
@@ -139,6 +141,48 @@ def test_even_steered_thrust_is_above_22_degrees_only_at_the_end(turn_results):
         6.74, abs=0.02
     )
     assert steered.angle_gain_over_head_on == pytest.approx(1.00274, abs=2e-5)
+
+
+@pytest.mark.slow
+def test_a_4g_overtake_pusher_clears_earth_but_cannot_make_the_turn():
+    """A safe pure overtake reaches the target speed 120 degrees off course."""
+
+    pusher = pusher_plate_turn_check()
+    assert PUSHER_PLATE_ACCELERATION.to_value(u.m / u.s**2) == pytest.approx(39.2266)
+    assert pusher.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
+        1104.54, abs=0.1
+    )
+    assert pusher.burn_duration.to_value(u.s) == pytest.approx(147.49, abs=0.02)
+    assert pusher.integrated_delta_v.to_value(u.km / u.s) == pytest.approx(
+        5.78572, abs=0.00002
+    )
+    assert pusher.impact_angle_start.to_value(u.deg) == pytest.approx(0.0, abs=1e-6)
+    assert pusher.impact_angle_end.to_value(u.deg) == pytest.approx(2.32, abs=0.01)
+    assert pusher.available_asymptote_turn.to_value(u.deg) == pytest.approx(
+        25.14, abs=0.01
+    )
+    assert pusher.required_asymptote_turn.to_value(u.deg) == pytest.approx(
+        144.90, abs=0.01
+    )
+    assert pusher.direction_shortfall.to_value(u.deg) == pytest.approx(119.76, abs=0.01)
+    assert pusher.maximum_safe_ballistic_turn.to_value(u.deg) == pytest.approx(
+        34.83, abs=0.01
+    )
+    assert pusher.required_ballistic_periapsis_altitude.to_value(u.km) == pytest.approx(
+        -6232.6, abs=0.1
+    )
+    assert pusher.vehicle_eventual_periapsis_altitude.to_value(u.km) == pytest.approx(
+        1768.7, abs=0.2
+    )
+    assert pusher.minimum_projectile_clearance.to_value(u.km) == pytest.approx(
+        3236.8, abs=0.2
+    )
+    assert pusher.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
+        2165.6, abs=0.2
+    )
+    assert pusher.outgoing_vinf.to_value(u.km / u.s) == pytest.approx(
+        11.56427943, abs=1e-7
+    )
 
 
 def test_3000_k_loading_uses_85_percent_of_ideal_exhaust_velocity():
