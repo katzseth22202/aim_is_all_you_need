@@ -283,8 +283,41 @@ mirror images give the same outgoing excess, so picking the one that rotates the
 thrust axis *toward* the incoming stream is worth ×1.012 / ×1.020 at zero
 propellant — more than any delta-v purchase on the aim trade curve. Same ~18.1° ADR
 0009 counted; now priced.
-_Avoid_: leaving it out of an aim comparison (it is larger than the effect being
-measured).
+**Proposed correction (ADR 0045): the favorable 3S mirror is Earth-occulted.** At
+the 600 km burn its least-blocked projectile hyperbola has periapsis 1,905 km below
+the surface; the other mirror is visible and asks only 7.70° of ideal plume cant.
+The incoming asymptote would have to move 27.19° merely to graze Earth. Until the
+circular-family optimizer consumes that visibility check, its free-mirror gain is
+an upper bound. _Avoid_: treating a sign choice in the outgoing hyperbola as proof
+that the incoming stream can reach the same burn point; leaving the mirror out of
+an aim comparison once visibility has been established.
+
+**Finite-burn orbit turn**:
+The vehicle-frame angle history during a 20-minute 3S departure on the visible
+mirror (`src/orbit_turn_analysis.py`, `make orbit-turn`, proposed ADR 0045). Fixed
+thrust optimizes 599.7/600.3 s about the unpowered orbit's reference periapsis and
+never gets more than 19.81° off head-on; velocity steering optimizes 582.5/617.5 s,
+reaches 23.16° only at cutoff and spends 11.9% of the burn beyond 22°. Plume cant
+never exceeds 11.34° and the integrated mass gain over head-on is under 0.3%.
+_Avoid_: confusing off-head-on collision angle, plume cant and patched-conic aim
+separation; centering on the powered path's shifted closest approach rather than
+the osculating unpowered periapsis used to schedule the burn.
+
+**Uncanted 3000 K sensitivity**:
+Keep the projectile's full side kick, resize hydrogen pulse by pulse to hold the
+mixed gas at 3000 K and take 85% of ideal **exhaust velocity**. The exact-vector
+20-minute optimum stays on the visible 600 km side: `k = 36.79-40.25`, 0.274 km/s
+signed lateral contribution, 706 km powered-path minimum and 0.4992 delivered per
+unit ignition mass. Opening the less-head-on front side over the whole burn needs a
+3,866 km parking periapsis and an all-after-periapsis burn; it delivers only 0.4669,
+6.5% less. The 600 km intercept is visible but a miss is not harmless: 44.6% of
+projectile mass would continue onto Earth. Requiring every miss to keep a 600 km
+periapsis moves the winning visible-side solution to 2,670 km, all before periapsis,
+5.798 km/s integrated delta-v and 0.4686 delivered (`m0/mf = 2.134`); its vehicle
+and intended stream stay above 3,082 km. _Avoid_: equating visibility before
+interception with a safe continuation after a miss; derating projectile momentum
+with nozzle efficiency, since it is a full signed control-volume term separate
+from the 0.85 exhaust-velocity factor.
 
 **Free-aim ceiling**:
 What the impact angle would be worth if it carried *no* delta-v charge: ×1.166 (2S) /

@@ -166,6 +166,14 @@ finite_burn_loss.py          ← leaf (boinor + scipy): integrates a burn centre
                                 one direction, and prices its loss against an impulse;
                                 reproduces the parent's 22/226/486 and 27/101 m/s
 
+orbit_turn_analysis.py       ← finite_burn_loss conventions + two-body hyperbolae:
+                                checks whether each circular-3S departure mirror is
+                                hidden by Earth, then integrates the vehicle-frame
+                                impact angle over a 20-minute burn; also closes the
+                                uncanted, variable-loading 3000 K chamber's full
+                                momentum vector, front-side altitude trade and
+                                600 km missed-projectile safety corridor (ADR 0045)
+
 chamber_departure.py         ← chamber_isp + finite_burn_loss + two_wave_growth: the chamber's departure
                                 over the flown chain with tanks, chamber wall + nozzle
                                 and the integrated fixed-direction loss charged; picks the chamber

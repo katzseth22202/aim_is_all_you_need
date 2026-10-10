@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -132,6 +132,9 @@ bag-converge:  ## Iterate the bag loop to a fixed point and report the gap (rule
 
 resonance-impulse:  ## Score circular 2S/3S closures on departure-burn delivered mass (ADR 0012)
 	python -m src.circular_resonance_impulse
+
+orbit-turn:  ## Earth occultation and a 20-minute burn on the circular 3S return (ADR 0045)
+	python -m src.orbit_turn_analysis
 
 fly-park:  ## Fly short and park to hold the clock; sweet phase, launch windows, the 2S/3S synodic locks and the chain check on them (ADR 0030/0031)
 	python -m src.fly_and_park
