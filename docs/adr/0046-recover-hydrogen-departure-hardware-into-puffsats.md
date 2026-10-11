@@ -122,6 +122,38 @@ throat is not supported by the present model. A protected hot face and different
 outer structural material would require accounting for both masses and cooling
 equipment. The scaled nozzle-extension proxy does not establish material viability.
 
+## Addendum: candidate electromagnetic handling of aluminum
+
+Recorded 2026-10-10 as a processing concept, not a validated equipment design.
+
+> Cut the chamber or tank into controlled pieces, retain them during cutting,
+> and use electromagnetic handling to position them for mechanical capture
+> and packaging.
+
+Aluminum's electrical conductivity makes contactless handling through induced
+eddy currents plausible. A changing magnetic field induces currents in the
+metal; their interaction with the applied field can produce forces and torque.
+Suitable coil geometry and feedback could assist translation, orientation, or
+braking. This is not ordinary ferromagnetic attraction: a simple oscillating
+electromagnet can repel aluminum rather than attract it. Reliable capture
+requires a designed field arrangement and control system.
+
+Useful force and working distance depend on coil geometry, field strength and
+frequency, and the piece's shape, thickness, orientation, and conductivity.
+Eddy-current heating must be included in the power and thermal budgets.
+Microgravity removes the need to support weight, but not the need to arrest
+translation and rotation; reaction forces and torques act on the processing
+spacecraft. Keeping pieces restrained during cutting avoids turning processing
+into a free-fragment collection problem.
+
+This is a reason to investigate aluminum-rich recoverable hardware, not proof
+that conversion into PuffSats is easy. Cutting, shaping, packaging, and attaching
+guidance hardware remain separate tasks. The concept does not validate the
+existing five-tonne processing allowance, establish 99% recovery, or qualify
+aluminum for the chamber's structural and thermal environment. No recovery
+fractions, equipment masses, financial results, or production defaults change
+with this addendum.
+
 ## Consequences and reproducibility
 
 This accounting credits useful material rather than reducing tank or chamber
