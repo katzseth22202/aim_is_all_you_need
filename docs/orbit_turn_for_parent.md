@@ -14,7 +14,7 @@ Status of each item for the paper:
 | 1 | Earth occults the favorable 3S mirror; the arrival angle is 164.5 deg, not 150.4 | **yes, a correction** |
 | 2 | Earth turns the vehicle during the burn, but through head-on, not away from it | **yes** |
 | 3 | A miss on the mass-optimal 600 km burn can hit Earth | **yes** |
-| 4 | An overtake-only plate cannot make the Earth departure | **yes, one sentence** |
+| 4 | An overtake-only plate cannot make the Earth departure | optional, one sentence |
 | 5 | The 3000 K hydrogen chamber | **physics yes, prices no** |
 | 6 | Why a pulsed chamber should beat a pulse detonation engine | **yes, with a caveat** |
 | 7 | Recovering tank and chamber metal into PuffSats | **yes, as a 5500 K sensitivity** |
@@ -79,7 +79,10 @@ Proposed wording:
 > and firing the whole burn before periapsis keeps every miss above 600 km. That costs about
 > 7 percent of the delivered mass, a price we accept.
 
-## 4. An overtake-only plate cannot make the Earth departure
+## 4. An overtake-only plate cannot make the Earth departure (optional)
+
+The paper never proposes a plate departure, so this only answers "why not just use the
+plate?" Include it if that question needs answering.
 
 We gave a 4 g plate every advantage: perfect momentum transfer, no carried-mass penalty, a
 free ignition point and a stream that overtakes it exactly. It reaches the 3S energy in 147.5 s,
@@ -93,6 +96,12 @@ This is not an occultation problem: every path clears Earth.
 
 This rules out a plate-only Earth departure **from this stream**. It says nothing against the
 plate's 400 km push of the growth wave, which does not need the turn.
+
+The growth push is unaffected. It only has to add energy, raising the payload to the
+613,000 km apoapsis, where a 0.22-0.46 km/s burn sets the departure orientation. In the
+4 g case the collision stayed within 2.3 deg of a perfect overtake, and every projectile
+path, missed ones included, cleared Earth by more than 2,000 km. Miss safety for the
+paper's own 400 km push geometry has not been run.
 
 Proposed wording, near the two-device figure (`fig:` at line ~107 of `templateArxiv.tex`):
 
