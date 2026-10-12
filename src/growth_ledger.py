@@ -29,6 +29,7 @@ from src.chamber_departure import (
 from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_5500K,
+    LIQUID_HYDROGEN,
     METHANE_7000K,
     ROD_MASS,
     ChamberPairing,
@@ -897,12 +898,11 @@ def _mean(values: Sequence[float]) -> float:
     return float(np.mean(values))
 
 
-#: Hydrogen's cryostat mass and boil-off, per kilogram launched.  No
-#: flight-scale source exists; passive-MLI large tanks lose 0.1-0.5%/day, held
-#: for one parking orbit, and cryostat mass is swept over 1-5%.  The matrix
-#: carries the middle of both; :func:`_hold_sweep` shows the range.
-HYDROGEN_CRYOSTAT = 0.03
-HYDROGEN_BOIL_OFF_PER_DAY = 0.003
+#: Hydrogen's cryostat mass and boil-off, per kilogram launched, for the
+#: liquid (:data:`src.chamber_isp.LIQUID_HYDROGEN`).  The matrix carries the
+#: middle of both; :func:`_hold_sweep` shows the range.
+HYDROGEN_CRYOSTAT = LIQUID_HYDROGEN.cryostat_fraction
+HYDROGEN_BOIL_OFF_PER_DAY = LIQUID_HYDROGEN.boil_off_per_day
 
 
 def hydrogen_boil_off(cycles: Sequence[TwoWaveCycle], per_day: float) -> float:
@@ -1119,9 +1119,16 @@ def _slug_comparison(cycles: Sequence[TwoWaveCycle]) -> str:
             for label, slug, impactor in PLATE_OPTIONS:
                 runs = {
                     cap: chain_growth(
-                        cycles, plate_eta, pairing, eta, pitch,
-                        cryostat_fraction=held, boil_off=boil,
-                        max_slug_ratio=cap, slug=slug, impactor_bond_energy=impactor,
+                        cycles,
+                        plate_eta,
+                        pairing,
+                        eta,
+                        pitch,
+                        cryostat_fraction=held,
+                        boil_off=boil,
+                        max_slug_ratio=cap,
+                        slug=slug,
+                        impactor_bond_energy=impactor,
                     )  # fmt: skip
                     for cap in (PLATE_MAX_SLUG_RATIO, None)
                 }

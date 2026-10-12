@@ -15,14 +15,18 @@ from src.growth_cost import (
     Departure,
     DesignInputs,
     DiscountSchedule,
+    HardwareRecovery,
     PriceBook,
     RouteSeed,
     break_even_price,
     delayed,
     legacy_prices,
     present_value,
+    recovered,
+    recovered_cycle,
     route_break_even,
     run_program,
+    steady_exhaust,
     steady_state_cost,
     value_per_seed_dollar,
 )
@@ -313,3 +317,68 @@ def test_risk_is_charged_once_at_the_proof_and_time_at_the_bond_rate() -> None:
     assert sure.factor(12.0) == pytest.approx(DiscountSchedule.flat(0.10).factor(12.0))
     # The old stepped schedule is unchanged by the new fields.
     assert STEPPED.factor(8.0) == pytest.approx(1.3**-6.0 * 1.1**-2.0)
+
+
+#: A unit that consumes 100 t and sends 200 t onward, a fifth of it rods, and
+#: expends 30 t of tanks and one 50 t chamber.
+SPENT = CycleHardware(
+    consumed=100.0e3,
+    growth=2.0,
+    onward_puffsats=160.0e3,
+    onward_rods=40.0e3,
+    plate_puffsats=65.0e3,
+    argon=580.0e3,
+    departure_units=1,
+    tanks=30.0e3,
+    gas=400.0e3,
+    chamber_mass=50.0e3,
+)
+
+
+def test_recovered_hardware_stands_in_only_for_rods_by_default() -> None:
+    # 27 t of tank and 30 t of chamber are recovered, but the 195 t left after
+    # the processor must still be every growth PuffSat: rods can be 195/4 t.
+    cycle = recovered_cycle(SPENT, HardwareRecovery())
+    assert cycle.onward_puffsats == pytest.approx(195.0e3)
+    assert cycle.onward_rods == pytest.approx(48.75e3)
+    assert cycle.growth == pytest.approx(2.4375)
+    assert cycle.recycled == pytest.approx(48.75e3)
+    assert cycle.recycled_tanks / cycle.recycled_chambers == pytest.approx(27.0 / 30.0)
+    assert cycle.processors == 1.0
+
+
+def test_a_plate_that_takes_metal_uses_everything_recovered() -> None:
+    cycle = recovered_cycle(SPENT, HardwareRecovery(plate_takes_metal=True))
+    assert cycle.growth == pytest.approx((195.0e3 + 57.0e3) / 100.0e3)
+    assert cycle.recycled == pytest.approx(57.0e3)
+    # The split between waves is kept; only the total grows.
+    assert cycle.onward_rods / cycle.onward_puffsats == pytest.approx(0.25)
+
+
+def test_recovery_below_the_rod_cap_is_all_used() -> None:
+    cycle = recovered_cycle(SPENT, HardwareRecovery(tank_share=0.3, chamber_share=0.0))
+    assert cycle.recycled == pytest.approx(9.0e3)
+    assert cycle.growth == pytest.approx(2.04)
+
+
+def test_recovery_rejects_shares_outside_one_and_a_heavy_processor() -> None:
+    with pytest.raises(ValueError, match="shares"):
+        recovered_cycle(SPENT, HardwareRecovery(tank_share=1.1))
+    with pytest.raises(ValueError, match="outweighs"):
+        recovered_cycle(SPENT, HardwareRecovery(processor_mass=250.0e3))
+
+
+def test_the_processor_is_charged_and_the_recycled_mass_counted_per_year() -> None:
+    inputs = replace(chain(), cycles=(SPENT,) * 3)
+    plain_cost, plain = steady_state_cost(inputs, FLAT)
+    with_recovery = recovered(inputs, HardwareRecovery())
+    cost, lines = steady_state_cost(with_recovery, FLAT)
+    assert "processor" not in plain
+    assert lines["processor"] > 0.0
+    assert cost < plain_cost
+    flow = steady_exhaust(with_recovery, FLAT)
+    assert flow.launches > 0.0
+    assert (flow.recycled_tanks + flow.recycled_chambers) / flow.launches == (
+        pytest.approx(48.75e3)
+    )
+    assert steady_exhaust(inputs, FLAT).recycled_tanks == 0.0

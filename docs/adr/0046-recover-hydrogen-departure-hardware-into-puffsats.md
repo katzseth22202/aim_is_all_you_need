@@ -6,7 +6,12 @@ Date: 2026-10-10
 
 ## Context
 
-> **Superseded in part, 2026-10-12 (ADR 0049).** Every 3,000 K figure below was
+> **Superseded in part, 2026-10-12 (ADRs 0049, 0050).** ADR 0050 re-prices recovery
+> on the paper's flown chain in production code, confines recovered mass to rods
+> (growth PuffSats must disperse), drops aluminium tanks for carbon fibre and
+> replaces the Pinatubo comparison with the meteoric background.
+>
+> **Energy (ADR 0049).** Every 3,000 K figure below was
 > computed with a hot energy scaled linearly from 5,500 K (57.3 MJ/kg, 9.10 km/s
 > exhaust). Equilibrium gives 34.5 MJ/kg and 7.06 km/s; ADR 0045's re-solved
 > miss-safe burn delivers 39.1% of ignition mass instead of 46.9%. The 3,000 K

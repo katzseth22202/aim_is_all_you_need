@@ -14,9 +14,11 @@ from astropy import units as u
 from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_5500K,
+    LIQUID_HYDROGEN,
     METHANE_7000K,
     PLUG_RATIO,
     ROD_MASS,
+    SLUSH_HYDROGEN,
     SURVIVABLE_IMPULSE,
     ChamberPairing,
     absolute_efficiency,
@@ -25,6 +27,7 @@ from src.chamber_isp import (
     efficiency_for_impulse,
     momentum_debit_share,
     slug_ratio_at,
+    stored_as,
     survivable_methane,
 )
 
@@ -272,3 +275,32 @@ def test_the_slug_ratio_holds_each_pairings_own_plug() -> None:
     assert k + 1.0 + pairing.plug_ratio == pytest.approx(
         4.0 * (pairing.reference_slug_ratio + 1.0 + pairing.plug_ratio)
     )
+
+
+def test_slush_shrinks_the_tank_by_its_density_and_keeps_the_chamber() -> None:
+    slush = stored_as(HYDROGEN_5500K, SLUSH_HYDROGEN)
+    assert slush.tank_fraction == pytest.approx(0.205 / 1.15)
+    assert slush.wall_mass == HYDROGEN_5500K.wall_mass
+    assert slush.chemistry_ceiling == HYDROGEN_5500K.chemistry_ceiling
+    assert slush.hydrogen and slush.storage is SLUSH_HYDROGEN
+    assert SLUSH_HYDROGEN.boil_off_per_day == 0.0
+    assert HYDROGEN_5500K.storage is LIQUID_HYDROGEN
+
+
+def test_only_a_hydrogen_pairing_has_a_storage_to_change() -> None:
+    assert not METHANE_7000K.hydrogen
+    with pytest.raises(ValueError, match="hydrogen"):
+        stored_as(METHANE_7000K, SLUSH_HYDROGEN)
+
+
+def test_the_slush_heat_sink_outlasts_the_hold() -> None:
+    """Melting half the solid and warming to 20.3 K absorbs ~18% of boiling.
+
+    Fusion 58.2 kJ/kg on half the mass, plus about 52 kJ/kg warming the
+    liquid from 13.8 K, against 446 kJ/kg to boil it: at the liquid's
+    0.3%/day that is about 60 days with nothing boiled.
+    """
+    sink = 0.5 * 58.2 + 52.0
+    days = sink / 446.0 / LIQUID_HYDROGEN.boil_off_per_day
+    assert sink / 446.0 == pytest.approx(0.18, abs=0.01)
+    assert days > 20.0 * 2.5

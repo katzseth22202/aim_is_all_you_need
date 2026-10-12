@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost hardware-recovery slush-hydrogen plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -73,6 +73,12 @@ seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1
 
 growth-cost:  ## The growth-charged seed valuation and steady-state $/kg at L1: 10%, 50% odds (ADR 0037/0040), seed routes (ADR 0039)
 	python -m src.growth_cost_report
+
+hardware-recovery:  ## Spent tanks and chamber cut up in flight and flown back as rods: growth, $/kg, exhaust tonnes (ADR 0050)
+	python -m src.hardware_recovery
+
+slush-hydrogen:  ## The hydrogen charge stored as 50% slush: smaller tank, no hold boil-off (ADR 0051)
+	python -m src.slush_hydrogen
 
 plate-designs:  ## The impact-sim's plate designs (spray cup 0.60/0.57, plug 0.70, paper 0.775) through the growth ledger (ADR 0041)
 	python -m src.growth_ledger --designs

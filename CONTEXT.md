@@ -338,6 +338,26 @@ open to area ratio 50-100: a 3-6x faster blowdown that still passes the
 ten-turnover mixing screen. _Avoid_: quoting NTR specific impulse for a pulsed
 chamber at the NTR's temperature.
 
+**Hardware recovery**:
+Spent tanks and the expended chamber, cut up during the cruise and flown back as
+**departure rods** (`growth_cost.recovered`, `make hardware-recovery`, ADR 0050).
+Rods only by default: growth PuffSats must disperse before the plate, so solid
+pieces can join the growth wave only as impactors on a plate met at 44 km/s or
+more (`plate_takes_metal`). On the paper's chain it lifts growth 1.905 -> 2.178
+(methane, 90% tanks + 60% steel chamber) and 2.418 -> 2.723 (hydrogen, tanks only:
+its chamber liner is copper). Tanks are carbon fibre, not aluminium. _Avoid_:
+splitting recovered mass between growth PuffSats and rods in their usual ratio;
+comparing exhaust metal with volcanic tonnage instead of meteoric ablation.
+
+**Slush hydrogen**:
+The hydrogen charge stored as 50% solid slush (`chamber_isp.SLUSH_HYDROGEN`,
+`make slush-hydrogen`, ADR 0051): 15% denser, so the tank is 0.178 kg per kg
+instead of 0.205, and 18% more heat sink, so a 20-day hold boils nothing. A
+pairing is hydrogen when `ChamberPairing.storage` is set. Growth 2.418 -> 2.560;
+2.877 with recovered tanks. _Avoid_: `pairing is HYDROGEN_5500K` to mean "hydrogen"
+(a stored-as pairing is a different object); claiming solid hydrogen removes the
+tank's structure (its mass is volume and loads, not pressure).
+
 **Overtake-only pusher at Earth**:
 A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S
 energy in 147.5 s, but Earth turns its incoming-stream-aligned trajectory only

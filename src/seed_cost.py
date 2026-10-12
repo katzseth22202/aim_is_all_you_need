@@ -45,8 +45,6 @@ from src.finite_burn_loss import finite_burn_loss
 from src.growth_ledger import (
     ADR_0033_PLATE,
     DEFAULT_PARKING_DAYS,
-    HYDROGEN_BOIL_OFF_PER_DAY,
-    HYDROGEN_CRYOSTAT,
     METHANE_PITCH,
     PLATE_DESIGNS_BY_NAME,
     RAPTOR3_THRUST,
@@ -344,7 +342,7 @@ class Design:
     @property
     def pitch_ratio(self) -> float:
         """The pitch per kilogram of rod, as the ledger takes it."""
-        if self.pairing is None or self.pairing is HYDROGEN_5500K:
+        if self.pairing is None or self.pairing.hydrogen:
             return 0.0
         pitch = METHANE_PITCH if self.pitch_per_pulse is None else self.pitch_per_pulse
         return float((pitch / self.pairing.rod_mass).to_value(u.one))
@@ -459,7 +457,7 @@ def design_chain(
             summarize_chain([c.period_years for c in three], growths),
             tuple(ledgers),
         )
-    hydrogen = design.pairing is HYDROGEN_5500K
+    storage = design.pairing.storage
     assert design.efficiency is not None
     grown = chain_growth(
         flown,
@@ -470,9 +468,11 @@ def design_chain(
         max_slug_ratio=plate.max_slug_ratio,
         impactor_bond_energy=plate.impactor_bond_energy,
         film_per_impulse=plate.film_per_impulse,
-        cryostat_fraction=HYDROGEN_CRYOSTAT if hydrogen else 0.0,
+        cryostat_fraction=0.0 if storage is None else storage.cryostat_fraction,
         boil_off=(
-            hydrogen_boil_off(flown, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
+            0.0
+            if storage is None
+            else hydrogen_boil_off(flown, storage.boil_off_per_day)
         ),
         chambers=design.chambers,
     )

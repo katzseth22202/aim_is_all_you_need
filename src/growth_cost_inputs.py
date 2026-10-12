@@ -25,7 +25,7 @@ from typing import Optional, Tuple
 import numpy as np
 from astropy import units as u
 
-from src.chamber_isp import HYDROGEN_5500K
+from src.chamber_departure import chamber_unit_mass
 from src.growth_cost import (
     ROD_MASS,
     CycleHardware,
@@ -35,7 +35,6 @@ from src.growth_cost import (
 )
 from src.growth_ledger import (
     ADR_0033_PLATE,
-    HYDROGEN_BOIL_OFF_PER_DAY,
     LAUNCH_UNIT,
     METHALOX_TANK_FRACTION,
     RAPTOR3_MASS,
@@ -113,10 +112,13 @@ def _chamber_cycles(
 ) -> Tuple[CycleHardware, ...]:
     pairing = chain.design.pairing
     assert pairing is not None
-    hydrogen = pairing is HYDROGEN_5500K
+    storage = pairing.storage
     pitch_ratio = chain.design.pitch_ratio
+    chamber_mass = _kg(chamber_unit_mass(pairing))
     boil_off = (
-        hydrogen_boil_off(chain.cycles, HYDROGEN_BOIL_OFF_PER_DAY) if hydrogen else 0.0
+        0.0
+        if storage is None
+        else hydrogen_boil_off(chain.cycles, storage.boil_off_per_day)
     )
     ledgers = chain.ledgers
     consumption = []
@@ -151,6 +153,7 @@ def _chamber_cycles(
                 pitch=pitch_ratio * rods,
                 pulses=departure.pulses,
                 film=_film(ledger.push, plate),
+                chamber_mass=chamber_mass,
             )
         )
     return tuple(hardware)
@@ -194,11 +197,7 @@ def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> Design
         cycles = _methalox_cycles(chain, plate)
         seed_puffsats, seed_rods = _kg(chain.seed), 0.0
     else:
-        departure = (
-            Departure.HYDROGEN
-            if design.pairing is HYDROGEN_5500K
-            else Departure.METHANE
-        )
+        departure = Departure.HYDROGEN if design.pairing.hydrogen else Departure.METHANE
         cycles = _chamber_cycles(chain, plate)
         first = chain.ledgers[0]
         assert isinstance(first, CycleGrowth)

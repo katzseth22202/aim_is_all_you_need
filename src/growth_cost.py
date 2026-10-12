@@ -78,6 +78,13 @@ class CycleHardware:
             the rods are priced as fleet when they are built).
         film: Plate film the push burns, when the ledger carries it (ADR
             0043); None prices it from the book's ``film_fraction``.
+        chamber_mass: One chamber's wall and nozzle extension, expended with
+            each departure unit (zero for methalox).
+        recycled_tanks: Spent tank mass cut up in flight and sent onward
+            inside ``onward_*`` (ADR 0050).  It leaves in the exhaust when it
+            is fired.
+        recycled_chambers: The same for chamber wall and nozzle.
+        processors: Recovery processors the unit carries (ADR 0050).
     """
 
     consumed: float
@@ -94,6 +101,15 @@ class CycleHardware:
     pitch: float = 0.0
     pulses: float = 0.0
     film: Optional[float] = None
+    chamber_mass: float = 0.0
+    recycled_tanks: float = 0.0
+    recycled_chambers: float = 0.0
+    processors: float = 0.0
+
+    @property
+    def recycled(self) -> float:
+        """Recovered hardware in the onward mass."""
+        return self.recycled_tanks + self.recycled_chambers
 
 
 @dataclass(frozen=True)
@@ -218,6 +234,8 @@ class PriceBook:
         fleet_flat: The paper's flat $/kg for every PuffSat and rod, if set.
         charge_growth: False reproduces ADR 0036: no growth costs, no seed
             manufacture.
+        processor: Per recovery processor, bought new for every growth launch
+            unit that recovers its hardware (ADR 0050; an assumption).
     """
 
     label: str = "Estimate"
@@ -243,6 +261,7 @@ class PriceBook:
     rod_body: float = 4.0
     fleet_flat: Optional[float] = None
     charge_growth: bool = True
+    processor: float = 1.0e6
 
     def departure_hardware(self, departure: Departure) -> LearningCurve:
         """The learning curve for one departure unit."""
@@ -413,6 +432,9 @@ class Program:
         packages: Steering packages bought.
         lines: Dollars by line over the measured steady-state lap.
         cargo: Cargo delivered over that lap.
+        launches: Growth launch units departed over that lap.
+        recycled_tanks: Recovered tank mass they send onward over that lap.
+        recycled_chambers: Recovered chamber mass they send onward.
     """
 
     flows: List[Tuple[float, float]] = field(default_factory=list)
@@ -421,6 +443,9 @@ class Program:
     packages: float = 0.0
     lines: Dict[str, float] = field(default_factory=dict)
     cargo: float = 0.0
+    launches: float = 0.0
+    recycled_tanks: float = 0.0
+    recycled_chambers: float = 0.0
 
     @property
     def seed_outlay(self) -> float:
@@ -507,6 +532,12 @@ def _grow(
     }
     if inputs.departure is not Departure.METHALOX:
         lines["chamber_spray"] = prices.chamber_spray * count
+    if cycle.processors:
+        lines["processor"] = prices.processor * cycle.processors * units
+    if tally is not None:
+        program.launches += units
+        program.recycled_tanks += cycle.recycled_tanks * units
+        program.recycled_chambers += cycle.recycled_chambers * units
     program.departure_units += count
     lines.update(
         _plate_lines(
@@ -732,6 +763,144 @@ def break_even_price(
     if worth(cap) < 0.0:
         return None
     return float(brentq(worth, 0.0, cap, xtol=1.0e-3))
+
+
+@dataclass(frozen=True)
+class HardwareRecovery:
+    """Spent departure hardware, cut up in flight and sent onward (ADR 0050).
+
+    After the departure burn the empty tanks and the expended chamber ride on
+    toward Jupiter with the payload anyway.  A processor carried in the stack
+    cuts and packages them during the three-year cruise, so they come back as
+    part of the next return's mass instead of being thrown away.  The
+    processor displaces onward payload and is bought new each launch.
+
+    Recovered mass is **not** fungible with the water PuffSats.  Growth
+    PuffSats must disperse into gas before they reach the plate, so by default
+    recovered hardware only becomes departure rods, which meet the chamber at
+    60-75 km/s and vaporize.  ``plate_takes_metal`` lifts that cap: at the
+    44 km/s and faster closing speeds of the Jovian-return plate, recovered
+    pieces could be impactors that spread water PuffSats over the plate.
+
+    Attributes:
+        tank_share: Share of spent tank mass recovered.
+        chamber_share: Share of chamber wall and nozzle recovered.
+        processor_mass: The processor, kg per launch unit.
+        plate_takes_metal: Let recovered mass be growth-wave mass too.
+    """
+
+    tank_share: float = 0.9
+    chamber_share: float = 0.6
+    processor_mass: float = 5000.0
+    plate_takes_metal: bool = False
+
+
+def recovered_cycle(cycle: CycleHardware, recovery: HardwareRecovery) -> CycleHardware:
+    """One return's launch unit with its spent hardware sent onward.
+
+    Without ``plate_takes_metal`` the recovered mass can stand in only for the
+    onward rods: the launched payload must still supply every growth PuffSat,
+    so the onward mass grows to ``launched / (1 - rod share)`` at most.  Any
+    recovered mass beyond that is left behind.  Tank and chamber share what is
+    used in proportion to what was recovered.
+
+    Args:
+        cycle: The unit as flown without recovery.
+        recovery: What is recovered.
+
+    Returns:
+        The unit with growth, onward mass and recycled mass updated.
+
+    Raises:
+        ValueError: If a share is outside [0, 1] or the processor outweighs the
+            onward payload.
+    """
+    if not (0.0 <= recovery.tank_share <= 1.0 and 0.0 <= recovery.chamber_share <= 1.0):
+        raise ValueError("recovered shares must lie in [0, 1]")
+    onward = cycle.onward_puffsats + cycle.onward_rods
+    launched = onward - recovery.processor_mass
+    if launched <= 0.0:
+        raise ValueError("the processor outweighs the onward payload")
+    tanks = recovery.tank_share * cycle.tanks
+    chambers = recovery.chamber_share * cycle.chamber_mass * cycle.departure_units
+    supply = tanks + chambers
+    rod_share = cycle.onward_rods / onward
+    used = (
+        supply
+        if recovery.plate_takes_metal
+        else min(supply, launched * rod_share / (1.0 - rod_share))
+    )
+    scale = (launched + used) / onward
+    taken = used / supply if supply > 0.0 else 0.0
+    return replace(
+        cycle,
+        growth=(launched + used) / cycle.consumed,
+        onward_puffsats=cycle.onward_puffsats * scale,
+        onward_rods=cycle.onward_rods * scale,
+        recycled_tanks=tanks * taken,
+        recycled_chambers=chambers * taken,
+        processors=1.0,
+    )
+
+
+def recovered(inputs: DesignInputs, recovery: HardwareRecovery) -> DesignInputs:
+    """The chain with every growth launch unit recovering its hardware.
+
+    The seed is unchanged: it is bought and flown before any hardware exists.
+
+    Args:
+        inputs: The chain without recovery.
+        recovery: What each unit recovers.
+
+    Returns:
+        The chain with recovery.
+    """
+    return replace(
+        inputs,
+        label=f"{inputs.label}, recovered",
+        cycles=tuple(recovered_cycle(c, recovery) for c in inputs.cycles),
+    )
+
+
+@dataclass(frozen=True)
+class SteadyExhaust:
+    """What one seed's held-level fleet sends through its exhausts each year.
+
+    Every recovered kilogram is eventually fired, as a rod in a chamber or as
+    an impactor on a plate, and most departure exhaust falls back into the
+    atmosphere (ADR 0050).  Per seed of one launch unit, so scale by seeds.
+
+    Attributes:
+        launches: Growth launch units departing per year.
+        recycled_tanks: Recovered tank mass sent onward per year, kg.
+        recycled_chambers: Recovered chamber mass sent onward per year, kg.
+    """
+
+    launches: float
+    recycled_tanks: float
+    recycled_chambers: float
+
+
+def steady_exhaust(
+    inputs: DesignInputs, prices: PriceBook, l1_price: float = 500.0
+) -> SteadyExhaust:
+    """Yearly launches and recycled hardware over the measured steady lap.
+
+    Args:
+        inputs: The design's chain.
+        prices: What everything costs (it selects the delivery schedule).
+        l1_price: Sale price the deliveries are scheduled for.
+
+    Returns:
+        Per-year rates, per seed.
+    """
+    program = run_program(inputs, prices, 0.0, l1_price, steady=True)
+    years = inputs.chain_years
+    return SteadyExhaust(
+        program.launches / years,
+        program.recycled_tanks / years,
+        program.recycled_chambers / years,
+    )
 
 
 def delayed(inputs: DesignInputs, years: float) -> DesignInputs:

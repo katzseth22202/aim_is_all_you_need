@@ -17,7 +17,8 @@ Status of each item for the paper:
 | 4 | An overtake-only plate cannot make the Earth departure | optional, one sentence |
 | 5 | The 3000 K hydrogen chamber | **physics yes, prices no** |
 | 6 | Why a pulsed chamber should beat a pulse detonation engine | **yes, with a caveat** |
-| 7 | Recovering tank and chamber metal into PuffSats | **yes, as a 5500 K sensitivity** |
+| 7 | Recycling spent tanks and chamber into rods (ADR 0050) | **yes, a sensitivity and a "why now"** |
+| 8 | Store the hydrogen charge as slush (ADR 0051) | **yes** |
 | - | Rotating tether (ADR 0048), 3000/3500 K economics (ADRs 0046-0047) | no |
 
 ## 1. The favorable 3S mirror is behind Earth (ADR 0045)
@@ -176,31 +177,92 @@ Proposed wording:
 > about one-fortieth of a detonation tube's wall per unit volume. It still pays the price
 > every blowdown pays against a steady rocket.
 
-## 7. Recovering tank and chamber metal into PuffSats (ADR 0046)
+## 7. The rocket eats its own spent hardware (ADR 0050)
 
-After departure, the tank and the expended chamber are already-launched mass on its way to
-Jupiter. Cutting and packaging them during the three-year trip turns them into PuffSat mass
-for the next generation. The scenario recovers 90% of tank mass and 60% of chamber and nozzle
-mass. It flies a 5 t cutting machine bought new for $1M every flight, and pays ordinary body
-and steering costs on recovered mass. On the 5500 K chamber (unaffected by the energy error):
+After the departure burn the empty tanks and the expended chamber ride on toward
+Jupiter with the payload anyway. A 5 t processor in the stack cuts and packages them
+during the three-year cruise, about 35 kg a day, and they come back as **departure
+rods**. They cannot simply become growth PuffSats, which must disperse into gas
+before the plate. Rods hit the chamber at 60-75 km/s and vaporize, and a denser rod
+needs a shallower, lighter plug, not a heavier one. `make hardware-recovery` runs
+this on the paper's chain, behind the spray cup, with the lob climbing (Estimate
+book, 10%, 50% odds):
 
-| | before | after |
-|---|---:|---:|
-| useful onward mass | 336.0 t | 407.7 t |
-| growth per 3S cycle | 2.44 | 2.96 |
-| operating cost, $/kg at L1 | 108.4 | 94.6 |
-| program break-even, cheap / dear seed, $/kg | 177.7 / 297.6 | 130.4 / 181.9 |
+| | growth per cycle | steady $/kg | break-even, cheap / dear seed |
+|---|---:|---:|---:|
+| methane AR 300, none | 1.905 | 162 | 340 / 810 |
+| methane, 90% tanks + 60% steel chamber | **2.178** | **136** | **255 / 528** |
+| hydrogen, none | 2.418 | 122 | 192 / 377 |
+| hydrogen, 90% tanks (chamber liner is copper) | **2.723** | **110** | **161 / 283** |
 
-Caveats the paper must keep: the recovery fractions and the machine are assumptions, not
-designs. Whether recovered metal behaves as projectile or rod material (copper and aluminum
-vapor in the chamber, packaging geometry, steering) is untested. Exhaust and impact
-performance are held fixed. The figures come from the common-route 3S ledger, not the paper's
-chain, and its generator is not committed; only the re-pricing is. Leave the ozone and
-electromagnetic-handling notes in ADR 0046 out of the paper.
+If the 44 km/s-plus Jovian-return plate can take recovered pieces as impactors that
+spread water PuffSats over it, growth rises further: methane 2.25, hydrogen 2.91.
+That is a fallback we may need, not a modeled design.
+
+**Build it to be recycled.**
+- Pressure management is carbon fibre in PEEK or PEKK, not aluminium. Recycled
+  aluminium would match the meteoric background, 142 t a year, at about five
+  departures a year.
+- No aluminium-lithium or copper alloys anywhere that ends up as exhaust.
+- The methane chamber's steel is recycled. Iron is what meteors already deliver most
+  of, 2,477 t a year.
+- Nozzle backing is carbon fibre or carbon-carbon.
+- Steel tabs on the planned cut lines let robots grip the pieces magnetically.
+
+**Exhaust is the cost.** Every recycled kilogram is eventually fired, and most
+departure exhaust is slower than orbital speed and falls back. The natural
+comparison is meteoric ablation, about 12,000 t a year, which also recondenses as
+nanometre smoke. Volcanic ash is not comparable: it is micron silicate with its
+metal bound inside, and almost all of it falls out within days. Per seed's fleet, a
+methane program matches nature's iron at about 60 seeds. Hydrogen's carbon-fibre
+tanks would match today's rocket soot at about 13 seeds, but only if every carbon
+atom became soot, which overstates it. The design's methane and polyethylene rods
+already carry far more carbon than the tanks.
 
 Proposed wording:
 
-> The spent tank and chamber need not be discarded. Cut up and repackaged during the
-> three-year trip, 90 percent of the tank and 60 percent of the chamber would add about a
-> fifth to the next generation's PuffSat mass. That raises growth per cycle from 2.4 to 3.0.
-> This is an accounting sensitivity; recovering hardware in flight has not been designed.
+> The spent tanks and chamber need not be thrown away. They ride on toward Jupiter
+> with the payload, and over the three-year cruise a small robotic processor cuts
+> them into departure rods. The rocket eats part of itself. Raising growth per cycle
+> from 1.9 to 2.2 cuts the methane chamber's delivered cost from \$162 to \$136 per
+> kilogram. We build the hardware for it, from carbon fibre and steel rather than
+> aluminium. Every recycled kilogram eventually leaves in the exhaust, and most
+> exhaust falls back. Meteors already deliver about 2,500 tonnes of iron a year
+> to the upper atmosphere, so a steel-recycling fleet stays below that background
+> until the program has grown from some sixty seeds.
+
+Cite Schulz et al. 2025 (arXiv 2510.21328) for the meteoric and re-entry tables and
+Maloney et al. 2022 for rocket soot. Citations for in-space robotic cutting are still
+owed.
+
+## 8. Store the hydrogen charge as slush (ADR 0051)
+
+Carry the hydrogen as 50% solid slush instead of normal-boiling-point liquid. NASA
+made, pumped and expelled it at scale for the National Aero-Space Plane (Lewis
+K-Site, 1990-94). It is 15% denser and carries 18% more heat sink. The tank shrinks
+in proportion, from 0.205 to 0.178 kg per kg. Melting the solid and warming the
+liquid absorb about 81 kJ/kg, so the same insulation boils nothing over the 20-day
+hold, against 6% for liquid. `make slush-hydrogen`:
+
+| hydrogen chamber | growth per cycle | steady $/kg | break-even, cheap / dear seed |
+|---|---:|---:|---:|
+| liquid (paper today) | 2.418 | 122 | 192 / 377 |
+| slush | 2.560 | 115 | 174 / 323 |
+| slush, tanks recycled (item 7) | **2.877** | **105** | **147 / 245** |
+
+Heavier 5% cryostats give back about a seventh of the gain. A $2/kg slush premium
+costs $0.4/kg at L1. Solid hydrogen would not lighten the tank further. Liquid
+hydrogen tanks are already low pressure; their mass is volume, insulation and
+launch loads. Slush's gain is density and heat sink.
+
+Proposed wording, in the hydrogen chamber's departure section:
+
+> We carry the hydrogen as slush, half frozen, as NASA did for the National
+> Aero-Space Plane. It is 15 percent denser than liquid, so the tank shrinks, and
+> melting its ice soaks up the heat that would otherwise boil 6 percent of the
+> charge away over the twenty-day hold. Together the two raise growth per cycle
+> from 2.42 to 2.56.
+
+Cite McNelis et al., "A Summary of the Slush Hydrogen Technology Program for the
+National Aero-Space Plane" (NTRS 19950017766), and Hardy and Whalen's transfer and
+expulsion reports (NASA TM 105596, TM 105191).

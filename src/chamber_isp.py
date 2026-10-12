@@ -37,7 +37,7 @@ reference value across speeds, which is an assumption: the companion solved it
 only at 75 km/s.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 import numpy as np
@@ -55,6 +55,40 @@ BURN_STEPS = 401
 ROD_MASS = 2.5 * u.kg
 #: Pulse rate of one 20 m^3 chamber (``fig:methane_wall_detail``: a 250 ms cycle).
 PULSE_RATE = 4.0 / u.s
+
+
+@dataclass(frozen=True)
+class HydrogenStorage:
+    """How a hydrogen chamber's charge is stored until the burn (ADR 0051).
+
+    Attributes:
+        name: Short label.
+        density: Bulk density of the stored charge; the tank scales inversely.
+        cryostat_fraction: Cryostat mass dropped with the plate, per kilogram
+            of hydrogen launched.
+        boil_off_per_day: Hydrogen lost per day of the hold, per kilogram
+            launched.
+    """
+
+    name: str
+    density: u.Quantity
+    cryostat_fraction: float
+    boil_off_per_day: float
+
+
+#: Normal-boiling-point liquid, the ledger's long-standing case.  No
+#: flight-scale source exists; passive-MLI large tanks lose 0.1-0.5%/day, held
+#: for one parking orbit, and cryostat mass is swept over 1-5%; the middle of
+#: both is carried.
+LIQUID_HYDROGEN = HydrogenStorage("liquid", 70.8 * u.kg / u.m**3, 0.03, 0.003)
+#: Slush at 50% solid, made on the ground by freeze-thaw (NASA Lewis K-Site,
+#: 1990-94: McNelis et al., NTRS 19950017766; Hardy and Whalen, NASA TM 105596).
+#: 15% denser than normal-boiling-point liquid, and 18% more heat sink: melting
+#: the solid and warming the liquid from the 13.8 K triple point to 20.3 K
+#: absorbs about 81 kJ/kg, 18% of the 446 kJ/kg that boils it.  The same
+#: insulation's 0.3%/day therefore boils nothing for about 60 days, so a
+#: 20-day hold loses none.  Same cryostat as the liquid (no active cooling).
+SLUSH_HYDROGEN = HydrogenStorage("slush 50%", 1.15 * 70.8 * u.kg / u.m**3, 0.03, 0.0)
 
 
 @dataclass(frozen=True)
@@ -80,6 +114,9 @@ class ChamberPairing:
         extension_mass: The nozzle extension; None takes
             :data:`src.chamber_departure.NOZZLE_EXTENSION_MASS`, the RL10B-2's
             scaled to the 20 m^3 sphere's 8.7 m exit.
+        storage: How a hydrogen charge is stored; None for methane.  A pairing
+            is a hydrogen pairing exactly when this is set, which survives
+            pickling where ``is HYDROGEN_5500K`` does not.
     """
 
     name: str
@@ -92,6 +129,12 @@ class ChamberPairing:
     plug_ratio: float = PLUG_RATIO
     pulse_rate: u.Quantity = field(default_factory=lambda: PULSE_RATE)
     extension_mass: Optional[u.Quantity] = None
+    storage: Optional[HydrogenStorage] = None
+
+    @property
+    def hydrogen(self) -> bool:
+        """Whether the charge is hydrogen."""
+        return self.storage is not None
 
 
 #: Closing speed ``tab:wall_pairings`` sizes the charges at: the 2.5 kg rod's.
@@ -103,8 +146,43 @@ REFERENCE_CLOSING_SPEED = 75.0 * u.km / u.s
 #: the pulse is in bonds at peak and the A/A* = 300 nozzle returns 94% of them
 #: (``tab:nozzle_area_ratio``), so the ceiling is 1 - 0.36 x 0.06 = 0.978.
 HYDROGEN_5500K = ChamberPairing(
-    "H2 5500 K", 5500.0 * u.K, 24.0, 32.0 * u.t, 0.205, 1.0 - 0.36 * (1.0 - 0.94)
+    "H2 5500 K",
+    5500.0 * u.K,
+    24.0,
+    32.0 * u.t,
+    0.205,
+    1.0 - 0.36 * (1.0 - 0.94),
+    storage=LIQUID_HYDROGEN,
 )
+
+
+def stored_as(pairing: ChamberPairing, storage: HydrogenStorage) -> ChamberPairing:
+    """A hydrogen pairing with its charge stored another way (ADR 0051).
+
+    The tank scales with the charge's volume, so its fraction falls in
+    proportion to the density gained.  Nothing else about the chamber changes.
+
+    Args:
+        pairing: A hydrogen pairing.
+        storage: The new storage.
+
+    Returns:
+        The pairing.
+
+    Raises:
+        ValueError: If ``pairing`` is not hydrogen.
+    """
+    if pairing.storage is None:
+        raise ValueError("only a hydrogen pairing has a storage to change")
+    ratio = float((pairing.storage.density / storage.density).to_value(u.one))
+    return replace(
+        pairing,
+        name=f"{pairing.name}, {storage.name}",
+        tank_fraction=pairing.tank_fraction * ratio,
+        storage=storage,
+    )
+
+
 #: Methane at 7000 K on Cr-Mo steel lined with 0.2 mm of pitch
 #: (``tab:wall_pairings``): 496 bar peak, about a 19 t wall; 0.034 kg of tank
 #: per kg of liquid methane.  69% of the pulse is in bonds at peak and even with
