@@ -15,14 +15,21 @@ from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_3000K,
     HYDROGEN_5500K,
+    HYDROGEN_SPHERE_GAS,
     LIQUID_HYDROGEN,
     METHANE_7000K,
+    METHANE_SURVIVABLE_GAS,
     PLUG_RATIO,
     ROD_MASS,
     SLUSH_HYDROGEN,
+    SPHERE_THROAT_AREA,
+    SPHERE_VOLUME,
     SURVIVABLE_IMPULSE,
+    SURVIVABLE_THROAT_AREA,
+    SURVIVABLE_VOLUME,
     ChamberPairing,
     absolute_efficiency,
+    blowdown_time,
     chamber_departure_burn,
     effective_isp,
     efficiency_for_impulse,
@@ -319,3 +326,32 @@ def test_the_3000_k_charge_is_sized_by_the_equilibrium_energy() -> None:
         float(sized.to_value(u.one)), abs=0.1
     )
     assert HYDROGEN_3000K.hydrogen
+
+
+def test_the_hydrogen_sphere_empties_on_the_papers_31_ms() -> None:
+    """The parent's e-fold time for hydrogen at V/A* ~ 100 m is ~31 ms."""
+    e = blowdown_time(
+        SPHERE_VOLUME, SPHERE_THROAT_AREA, HYDROGEN_SPHERE_GAS, np.exp(-1)
+    )
+    assert e.to_value(u.ms) == pytest.approx(31.0, abs=2.0)
+
+
+def test_two_hertz_leaves_the_methane_chamber_time_to_refill_and_four_does_not() -> (
+    None
+):
+    """Emptying the 212 m^3 chamber to its ~1 bar warm fill takes 278 ms at
+    this solve's sound speed and 336 ms at the parent's 3.7 km/s (ADR 0053)."""
+    gas = METHANE_SURVIVABLE_GAS
+    to_fill = (1.0 / 94.0) ** (1.0 / gas.gamma)
+    fast = blowdown_time(SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill)
+    slow = blowdown_time(
+        SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill, 3.7 * u.km / u.s
+    )
+    assert fast.to_value(u.ms) == pytest.approx(278.0, abs=3.0)
+    assert slow.to_value(u.ms) == pytest.approx(336.0, abs=3.0)
+    assert 250.0 < fast.to_value(u.ms) < slow.to_value(u.ms) < 500.0 - 150.0
+
+
+def test_blowdown_rejects_an_impossible_target() -> None:
+    with pytest.raises(ValueError, match="mass_left"):
+        blowdown_time(SPHERE_VOLUME, SPHERE_THROAT_AREA, HYDROGEN_SPHERE_GAS, 1.0)

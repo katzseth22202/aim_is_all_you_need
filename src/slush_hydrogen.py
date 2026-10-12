@@ -25,6 +25,7 @@ Run ``make slush-hydrogen`` (a few minutes).
 from dataclasses import replace
 from typing import List, Tuple
 
+from astropy import units as u
 from tabulate import tabulate
 
 from src.chamber_isp import (
@@ -58,7 +59,9 @@ EFFICIENCY_3000K = 0.85**2
 def designs() -> List[Design]:
     """The 5500 K chamber as liquid, slush, and slush with 5% cryostats, at its
     solved efficiency; the 3000 K chamber as liquid and slush at 85% of ideal
-    velocity, and as slush at the 5500 K chamber's solved efficiency."""
+    velocity, and as slush at the 5500 K chamber's solved efficiency.  The
+    5500 K slush chamber also at 2 Hz, the rate a bulged hydrogen chamber
+    would likely need (ADR 0053)."""
     eta = SOLVED_EFFICIENCY[HYDROGEN_5500K.name]
     slush = stored_as(HYDROGEN_5500K, SLUSH_HYDROGEN)
     heavy = stored_as(
@@ -70,6 +73,11 @@ def designs() -> List[Design]:
         DESIGNS[4],
         Design("Hydrogen, slush", slush, eta),
         Design("Hydrogen, slush, 5% cryostats", heavy, eta),
+        Design(
+            "Hydrogen, slush, 2 Hz",
+            replace(slush, name=f"{slush.name}, 2 Hz", pulse_rate=2.0 / u.s),
+            eta,
+        ),
         Design("H2 3000 K", HYDROGEN_3000K, EFFICIENCY_3000K),
         Design("H2 3000 K, slush", cool, EFFICIENCY_3000K),
         Design(f"H2 3000 K, slush, eta {eta:g}", cool, eta),

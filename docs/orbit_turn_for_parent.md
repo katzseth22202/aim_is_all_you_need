@@ -306,6 +306,16 @@ Earth-turn study, each doubling of burn time cost about 8.5% of delivered mass.
 For the methane chamber, quote that study's 2,500 s case, not the 1,200 s
 reference.
 
+**The blowdown, computed (ADR 0053).** The methane chamber reaches its ~1 bar fill
+pressure 278-336 ms after the pulse. That leaves 164-222 ms of the 500 ms period
+for films, plug, fill and lock, so 2 Hz fits. At 4 Hz the blowdown alone overruns
+the 250 ms period. The 20 m3 hydrogen sphere needs 135 ms at 4 Hz, which is tight
+but fits. A bulged hydrogen chamber would likely run at 2 Hz. For hydrogen slush
+with recycled tanks, that drops growth from 2.88 to 2.60 and raises the cost from
+$105 to $116/kg. Shrinking the methane chamber cuts blowdown in proportion: 142 ms
+at 106 m3, 73 ms at 53 m3. That would open 4 Hz, if the companion simulation finds
+the smaller chamber's wall survives.
+
 Proposed wording:
 
 > The methane chamber is the one we can build first, and it is slow. Its bulged

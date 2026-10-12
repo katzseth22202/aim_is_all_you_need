@@ -361,6 +361,14 @@ pairing is hydrogen when `ChamberPairing.storage` is set. Growth 2.418 -> 2.560;
 (a stored-as pairing is a different object); claiming solid hydrogen removes the
 tank's structure (its mass is volume and loads, not pressure).
 
+**Chamber blowdown**:
+The time a pulsed chamber takes to empty through its choked throat
+(`chamber_isp.blowdown_time`, ADR 0053); it goes as `V / (A* a)`. The survivable
+methane chamber (212 m3, 1.33 m2) needs 278-336 ms to reach its fill pressure, so
+2 Hz fits and 4 Hz cannot. The hydrogen sphere needs 135 ms at 4 Hz. _Avoid_:
+quoting the e-fold time as the blowdown (refill waits for ~97% of the mass to
+leave); crediting a bulged hydrogen chamber with the sphere's 4 Hz.
+
 **Overtake-only pusher at Earth**:
 A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S
 energy in 147.5 s, but Earth turns its incoming-stream-aligned trajectory only

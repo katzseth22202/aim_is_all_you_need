@@ -234,6 +234,88 @@ SURVIVABLE_IMPULSE = {100: 906.0 * u.kN * u.s, 300: 971.0 * u.kN * u.s}
 #: Its nozzle extensions: the 2.19 t scaled by exit area, 13.0 m and 22.5 m exits.
 SURVIVABLE_EXTENSION_MASS = {100: 4.9 * u.t, 300: 14.7 * u.t}
 
+#: The survivable chamber's volume and throat (parent ``tab:one_chamber``).
+SURVIVABLE_VOLUME = 212.0 * u.m**3
+SURVIVABLE_THROAT_AREA = 1.33 * u.m**2
+#: The 20 m^3 sphere's throat at A/A* = 300 behind the 8.7 m exit.
+SPHERE_VOLUME = 20.0 * u.m**3
+SPHERE_THROAT_AREA = 59.4468 / 300.0 * u.m**2
+
+
+@dataclass(frozen=True)
+class BlowdownGas:
+    """A chamber's gas at peak, for the blowdown estimate (ADR 0053).
+
+    Cantera ``gri30`` equilibrium at the peak state (polynomials extrapolated
+    above 5000 K).  ``gamma`` is the effective isentropic exponent of an
+    equilibrium expansion to a tenth of the density, which counts the heat that
+    recombination returns; it is lower than the frozen value.
+
+    Attributes:
+        name: Label.
+        peak_pressure: Pressure at peak.
+        gamma: Effective isentropic exponent over the blowdown.
+        sound_speed: ``sqrt(gamma p / rho)`` at peak.
+    """
+
+    name: str
+    peak_pressure: u.Quantity
+    gamma: float
+    sound_speed: u.Quantity
+
+
+#: The survivable methane chamber: 122 kg of methane and rod in 212 m^3 at
+#: 7000 K, 94 bar (the parent's ~94 bar).  The parent's own blowdown uses
+#: 3.7 km/s, a slower bound kept beside this one.
+METHANE_SURVIVABLE_GAS = BlowdownGas(
+    "CH4 7000 K, 212 m^3", 94.0 * u.bar, 1.225, 4.48 * u.km / u.s
+)
+#: The 20 m^3 hydrogen sphere: 60 kg at 5500 K, 806 bar (the table's 818).
+HYDROGEN_SPHERE_GAS = BlowdownGas(
+    "H2 5500 K, 20 m^3", 806.0 * u.bar, 1.194, 5.66 * u.km / u.s
+)
+
+
+def blowdown_time(
+    volume: u.Quantity,
+    throat_area: u.Quantity,
+    gas: BlowdownGas,
+    mass_left: float,
+    sound_speed: Optional[u.Quantity] = None,
+) -> u.Quantity:
+    """Time for a chamber to empty to ``mass_left`` of its peak charge.
+
+    The quasi-steady adiabatic blowdown of ADR 0049: a choked throat, the
+    gas expanding isentropically behind it, discharge coefficient one,
+
+        m / m0 = (1 + q lambda t)^(-1/q),   q = (gamma - 1) / 2,
+        lambda = (A* / V) a0 (2 / (gamma + 1))^((gamma + 1) / (2 (gamma - 1))).
+
+    Pressure falls as ``(m / m0)^gamma``, so a pressure target is
+    ``mass_left = (p / p0)^(1 / gamma)``.
+
+    Args:
+        volume: Chamber volume.
+        throat_area: Throat area.
+        gas: The gas at peak.
+        mass_left: Share of the peak mass still inside, in (0, 1).
+        sound_speed: Overrides ``gas.sound_speed``.
+
+    Returns:
+        The time.
+
+    Raises:
+        ValueError: If ``mass_left`` is outside (0, 1).
+    """
+    if not 0.0 < mass_left < 1.0:
+        raise ValueError("mass_left must lie in (0, 1)")
+    gamma = gas.gamma
+    speed = gas.sound_speed if sound_speed is None else sound_speed
+    q = 0.5 * (gamma - 1.0)
+    choke = (2.0 / (gamma + 1.0)) ** ((gamma + 1.0) / (2.0 * (gamma - 1.0)))
+    rate = (throat_area / volume * speed * choke).to(1 / u.s)
+    return ((mass_left ** (-q) - 1.0) / (q * rate)).to(u.ms)
+
 
 def survivable_methane(
     area_ratio: int,
