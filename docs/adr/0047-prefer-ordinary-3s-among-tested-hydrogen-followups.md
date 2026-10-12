@@ -6,6 +6,15 @@ Status: Accepted as the working comparison baseline, not a global optimum.
 
 ## Decision
 
+> **Superseded in part, 2026-10-12 (ADR 0049).** The 3,000 K and 3,500 K rows
+> used hot energies scaled linearly from 5,500 K (`docs/hydrogen_followup_trajectory.py`
+> carries `26.76 * 5500 / T`). At 3,000 K that overstates the energy by two-thirds.
+> Every hydrogen-3000/3500 price below is optimistic and void for quoting. The
+> ordering among these variants shares the error and was not re-run. The error
+> only flatters the cooler cases, so 5,500 K with recovered hardware ($181.89/kg,
+> ADR 0046) stays cheaper than any of them.
+
+
 Keep the ordinary 3S architecture with recovered departure hardware (ADR 0046)
 as the preferred tested baseline. Raising hydrogen temperature to 3500 K,
 advancing the growth wave, or selecting 2S whenever the correction is below

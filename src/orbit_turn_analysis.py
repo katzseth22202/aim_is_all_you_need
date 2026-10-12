@@ -33,6 +33,7 @@ Run ``make orbit-turn`` for the compact report.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import List, Tuple
 
 import numpy as np
@@ -44,7 +45,6 @@ from scipy.integrate import OdeSolution, solve_ivp
 from scipy.optimize import brentq, minimize, minimize_scalar
 
 from src.astro_constants import PUFFSAT_CYCLE_ORBIT_PERIOD
-from src.chamber_isp import HYDROGEN_5500K, REFERENCE_CLOSING_SPEED
 from src.finite_burn_loss import DEPARTURE_ALTITUDE
 
 THREE_SYNODIC_DEPARTURE_VINF = 11.564279430721319 * u.km / u.s
@@ -58,19 +58,74 @@ UNCANTED_CHAMBER_TEMPERATURE = 3000.0 * u.K
 UNCANTED_EXHAUST_VELOCITY_EFFICIENCY = 0.85
 PUSHER_PLATE_ACCELERATION = 4.0 * g0
 
-# The 5500 K chamber's reference loading pins mixed hot-gas energy without
-# inventing a new hydrogen heat capacity.  Scale that energy linearly with
-# temperature for the requested 3000 K sensitivity.  The new case has no plug:
-# the reference plug appears here only because it shared the 5500 K energy.
-_REFERENCE_MIXED_SPECIFIC_ENERGY = (
-    0.5
-    * REFERENCE_CLOSING_SPEED**2
-    / (HYDROGEN_5500K.reference_slug_ratio + 1.0 + HYDROGEN_5500K.plug_ratio)
+#: Hydrogen loading the 3000 K hot-energy solve is evaluated at: about 100 kg
+#: in the 20 m^3 chamber.  At 1 kg/m^3 the energy moves by under 3%.
+UNCANTED_CHAMBER_DENSITY = 5.0 * u.kg / u.m**3
+#: Cold reference for the hot energy: molecular hydrogen gas at 200 K, the
+#: floor of the NASA polynomials.  Warming the stored liquid from 20 K to
+#: 200 K (roughly another 1.5-2 MJ/kg) is not charged, so ``k`` runs a few
+#: percent high, slightly favoring the 3000 K case.
+_COLD_REFERENCE_TEMPERATURE = 200.0 * u.K
+
+
+@lru_cache(maxsize=None)
+def _hydrogen_internal_energy(temperature_k: float, density: float) -> float:
+    """Equilibrium specific internal energy of hydrogen above 200 K, in J/kg."""
+
+    import cantera as ct
+
+    hot = ct.Solution("gri30.yaml")
+    hot.TDX = temperature_k, density, "H2:1"
+    hot.equilibrate("TV")
+    cold = ct.Solution("gri30.yaml")
+    cold.TPX = float(_COLD_REFERENCE_TEMPERATURE.to_value(u.K)), ct.one_atm, "H2:1"
+    return float(hot.int_energy_mass - cold.int_energy_mass)
+
+
+def hydrogen_hot_energy(
+    temperature: u.Quantity,
+    density: u.Quantity = UNCANTED_CHAMBER_DENSITY,
+) -> u.Quantity:
+    """Energy the impact must leave in each kilogram of the hot charge.
+
+    The chamber is sealed while the pulse thermalizes and then blows down, so
+    its energy budget is the equilibrium *internal* energy, not the enthalpy a
+    steady-flow nuclear rocket uses: a full blowdown to vacuum turns at most
+    ``u`` into directed kinetic energy, which is ``1/gamma`` of ``h``.  The
+    projectile is charged at hydrogen's specific energy, which overstates its
+    share for any condensed projectile.  Solved with Cantera's ``gri30.yaml``
+    ideal-gas equilibrium (H and H2 at temperature and density).
+
+    Args:
+        temperature: Common hot-mixture temperature after impact.
+        density: Hydrogen density in the closed chamber.
+
+    Returns:
+        Specific internal energy above molecular hydrogen gas at 200 K.
+
+    Raises:
+        ValueError: If temperature or density is nonpositive.
+    """
+
+    if temperature <= 0.0 * u.K or density <= 0.0 * u.kg / u.m**3:
+        raise ValueError("temperature and density must be positive")
+    return (
+        _hydrogen_internal_energy(
+            float(temperature.to_value(u.K)), float(density.to_value(u.kg / u.m**3))
+        )
+        * u.J
+        / u.kg
+    ).to(u.MJ / u.kg)
+
+
+# Earlier revisions scaled the 5500 K pairing's mixed energy linearly to
+# 3000 K (57.3 MJ/kg).  At 5500 K about a third of that energy sits in
+# dissociation that 3000 K hydrogen (0.3% atomic) does not have, so the
+# scaling overstated the energy by two-thirds (ADR 0049).
+UNCANTED_MIXED_SPECIFIC_ENERGY = hydrogen_hot_energy(UNCANTED_CHAMBER_TEMPERATURE)
+UNCANTED_IDEAL_EXHAUST_SPEED = np.sqrt(2.0 * UNCANTED_MIXED_SPECIFIC_ENERGY).to(
+    u.km / u.s
 )
-UNCANTED_MIXED_SPECIFIC_ENERGY = _REFERENCE_MIXED_SPECIFIC_ENERGY * (
-    UNCANTED_CHAMBER_TEMPERATURE / HYDROGEN_5500K.temperature
-)
-UNCANTED_IDEAL_EXHAUST_SPEED = np.sqrt(2.0 * UNCANTED_MIXED_SPECIFIC_ENERGY)
 UNCANTED_EXHAUST_SPEED = (
     UNCANTED_EXHAUST_VELOCITY_EFFICIENCY * UNCANTED_IDEAL_EXHAUST_SPEED
 )
@@ -269,7 +324,11 @@ class UncantedThermalBurn:
         off_head_on_maximum: Largest departure from head-on during the burn.
         integrated_axial_delta_v: Integral of axial chamber acceleration.
         integrated_lateral_delta_v: Signed integral of uncancelled lateral
-            acceleration in the instantaneous velocity frame.
+            acceleration in the instantaneous velocity frame.  The nozzle is
+            axial, so all of it is the projectile's.
+        integrated_projectile_axial_delta_v: The projectile's own share of the
+            axial integral, ``w_vec / k`` along the velocity.  Negative while
+            the collision is head-on: the impactor knocks the vehicle back.
         integrated_thrust_delta_v: Integral of the thrust-acceleration
             vector's magnitude.
         impulsive_delta_v: Tangential impulse at the reference periapsis for
@@ -304,6 +363,7 @@ class UncantedThermalBurn:
     off_head_on_maximum: u.Quantity
     integrated_axial_delta_v: u.Quantity
     integrated_lateral_delta_v: u.Quantity
+    integrated_projectile_axial_delta_v: u.Quantity
     integrated_thrust_delta_v: u.Quantity
     impulsive_delta_v: u.Quantity
     finite_burn_penalty: u.Quantity
@@ -581,9 +641,9 @@ def uncanted_slug_ratio(
 ) -> float:
     """Hydrogen mass per projectile mass that holds one chamber temperature.
 
-    The hot-mixture specific energy is anchored to the repository's 5500 K
-    hydrogen chamber and scaled linearly with temperature.  With no carried
-    plug, energy conservation gives ``k = w^2 / (2 u_hot) - 1``.
+    The hot-mixture specific energy is hydrogen's equilibrium internal energy
+    (:func:`hydrogen_hot_energy`).  With no carried plug, energy conservation
+    gives ``k = w^2 / (2 u_hot) - 1``.
 
     Args:
         closing_speed: Projectile speed relative to the vehicle.
@@ -598,9 +658,7 @@ def uncanted_slug_ratio(
 
     if temperature <= 0.0 * u.K:
         raise ValueError("temperature must be positive")
-    hot_energy = _REFERENCE_MIXED_SPECIFIC_ENERGY * (
-        temperature / HYDROGEN_5500K.temperature
-    )
+    hot_energy = hydrogen_hot_energy(temperature)
     ratio = float((closing_speed**2 / (2.0 * hot_energy)).to_value(u.one)) - 1.0
     if ratio <= 0.0:
         raise ValueError("closing speed cannot heat the projectile to temperature")
@@ -1151,9 +1209,7 @@ def uncanted_thermal_burn(
         raise ValueError("exhaust_velocity_efficiency must be in (0, 1]")
     if missed_periapsis_floor is not None and missed_periapsis_floor < 0.0 * u.km:
         raise ValueError("missed_periapsis_floor must be nonnegative")
-    hot_energy_quantity = _REFERENCE_MIXED_SPECIFIC_ENERGY * (
-        temperature / HYDROGEN_5500K.temperature
-    )
+    hot_energy_quantity = hydrogen_hot_energy(temperature)
     hot_energy = float(hot_energy_quantity.to_value(u.km**2 / u.s**2))
     exhaust_speed = exhaust_velocity_efficiency * float(np.sqrt(2.0 * hot_energy))
     variable_altitude = front_side or missed_periapsis_floor is not None
@@ -1284,6 +1340,7 @@ def uncanted_thermal_burn(
     off_head_on = np.zeros(_PROFILE_SAMPLES)
     axial_impulse = np.zeros(_PROFILE_SAMPLES)
     lateral_impulse = np.zeros(_PROFILE_SAMPLES)
+    projectile_axial_impulse = np.zeros(_PROFILE_SAMPLES)
     route_clearances = np.zeros(_PROFILE_SAMPLES)
     missed_periapsis_altitudes = np.zeros(_PROFILE_SAMPLES)
     for index, (position, velocity) in enumerate(
@@ -1313,6 +1370,7 @@ def uncanted_thermal_burn(
         off_head_on[index] = np.pi - abs(angle)
         axial_impulse[index] = float(axis @ impulse)
         lateral_impulse[index] = float(axis[0] * impulse[1] - axis[1] * impulse[0])
+        projectile_axial_impulse[index] = float(axis @ relative) / slug_ratio
         route_clearances[index] = min(state_altitude, route_clearance)
         missed_periapsis_altitudes[index] = route.periapsis_radius - earth_radius
 
@@ -1325,6 +1383,9 @@ def uncanted_thermal_burn(
     )
     integrated_lateral = float(
         np.trapezoid(acceleration_scale * lateral_impulse, evaluation.times)
+    )
+    integrated_projectile_axial = float(
+        np.trapezoid(acceleration_scale * projectile_axial_impulse, evaluation.times)
     )
     integrated_thrust = float(
         np.trapezoid(
@@ -1367,6 +1428,7 @@ def uncanted_thermal_burn(
         off_head_on_maximum=(float(np.max(off_head_on)) * u.rad).to(u.deg),
         integrated_axial_delta_v=integrated_axial * u.km / u.s,
         integrated_lateral_delta_v=integrated_lateral * u.km / u.s,
+        integrated_projectile_axial_delta_v=integrated_projectile_axial * u.km / u.s,
         integrated_thrust_delta_v=integrated_thrust * u.km / u.s,
         impulsive_delta_v=impulsive_delta_v * u.km / u.s,
         finite_burn_penalty=(integrated_thrust - impulsive_delta_v) * u.km / u.s,
@@ -1720,9 +1782,10 @@ def _print_report() -> None:
             f"{thermal.finite_burn_penalty.to_value(u.m / u.s):.1f} m/s"
         )
         print(
-            "    axial / signed lateral dv: "
-            f"{thermal.integrated_axial_delta_v.to_value(u.km / u.s):.3f} / "
-            f"{thermal.integrated_lateral_delta_v.to_value(u.km / u.s):.3f} km/s"
+            "    axial (projectile share) / signed lateral dv: "
+            f"{thermal.integrated_axial_delta_v.to_value(u.km / u.s):.3f} "
+            f"({thermal.integrated_projectile_axial_delta_v.to_value(u.km / u.s):.3f})"
+            f" / {thermal.integrated_lateral_delta_v.to_value(u.km / u.s):.3f} km/s"
         )
         print(
             "    intercept clearance / missed-shot periapsis / Earth-impact share: "

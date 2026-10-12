@@ -1,6 +1,6 @@
 # Earth occults the canted 3S mirror, and a 20-minute burn stays centered
 
-Status: proposed
+Status: accepted (3000 K sections re-solved 2026-10-12; see ADR 0049)
 
 Date: 2026-10-09
 
@@ -59,10 +59,12 @@ the fixed-`k` angle ledger above:
 
 - the projectile is externally supplied and no plug is carried;
 - its impact energy heats the projectile plus hydrogen to 3000 K;
-- hot-mixture energy is anchored to the repository's 5500 K hydrogen pairing and
-  scaled linearly with temperature, giving 57.328 MJ/kg;
-- ideal exhaust is 10.708 km/s and the nozzle supplies 85% of that **velocity**,
-  9.102 km/s (72.25% of ideal directed kinetic energy);
+- hot-mixture energy is hydrogen's equilibrium **internal** energy at 3000 K
+  and 5 kg/m3 (Cantera, `gri30.yaml`), 34.53 MJ/kg above 200 K gas.  The
+  chamber is sealed while the pulse thermalizes and then blows down, so
+  internal energy, not enthalpy, is the budget;
+- ideal exhaust is 8.310 km/s and the nozzle supplies 85% of that **velocity**,
+  7.064 km/s (72.25% of ideal directed kinetic energy);
 - hydrogen loading changes with closing speed as
   `k = w^2 / (2 u_hot) - 1`; and
 - the axial nozzle does not cancel the projectile's lateral momentum.
@@ -107,7 +109,7 @@ and is not free steering on the existing closure.
 This exposes a sign/visibility gap in ADR 0012's `departure-hyperbola mirror`.
 That calculation folds the speed through Earth's gravity but rotates the direction
 algebraically, without constructing the incoming Earth hyperbola.  Its quoted free
-mirror gain is therefore an upper bound, not a flyable choice.  This proposed ADR
+mirror gain is therefore an upper bound, not a flyable choice.  This ADR
 records the correction but does not yet rewrite the circular-family optimizer or
 the parent paper's 150.4-degree turnaround figure.
 
@@ -150,30 +152,31 @@ means; the usual and useful convention is the osculating unpowered one at igniti
 
 ### Keeping the side kick does not make the front side optimal
 
-At 45 and 73 km/s closing speed, the 3000 K energy rule gives `k = 16.66` and
-`45.48`; the optimized burns land inside that bracket.  The vector-closed results
+At 45 and 73 km/s closing speed, the 3000 K energy rule gives `k = 28.32` and
+`76.17`; the optimized burns land inside that bracket.  The vector-closed results
 are:
 
 | axial-nozzle solution | parking periapsis | burn before/after periapsis | closing speed | `k` | off head-on | H2 spent / delivered | `m0/mf` | external projectile | total / impulse delta-v | finite penalty | intercept clearance |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| naturally visible side | **600 km** | 583 / 617 s | 65.82-68.77 km/s | 36.79-40.25 | 4.33 -> 23.65 deg | 0.5008 / **0.4992** | 2.003 | 0.01275 | 5.339 / 5.119 km/s | 220 m/s | 706 km |
-| less-head-on front side | **3,866 km** | 0 / 1,200 s | 61.74-66.85 km/s | 32.25-37.97 | 44.82 -> 31.34 deg | 0.5331 / **0.4669** | 2.142 | 0.01524 | 6.056 / 5.796 km/s | 259 m/s | grazing |
+| naturally visible side | **600 km** | 612 / 588 s | 65.74-68.85 km/s | 61.58-67.63 | 4.52 -> 23.48 deg | 0.5779 / **0.4221** | 2.369 | 0.00879 | 5.336 / 5.119 km/s | 217 m/s | 716 km |
+| less-head-on front side | **4,106 km** | 0 / 1,200 s | 61.54-66.83 km/s | 53.85-63.68 | 45.81 -> 31.48 deg | 0.6160 / **0.3840** | 2.604 | 0.01055 | 6.066 / 5.837 km/s | 229 m/s | grazing |
 
-The projectile really is a small part of the flow: only 1.28% of initial vehicle
-mass arrives externally in the winning case, against 50.08% spent as onboard
+The projectile really is a small part of the flow: only 0.88% of initial vehicle
+mass arrives externally in the winning case, against 57.79% spent as onboard
 hydrogen.  Its uncancelled sideways contribution is nevertheless measurable.  It
-integrates to 0.274 km/s in the rotating local frame, changes sign near head-on and
-does **not** drive the vehicle into Earth; the powered path bottoms at 706 km.
-The finite duration is not hidden: the full thrust-vector integral is 5.339 km/s,
-220 m/s above the 5.119 km/s impulse, and the propagated endpoint closes on the
+integrates to 0.205 km/s in the rotating local frame, changes sign near head-on and
+does **not** drive the vehicle into Earth; the powered path bottoms at 716 km.
+Along the axis the projectile is a debit throughout, -0.854 km/s (ADR 0049).
+The finite duration is not hidden: the full thrust-vector integral is 5.336 km/s,
+217 m/s above the 5.119 km/s impulse, and the propagated endpoint closes on the
 specified 11.56427943 km/s excess vector in both speed and direction.
 
 The front side does benefit from its less-head-on momentum term at a fixed altitude,
-but it cannot use the instantaneous 3,037 km grazing altitude for an entire finite
-burn.  Joint clearance and 3S-vector closure move its optimum to a 3,866 km parking
+but it cannot use the instantaneous grazing altitude for an entire finite burn.
+Joint clearance and 3S-vector closure move its optimum to a 4,106 km parking
 periapsis and put the whole burn after periapsis.  Lost Oberth leverage then wins:
-it delivers **6.5% less vehicle mass** from the same ignition mass, or consumes
-about 14% more hydrogen per delivered kilogram (1.142 versus 1.003).
+it delivers **9.0% less vehicle mass** from the same ignition mass, or consumes
+about 17% more hydrogen per delivered kilogram (1.604 versus 1.369).
 
 Thus accepting the side kick is sound on the visible side, but raising periapsis to
 recover the front side is not worth it under these assumptions.  A true overtaking
@@ -185,7 +188,7 @@ head-on.
 
 The 600 km mass optimum is reachable but not fail-safe.  Later projectiles are
 intercepted inbound; if they miss, their unconsumed continuations reach as low as
-**3,104 km below the surface**.  Weighted by projectile flow, **44.6%** of the
+**2,983 km below the surface**.  Weighted by projectile flow, **42.8%** of the
 stream is Earth-intersecting after a miss.  Saying that Earth does not occult the
 intercept does not license saying every miss flies by harmlessly.
 
@@ -193,58 +196,54 @@ Requiring every missed projectile to keep at least a 600 km periapsis gives:
 
 | miss-safe solution | parking periapsis | burn before/after | `k` | off head-on | H2 propellant / delivered | `m0/mf` | total / impulse delta-v | finite penalty | vehicle/intercept minimum | missed-shot minimum |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| visible-side safe | **2,670 km** | 1,200 / 0 s | 34.62-40.74 | 2.48 -> 21.07 deg | 53.14% / **46.86%** | 2.134 | 5.798 / 5.576 km/s | 222 m/s | 3,082 km | **600 km** |
-| front-side safe | **4,535 km** | 0 / 1,200 s | 32.13-37.90 | 43.90 -> 31.42 deg | 53.85% / **46.15%** | 2.167 | 6.144 / 5.908 km/s | 235 m/s | 600 km | **600 km** |
+| visible-side safe | **2,631 km** | 1,200 / 0 s | 58.15-68.36 | 2.46 -> 20.99 deg | 60.86% / **39.14%** | 2.555 | 5.784 / 5.569 km/s | 215 m/s | 3,044 km | **600 km** |
+| front-side safe | **4,788 km** | 0 / 1,200 s | 53.66-63.56 | 44.93 -> 31.57 deg | 62.15% / **37.85%** | 2.642 | 6.153 / 5.949 km/s | 204 m/s | 600 km | **600 km** |
 
-The safety floor costs the winning visible-side design **6.1% of delivered mass**
-relative to the intercept-only optimum (0.4686 versus 0.4992), but removes the
-Earth-impact miss corridor.  It still beats the safe front-side mirror by 1.5% in
-delivered mass.  If harmless misses are an architecture requirement, the 2,670 km,
+The safety floor costs the winning visible-side design **7.3% of delivered mass**
+relative to the intercept-only optimum (0.3914 versus 0.4221), but removes the
+Earth-impact miss corridor.  It still beats the safe front-side mirror by 3.4% in
+delivered mass.  If harmless misses are an architecture requirement, the 2,631 km,
 all-before-periapsis solution is the recommendation from this model.
 
-### Lower thrust reverses the miss-safe mirror choice
+### Lower thrust costs about 8% of delivered mass per doubling
 
 Stretching the same burn from 1,200 to **2,500 seconds**, while retaining the 600 km
-missed-projectile floor, raises the periapsis demanded by both mirror families.  The
-front-side family now wins narrowly:
+missed-projectile floor, raises the periapsis demanded by both mirror families.
+The visible side still wins, now by only 0.7%:
 
 | 2,500 s miss-safe solution | parking periapsis | burn before/after | `k` | H2 propellant / delivered | external impactor / H2 | total / impulse delta-v | finite penalty | missed-shot minimum |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| visible-side safe | 4,640 km | 2,500 / 0 s | 32.72-39.17 | 56.52% / 43.48% | 2.76% | 6.363 / 5.925 km/s | 438 m/s | 600 km |
-| front-side safe | **5,566 km** | 0 / 2,500 s | 31.34-37.26 | **56.14% / 43.86%** | **2.92%** | **6.526 / 6.068 km/s** | **458 m/s** | **600 km** |
-
-Thus the optimum is an all-after-periapsis front-side burn.  It uses external
-impactor mass equal to **2.92% of onboard hydrogen** (one impactor kilogram per
-34.26 kg H2), or 1.639% of ignition mass.  Relative to the 1,200 s recommended
-solution, total integrated delta-v rises by **0.728 km/s**: 0.492 km/s comes from
-the higher-periapsis impulsive requirement and 0.236 km/s from the larger
-finite-burn penalty.  Hydrogen fraction rises by 3.00 percentage points and
-delivered mass falls 6.4% relatively, from 46.86% to 43.86%.  The front-side result
-delivers only 0.87% more than the 2,500 s visible-side alternative, so the reversal
-is real but small on this model.
+| visible-side safe | **4,510 km** | 2,500 / 0 s | 54.99-65.78 | **64.26% / 35.74%** | **1.65%** | **6.336 / 5.904 km/s** | **432 m/s** | 600 km |
+| front-side safe | 5,920 km | 0 / 2,500 s | 52.31-62.54 | 64.49% / 35.51% | 1.75% | 6.542 / 6.120 km/s | 422 m/s | 600 km |
 
 Doubling duration again to **5,000 seconds** remains feasible rather than hitting a
-sharp lower-thrust limit.  The generic short-burn optimizer seed crosses a
-zero-angular-momentum trial route at this duration, so continue numerically from
-the verified 2,500-second solution; this changes only the initial guess, not the
-objective or constraints.  Both mirror families then converge on the exact 3S
-vector:
+sharp lower-thrust limit, and there the front side takes over.  The generic
+short-burn optimizer seed crosses a zero-angular-momentum trial route at this
+duration, so continue numerically from the verified 2,500-second solution; this
+changes only the initial guess, not the objective or constraints.  Both mirror
+families then converge on the exact 3S vector:
 
 | miss-safe duration | winning mirror | parking periapsis | burn before/after | `k` | H2 propellant / delivered | external impactor / H2 | total / impulse delta-v | finite penalty |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| 1,200 s | visible side | 2,670 km | 1,200 / 0 s | 34.62-40.74 | 53.14% / 46.86% | 2.65% | 5.798 / 5.576 km/s | 222 m/s |
-| 2,500 s | front side | 5,566 km | 0 / 2,500 s | 31.34-37.26 | 56.14% / 43.86% | 2.92% | 6.526 / 6.068 km/s | 458 m/s |
-| 5,000 s | front side | **6,905 km** | 0 / 5,000 s | 30.54-36.70 | **58.84% / 41.16%** | **2.975%** | **7.004 / 6.255 km/s** | **748 m/s** |
+| 1,200 s | visible side | 2,631 km | 1,200 / 0 s | 58.15-68.36 | 60.86% / 39.14% | 1.58% | 5.784 / 5.569 km/s | 215 m/s |
+| 2,500 s | visible side | 4,510 km | 2,500 / 0 s | 54.99-65.78 | 64.26% / 35.74% | 1.65% | 6.336 / 5.904 km/s | 432 m/s |
+| 5,000 s | front side | **7,415 km** | 0 / 5,000 s | 50.93-61.62 | **67.21% / 32.79%** | **1.78%** | **7.027 / 6.322 km/s** | **705 m/s** |
 
-The 5,000-second front-side solution uses external impactor mass equal to 2.975%
-of onboard hydrogen (one impactor kilogram per 33.62 kg H2), or 1.750% of ignition
-mass.  Relative to 2,500 seconds, integrated delta-v rises by **0.477 km/s**:
-0.187 km/s is the higher-periapsis impulsive requirement and 0.290 km/s is added
-finite-burn penalty.  Hydrogen rises 2.70 percentage points and delivered mass
-falls 6.16% relatively, from 43.86% to 41.16%.  The visible-side alternative at
-9,321 km delivers only 39.45%, so the front-side choice is now 4.34% better.  Every
-miss still retains exactly the 600 km floor.  Lower thrust therefore still works
-at 5,000 seconds, but the penalty is material and smoothly worsening.
+Each doubling of duration costs about 8.5% of delivered mass relatively
+(39.14% -> 35.74% -> 32.79%) and adds 0.55 then 0.69 km/s of integrated
+delta-v, split between the higher periapsis the miss floor then demands and the
+larger finite-burn penalty.  At 5,000 s the visible-side alternative at 8,946 km
+delivers 31.72%, so the front side is 3.3% better.  Every miss retains exactly the
+600 km floor.  Lower thrust therefore still works, but the penalty is material and
+smoothly worsening: thrust is worth buying, which is the case for the faster
+blowdown of ADR 0049.
+
+An earlier revision of this ADR used a 3000 K hot energy scaled linearly from the
+5500 K pairing (57.33 MJ/kg, 9.10 km/s exhaust).  That overstated the energy by
+two-thirds and every delivered fraction by 6-9 points; it also made the mirror
+reversal appear at 2,500 s instead of 5,000 s.  The Earth geometry, the 20-minute
+turn and the pusher-plate sections below and above did not use it and are
+unchanged.
 
 ### A high-thrust overtake-only plate still cannot make the turn
 
@@ -295,11 +294,12 @@ direction closure even though its projectile route is visible and miss-safe.
   without materially changing the incoming state.
 - The uncanted sensitivity uses constant **hydrogen** mass flow.  Projectile rate
   changes as `1/k`; a fixed pulse cadence would be a different throttle law.
-- Its 3000 K mixed energy is a transparent scaling of the existing 5500 K pairing,
-  not a new equilibrium calculation of hydrogen plus a specified projectile
-  material.  The projectile composition, plug/gate hardware and finite chamber
-  rate could move the absolute delivered fractions.  The full vector momentum,
-  Earth clearance and exact 3S closure are included.
+- Its 3000 K energy is pure hydrogen at equilibrium, charged to the projectile
+  share too, and referenced to 200 K gas rather than 20 K liquid; warming the
+  liquid would add roughly 5% to the energy each kilogram must take up.  The
+  projectile composition, plug/gate hardware and finite chamber rate could move
+  the absolute delivered fractions.  The full vector momentum, Earth clearance
+  and exact 3S closure are included.
 
 ## Reproduction
 

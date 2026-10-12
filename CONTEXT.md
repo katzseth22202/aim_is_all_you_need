@@ -283,7 +283,7 @@ mirror images give the same outgoing excess, so picking the one that rotates the
 thrust axis *toward* the incoming stream is worth ×1.012 / ×1.020 at zero
 propellant — more than any delta-v purchase on the aim trade curve. Same ~18.1° ADR
 0009 counted; now priced.
-**Proposed correction (ADR 0045): the favorable 3S mirror is Earth-occulted.** At
+**Correction (ADR 0045): the favorable 3S mirror is Earth-occulted.** At
 the 600 km burn its least-blocked projectile hyperbola has periapsis 1,905 km below
 the surface; the other mirror is visible and asks only 7.70° of ideal plume cant.
 The incoming asymptote would have to move 27.19° merely to graze Earth. Until the
@@ -294,7 +294,7 @@ an aim comparison once visibility has been established.
 
 **Finite-burn orbit turn**:
 The vehicle-frame angle history during a 20-minute 3S departure on the visible
-mirror (`src/orbit_turn_analysis.py`, `make orbit-turn`, proposed ADR 0045). Fixed
+mirror (`src/orbit_turn_analysis.py`, `make orbit-turn`, ADR 0045). Fixed
 thrust optimizes 599.7/600.3 s about the unpowered orbit's reference periapsis and
 never gets more than 19.81° off head-on; velocity steering optimizes 582.5/617.5 s,
 reaches 23.16° only at cutoff and spends 11.9% of the burn beyond 22°. Plume cant
@@ -305,25 +305,38 @@ the osculating unpowered periapsis used to schedule the burn.
 
 **Uncanted 3000 K sensitivity**:
 Keep the projectile's full side kick, resize hydrogen pulse by pulse to hold the
-mixed gas at 3000 K and take 85% of ideal **exhaust velocity**. The exact-vector
-20-minute optimum stays on the visible 600 km side: `k = 36.79-40.25`, 0.274 km/s
-signed lateral contribution, 706 km powered-path minimum and 0.4992 delivered per
-unit ignition mass. Opening the less-head-on front side over the whole burn needs a
-3,866 km parking periapsis and an all-after-periapsis burn; it delivers only 0.4669,
-6.5% less. The 600 km intercept is visible but a miss is not harmless: 44.6% of
-projectile mass would continue onto Earth. Requiring every miss to keep a 600 km
-periapsis moves the winning visible-side solution to 2,670 km, all before periapsis,
-5.798 km/s integrated delta-v and 0.4686 delivered (`m0/mf = 2.134`); its vehicle
-and intended stream stay above 3,082 km. At 2,500 seconds the miss-safe optimum
-switches narrowly to the front side: 5,566 km periapsis, all after periapsis,
-6.526 km/s integrated delta-v, 0.5614 H2 fraction and 0.4386 delivered; external
-impactor mass is 2.92% of onboard hydrogen. At 5,000 seconds that same safe family
-still closes, but at 6,905 km periapsis, 7.004 km/s integrated delta-v, 0.5884 H2
-fraction and 0.4116 delivered; impactor mass is 2.975% of H2. _Avoid_: equating
-visibility before
-interception with a safe continuation after a miss; derating projectile momentum
-with nozzle efficiency, since it is a full signed control-volume term separate
-from the 0.85 exhaust-velocity factor.
+mixed gas at 3000 K and take 85% of ideal **exhaust velocity**. The hot energy is
+hydrogen's equilibrium internal energy, 34.53 MJ/kg (**blowdown energy budget**),
+so the exhaust is 7.06 km/s. The exact-vector 20-minute optimum stays on the
+visible 600 km side: `k = 61.6-67.6`, 0.205 km/s signed lateral contribution
+against a 0.854 km/s axial projectile debit, 716 km powered-path minimum and
+0.4221 delivered per unit ignition mass. Opening the less-head-on front side over
+the whole burn needs a 4,106 km parking periapsis and an all-after-periapsis burn;
+it delivers only 0.3840, 9.0% less. The 600 km intercept is visible but a miss is
+not harmless: 42.8% of projectile mass would continue onto Earth. Requiring every
+miss to keep a 600 km periapsis moves the winning visible-side solution to
+2,631 km, all before periapsis, 5.784 km/s integrated delta-v and 0.3914 delivered
+(`m0/mf = 2.555`); its vehicle and intended stream stay above 3,044 km. At 2,500
+seconds the visible side still wins narrowly (4,510 km, 0.3574 delivered); at
+5,000 seconds the front side takes over (7,415 km periapsis, all after periapsis,
+7.027 km/s integrated delta-v, 0.3279 delivered). Each doubling of burn time costs
+about 8.5% of delivered mass. _Avoid_: equating visibility before interception
+with a safe continuation after a miss; derating projectile momentum with nozzle
+efficiency, since it is a full signed control-volume term separate from the 0.85
+exhaust-velocity factor; scaling a hot-gas energy linearly in temperature from
+a dissociated reference (the retired 57.3 MJ/kg, ADR 0049).
+
+**Blowdown energy budget**:
+A sealed chamber that thermalizes a pulse and then empties through its nozzle can
+turn at most the gas's **internal energy** `u` into directed flow; a steady-flow
+nuclear rocket at the same temperature collects the enthalpy `h = gamma u` for an
+ideal gas. At 3000 K hydrogen holds 34.5 MJ/kg against 46.9, so at equal peak
+temperature the pulsed chamber's ideal exhaust is about `1/sqrt(gamma)` (0.86) of
+the NTR's (`hydrogen_hot_energy`, ADR 0049). At 3000 K only 0.32% of the hydrogen
+nuclei are atomic, so the nozzle has no recombination store to wait for and can
+open to area ratio 50-100: a 3-6x faster blowdown that still passes the
+ten-turnover mixing screen. _Avoid_: quoting NTR specific impulse for a pulsed
+chamber at the NTR's temperature.
 
 **Overtake-only pusher at Earth**:
 A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S

@@ -1,5 +1,9 @@
 # Hydrogen departure and growth cost: exploratory record, 2026-10-10
 
+> **2026-10-12:** the 3,000 K and 3,500 K figures here use a hot energy scaled
+> linearly from 5,500 K, which ADR 0049 shows overstates it by up to two-thirds.
+> Treat them as void; the 5,500 K and methane figures are unaffected.
+
 ## Status and scope
 
 These are conditional analysis results, not a replacement for the production

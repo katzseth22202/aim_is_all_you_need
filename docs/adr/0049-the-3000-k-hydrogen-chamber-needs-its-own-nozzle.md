@@ -2,7 +2,8 @@
 
 Date: 2026-10-10
 
-Status: Proposed for review.
+Status: Accepted 2026-10-12.  The energy debt it found is paid in
+`src/orbit_turn_analysis.py`; the nozzle sweep it asks for is still open.
 
 ## Context
 
@@ -72,12 +73,26 @@ Only **0.32% of the hydrogen nuclei are atomic**. Expansion moves equilibrium
 farther toward H2 as the gas cools. There is no material dissociation store for
 an area-ratio-300 nozzle to recover.
 
-The same diagnostic exposes a separate modeling debt. Relative to molecular
-hydrogen at 200 K, the equilibrium gas holds about 34.5 MJ/kg of internal
-energy, not 57.3 MJ/kg. This pure-hydrogen number is not a replacement for a
-mixed rod/gas solve, but it shows that scaling the 5500 K mixture linearly in
-temperature is not an equation of state. The current loading and 9.102 km/s
-exhaust speed must be re-solved before a wider nozzle is credited economically.
+The same diagnostic exposed a modeling debt, now paid.  Relative to molecular
+hydrogen at 200 K, the equilibrium gas holds **34.53 MJ/kg** of internal energy,
+not the 57.3 MJ/kg the linear scaling gave.  About a third of the 5500 K
+pairing's energy sits in dissociation, and scaling by temperature carried that
+share down to a gas that has none.  `orbit_turn_analysis.hydrogen_hot_energy`
+now solves the equilibrium directly (at 1 kg/m3 it moves under 3%), which sets
+the ideal exhaust at 8.31 km/s and the 85%-velocity exhaust at **7.06 km/s**,
+not 9.10.  ADR 0045's 3000 K tables are re-solved with it: the selected
+miss-safe 1,200 s burn delivers 39.14% of ignition mass, not 46.86%.
+
+Internal energy, not enthalpy, is the right budget.  The chamber is sealed while
+the pulse thermalizes and then blows down: the gas left behind does the work of
+pushing out what leaves, so a full blowdown to vacuum turns at most `u` into
+directed kinetic energy.  A steady-flow nuclear rocket at the same temperature
+collects the enthalpy, 46.9 MJ/kg here, `gamma` times more.  At equal wall-limited
+peak temperature, a pulsed chamber therefore gives about `1/sqrt(gamma)`, 0.86,
+of a steady nuclear rocket's ideal exhaust speed.  NTR materials heritage tells us
+what a wall survives, not that a pulsed chamber at that temperature matches NTR
+specific impulse.  What can recover some of it is that the wall sees the peak only
+briefly in each pulse, which is not yet credited.
 
 ## A wider throat shortens blowdown in direct proportion
 
@@ -129,45 +144,36 @@ impulse = (1 + 1/k) ve a + w_rel / k,
 ```
 
 where `a` is the instantaneous velocity/nozzle axis and `w_rel` is the full
-projectile-relative velocity vector. Decomposing the existing fine integration
-gives, for the selected miss-safe solution at 2,670 km periapsis:
+projectile-relative velocity vector.  `UncantedThermalBurn` now reports the
+projectile's axial share as `integrated_projectile_axial_delta_v`.  For the
+selected miss-safe solution at 2,631 km periapsis:
 
 ```text
 burn duration                         1,200 s, all before reference periapsis
-impact angle                          158.93 to 177.52 degrees
-projectile axial delta-v             -1.29004 km/s
-nozzle-only axial delta-v            +7.07913 km/s
-net axial delta-v                    +5.78908 km/s
-signed projectile lateral delta-v    +0.30077 km/s
-integral of thrust-vector magnitude  +5.79806 km/s
+impact angle                          159.01 to 177.54 degrees
+projectile axial delta-v             -0.951 km/s
+nozzle-only axial delta-v            +6.730 km/s
+net axial delta-v                    +5.779 km/s
+signed projectile lateral delta-v    +0.226 km/s
+integral of thrust-vector magnitude  +5.784 km/s
 ```
 
-The axial projectile term is negative at every sample. Integrated with the
-constant hydrogen flow and falling vehicle mass, it removes **1.290 km/s**, or
-18.2% of the nozzle-only axial impulse. Expressed as a burn average, that is
-**1.075 m/s2 backward**. Per kilogram of hydrogen, the time-mean incoming
-momentum term is about **-1.72 km/s** along the local axis.
+The axial projectile term is negative at every sample.  Integrated with the
+constant hydrogen flow and falling vehicle mass, it removes **0.951 km/s**, or
+14.1% of the nozzle-only axial impulse, a burn average of **0.79 m/s2
+backward**.  It is smaller than the 1.29 km/s recorded before the energy fix
+only because the correct, lower energy raises `k` from about 38 to about 63:
+each kilogram of hydrogen now meets less projectile.
 
-Earth's turn does provide a credit, but it is transverse. The projectile adds
-0.301 km/s in the sign of the required turn throughout this all-before-
-periapsis solution. Projected instead onto the final outgoing asymptote, its
-integrated contribution is -1.117 km/s and is negative throughout. It never
-becomes forward thrust.
+Earth's turn does provide a credit, but it is transverse.  The projectile adds
+0.226 km/s in the sign of the required turn in this all-before-periapsis
+solution.  It never becomes forward thrust.  At the unconstrained 600 km mass
+optimum (612 s before, 588 s after reference periapsis) the projectile's axial
+debit is 0.854 km/s and its net lateral help 0.205 km/s.
 
-The unconstrained 600 km mass optimum, which burns 583 s before and 617 s
-after reference periapsis, is the useful sign-change sensitivity. There the
-projectile contributes **-1.15455 km/s axially**. Its lateral component is
-adverse for the first 158 s and helpful for the remaining 1,042 s:
-
-```text
-adverse lateral contribution    -0.00458 km/s
-helpful lateral contribution    +0.27887 km/s
-net lateral contribution        +0.27429 km/s
-```
-
-Thus including the helpful interval barely changes the answer to “how hard
-does the impactor knock backward?” It does not offset the axial debit; it
-mostly supplies a small turning impulse that the axial nozzle cannot provide.
+Thus Earth's turn barely changes the answer to "how hard does the impactor
+knock backward?"  It does not offset the axial debit; it mostly supplies a small
+turning impulse that the axial nozzle cannot provide.
 
 ## Consequences
 
@@ -176,27 +182,23 @@ mostly supplies a small turning impulse that the axial nozzle cannot provide.
   demonstrated.
 - A wider throat may reduce nozzle and wall dwell as well as emptying time,
   but peak-pressure, local heat-flux and structural consequences remain open.
-- The present 3000 K economics rest on both borrowed hardware and an unsolved
-  thermodynamic state. A nozzle-only geometry edit would give false precision.
+- The recorded 3000 K economics (ADR 0046, 0047) rest on borrowed hardware and
+  the superseded 57.3 MJ/kg energy. They are void until the ledger is rebuilt
+  with the equilibrium energy; a nozzle-only geometry edit would give false
+  precision.
 - Turning helps use the projectile's transverse momentum. It does not reverse
-  the head-on momentum debit, which remains roughly 1.2--1.3 km/s across the
-  two 1,200 s visible-side solutions.
+  the head-on momentum debit, which remains roughly 0.85--0.95 km/s across
+  the two 1,200 s visible-side solutions.
 - Re-solving the equation of state changes `k`, exhaust speed, projectile
   fraction, pulse count and finite-burn trajectory together. None should be
   updated in isolation.
 
 ## Reproduction and verification
 
-The miss-safe result is reproduced by
-`uncanted_thermal_burn(False, burn_time=1200 s,
-missed_periapsis_floor=600 km)`. At every one of its 1,201 samples, project
-`w_rel / k` onto the unit velocity for the axial column and onto its left-hand
-normal for the lateral column, then integrate with the existing
-`hydrogen_flow / vehicle_mass` acceleration scale. The 600 km sensitivity is
-the same call without `missed_periapsis_floor`.
-
-The equilibrium and blowdown inputs and equations are recorded above so this
-ADR does not depend on ignored scratch state. Production source and tests are
-unchanged by this decision record. With the project virtual environment on
-`PATH`, the full `make test-all` suite completed after this ADR was written:
-**877 passed, 1 skipped**, with 23 warnings.
+`make orbit-turn` prints the energy, the re-solved tables and the projectile's
+axial share; `pytest tests/test_orbit_turn_analysis.py` asserts them, including
+that the 3000 K equilibrium energy is under 61% of the old scaled value.  The
+miss-safe result is `uncanted_thermal_burn(False, burn_time=1200 s,
+missed_periapsis_floor=600 km)`; the 600 km sensitivity is the same call without
+`missed_periapsis_floor`.  The equilibrium diagnostic and blowdown equations
+are recorded above, so this ADR does not depend on ignored scratch state.

@@ -6,6 +6,18 @@ Date: 2026-10-10
 
 ## Context
 
+> **Superseded in part, 2026-10-12 (ADR 0049).** Every 3,000 K figure below was
+> computed with a hot energy scaled linearly from 5,500 K (57.3 MJ/kg, 9.10 km/s
+> exhaust). Equilibrium gives 34.5 MJ/kg and 7.06 km/s; ADR 0045's re-solved
+> miss-safe burn delivers 39.1% of ignition mass instead of 46.9%. The 3,000 K
+> column is therefore optimistic and should not be quoted. The error only flatters
+> 3,000 K, so the ranking (5,500 K cheaper) stands. The **5,500 K** results did
+> not use the scaling and remain the recovery sensitivity of record. The common-route
+> ledger that produced the snapshot JSON is described in
+> `docs/hydrogen_curvature_cost_2026-10-10.md` but its generator is not committed:
+> the replay script re-prices the recorded inputs, it cannot rebuild them.
+
+
 Hydrogen departure leaves substantial tank and chamber mass after the burn.
 Discarding all of it reduces the useful material available to multiply the next
 generation of PuffSats. The user proposes cutting and packaging that hardware

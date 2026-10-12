@@ -1,5 +1,9 @@
 # Hydrogen follow-ups: selected designs and comparison limits
 
+> **2026-10-12:** the 3,000 K and 3,500 K figures here use a hot energy scaled
+> linearly from 5,500 K, which ADR 0049 shows overstates it by up to two-thirds.
+> Treat them as void; the 5,500 K and methane figures are unaffected.
+
 These exploratory results extend ADR 0046 at source revision `930083e`.
 The durable inputs are `data/hydrogen_followups_2026-10-10.json`: 16 financial
 cases, 46 finite-burn profiles, physical design summaries, and the adaptive

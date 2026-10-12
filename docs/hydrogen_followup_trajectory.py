@@ -2,6 +2,11 @@
 
 Float substrate uses km, s, and unit ignition mass, as orbit_turn_analysis does.
 All mission inputs are explicit; no scratch files or mutated module constants.
+
+The loading below scales the 5500 K pairing linearly with temperature, as the
+recorded 2026-10-10 study did.  ADR 0049 retires that rule (it overstates the
+3000 K energy by two-thirds); this script replays the record, it is not a
+current model.  Use src.orbit_turn_analysis.hydrogen_hot_energy for new work.
 """
 
 import numpy as np

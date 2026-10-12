@@ -1,5 +1,9 @@
 # Recovering departure hardware into PuffSats
 
+> **2026-10-12:** the 3,000 K and 3,500 K figures here use a hot energy scaled
+> linearly from 5,500 K, which ADR 0049 shows overstates it by up to two-thirds.
+> Treat them as void; the 5,500 K and methane figures are unaffected.
+
 This is a fixed-flight sensitivity to the [common-route study](hydrogen_curvature_cost_2026-10-10.md),
 not a new trajectory optimization. The user selected 90% recovery of hydrogen
 tank mass and 60% recovery of **both chamber and nozzle**, with a 5 t cutting

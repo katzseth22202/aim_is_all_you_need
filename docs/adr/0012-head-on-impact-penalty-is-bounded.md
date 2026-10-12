@@ -2,6 +2,11 @@
 
 Status: accepted
 
+Amended by: ADR 0045. On the circular 3S return the favorable mirror is hidden
+behind Earth at the 600 km burn (its projectile hyperbola passes 1,905 km below
+the surface), so the x1.020 3S mirror gain below is an upper bound, not a
+flyable choice. The 2S mirror has not been checked for visibility.
+
 Date: 2026-08-17
 
 Extends: ADR 0009 (the head-on nozzle's `beta = sqrt(1+k) - 1` is one endpoint of

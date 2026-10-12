@@ -10,6 +10,7 @@ from src.orbit_turn_analysis import (
     UNCANTED_MIXED_SPECIFIC_ENERGY,
     blocked_mirror_clearance_angle,
     finite_burn_turn,
+    hydrogen_hot_energy,
     occultation_half_angle,
     pusher_plate_turn_check,
     three_synodic_periapsis_mirrors,
@@ -207,16 +208,33 @@ def test_3000_k_loading_uses_85_percent_of_ideal_exhaust_velocity():
     """The requested efficiency is a velocity multiplier, not an energy share."""
 
     assert UNCANTED_MIXED_SPECIFIC_ENERGY.to_value(u.MJ / u.kg) == pytest.approx(
-        57.3278, abs=0.0001
+        34.529, abs=0.001
     )
     assert UNCANTED_IDEAL_EXHAUST_SPEED.to_value(u.km / u.s) == pytest.approx(
-        10.7077, abs=0.0001
+        8.3101, abs=0.0001
     )
     assert UNCANTED_EXHAUST_SPEED.to_value(u.km / u.s) == pytest.approx(
-        9.1016, abs=0.0001
+        7.0636, abs=0.0001
     )
-    assert uncanted_slug_ratio(45.0 * u.km / u.s) == pytest.approx(16.6616)
-    assert uncanted_slug_ratio(73.0 * u.km / u.s) == pytest.approx(45.4784, abs=0.0001)
+    assert uncanted_slug_ratio(45.0 * u.km / u.s) == pytest.approx(28.323, abs=0.001)
+    assert uncanted_slug_ratio(73.0 * u.km / u.s) == pytest.approx(76.167, abs=0.001)
+
+
+def test_3000_k_hydrogen_holds_no_dissociation_store():
+    """Linear scaling from 5500 K kept energy 3000 K hydrogen does not have.
+
+    The 5500 K pairing's 105 MJ/kg includes about a third in dissociation.
+    Scaled by 3000/5500 it gave 57.3 MJ/kg; equilibrium gives 34.5, near the
+    molecular gas's sensible energy, and lower density barely moves it.
+    """
+
+    hot = hydrogen_hot_energy(3000.0 * u.K).to_value(u.MJ / u.kg)
+    thin = hydrogen_hot_energy(3000.0 * u.K, 1.0 * u.kg / u.m**3).to_value(u.MJ / u.kg)
+    assert hot < 0.61 * 57.3278
+    assert thin == pytest.approx(hot, rel=0.03)
+    assert hydrogen_hot_energy(3500.0 * u.K).to_value(u.MJ / u.kg) > hot
+    with pytest.raises(ValueError, match="must be positive"):
+        hydrogen_hot_energy(0.0 * u.K)
 
 
 @pytest.mark.slow
@@ -226,32 +244,32 @@ def test_uncanted_momentum_closes_the_visible_3s_departure(uncanted_results):
     visible, _ = uncanted_results
     assert visible.reference_periapsis_altitude.to_value(u.km) == pytest.approx(600.0)
     assert visible.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
-        583.0, abs=0.2
+        612.3, abs=0.2
     )
-    assert visible.slug_ratio_minimum == pytest.approx(36.79, abs=0.01)
-    assert visible.slug_ratio_maximum == pytest.approx(40.25, abs=0.01)
-    assert visible.hydrogen_spent_fraction == pytest.approx(0.50083, abs=1e-5)
-    assert visible.delivered_fraction == pytest.approx(0.49917, abs=1e-5)
-    assert visible.initial_to_delivered_mass_ratio == pytest.approx(2.00331, abs=1e-5)
-    assert visible.impactor_mass_fraction == pytest.approx(0.01275, abs=1e-5)
-    assert visible.closest_altitude.to_value(u.km) == pytest.approx(706.5, abs=0.2)
+    assert visible.slug_ratio_minimum == pytest.approx(61.58, abs=0.01)
+    assert visible.slug_ratio_maximum == pytest.approx(67.63, abs=0.01)
+    assert visible.hydrogen_spent_fraction == pytest.approx(0.57793, abs=1e-5)
+    assert visible.delivered_fraction == pytest.approx(0.42207, abs=1e-5)
+    assert visible.initial_to_delivered_mass_ratio == pytest.approx(2.36929, abs=1e-5)
+    assert visible.impactor_mass_fraction == pytest.approx(0.00879, abs=1e-5)
+    assert visible.closest_altitude.to_value(u.km) == pytest.approx(715.7, abs=0.2)
     assert visible.integrated_lateral_delta_v.to_value(u.km / u.s) == pytest.approx(
-        0.2743, abs=0.0002
+        0.2048, abs=0.0002
     )
     assert visible.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
-        5.33935, abs=0.00002
+        5.33611, abs=0.00002
     )
     assert visible.impulsive_delta_v.to_value(u.km / u.s) == pytest.approx(
         5.11887, abs=0.00002
     )
     assert visible.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
-        220.48, abs=0.05
+        217.24, abs=0.05
     )
     assert visible.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
-        -3103.7, abs=0.2
+        -2983.4, abs=0.2
     )
     assert visible.missed_projectile_earth_impact_fraction == pytest.approx(
-        0.4456, abs=0.0002
+        0.4277, abs=0.0002
     )
     assert visible.outgoing_vinf.to_value(u.km / u.s) == pytest.approx(
         11.56427943, abs=1e-7
@@ -265,7 +283,7 @@ def test_raising_periapsis_to_open_the_front_side_loses_mass(uncanted_results):
 
     visible, front = uncanted_results
     assert front.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        3866.3, abs=0.2
+        4105.9, abs=0.2
     )
     assert front.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
         0.0, abs=0.01
@@ -273,14 +291,14 @@ def test_raising_periapsis_to_open_the_front_side_loses_mass(uncanted_results):
     assert front.minimum_projectile_clearance.to_value(u.km) == pytest.approx(
         0.0, abs=0.01
     )
-    assert front.slug_ratio_minimum == pytest.approx(32.25, abs=0.01)
-    assert front.slug_ratio_maximum == pytest.approx(37.97, abs=0.01)
-    assert front.off_head_on_maximum.to_value(u.deg) == pytest.approx(44.82, abs=0.02)
+    assert front.slug_ratio_minimum == pytest.approx(53.85, abs=0.01)
+    assert front.slug_ratio_maximum == pytest.approx(63.68, abs=0.01)
+    assert front.off_head_on_maximum.to_value(u.deg) == pytest.approx(45.81, abs=0.02)
     assert front.integrated_lateral_delta_v.to_value(u.km / u.s) == pytest.approx(
-        0.8094, abs=0.0002
+        0.6128, abs=0.0002
     )
     assert front.delivered_fraction / visible.delivered_fraction == pytest.approx(
-        0.9354, abs=0.0002
+        0.9098, abs=0.0002
     )
 
 
@@ -290,48 +308,63 @@ def test_a_600_km_missed_projectile_floor_moves_the_optimum(miss_safe_results):
 
     visible, front = miss_safe_results
     assert visible.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        2670.0, abs=0.2
+        2631.4, abs=0.2
     )
     assert visible.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
         1200.0, abs=0.01
     )
-    assert visible.closest_altitude.to_value(u.km) == pytest.approx(3082.2, abs=0.2)
+    assert visible.closest_altitude.to_value(u.km) == pytest.approx(3044.2, abs=0.2)
     assert visible.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
         600.0, abs=0.01
     )
     assert visible.missed_projectile_earth_impact_fraction == pytest.approx(0.0)
     assert visible.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
-        5.79806, abs=0.00002
+        5.78370, abs=0.00002
     )
     assert visible.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
-        221.83, abs=0.05
+        215.04, abs=0.05
     )
-    assert visible.hydrogen_spent_fraction == pytest.approx(0.53136, abs=1e-5)
-    assert visible.delivered_fraction == pytest.approx(0.46864, abs=1e-5)
-    assert visible.initial_to_delivered_mass_ratio == pytest.approx(2.13383, abs=1e-5)
+    assert visible.hydrogen_spent_fraction == pytest.approx(0.60859, abs=1e-5)
+    # The impactor is an axial debit throughout; Earth's turn only makes its
+    # sideways share useful (ADR 0049).
+    assert visible.integrated_projectile_axial_delta_v.to_value(
+        u.km / u.s
+    ) == pytest.approx(-0.9510, abs=0.0005)
+    assert visible.delivered_fraction == pytest.approx(0.39141, abs=1e-5)
+    assert visible.initial_to_delivered_mass_ratio == pytest.approx(2.55486, abs=1e-5)
 
     assert front.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        4535.4, abs=0.2
+        4787.8, abs=0.2
     )
     assert front.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
         600.0, abs=0.01
     )
-    assert front.delivered_fraction == pytest.approx(0.46151, abs=1e-5)
+    assert front.delivered_fraction == pytest.approx(0.37853, abs=1e-5)
     assert visible.delivered_fraction > front.delivered_fraction
 
 
 @pytest.mark.slow
-def test_lower_thrust_reverses_the_miss_safe_mirror_choice(long_miss_safe_results):
-    """At 2,500 s the safe front side narrowly beats the visible-side family."""
+def test_2500_second_burn_keeps_the_visible_side_narrowly(long_miss_safe_results):
+    """At 2,500 s the safe visible side still beats the front side, by 0.7%."""
 
     visible, front = long_miss_safe_results
     assert visible.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        4640.0, abs=0.2
+        4510.3, abs=0.2
     )
-    assert visible.delivered_fraction == pytest.approx(0.43481, abs=1e-5)
+    assert visible.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
+        2500.0, abs=0.01
+    )
+    assert visible.hydrogen_spent_fraction == pytest.approx(0.64255, abs=1e-5)
+    assert visible.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
+        6.33614, abs=0.00002
+    )
+    assert visible.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
+        431.88, abs=0.05
+    )
+    assert visible.delivered_fraction == pytest.approx(0.35745, abs=1e-5)
 
     assert front.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        5566.2, abs=0.2
+        5920.3, abs=0.2
     )
     assert front.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
         0.0, abs=0.01
@@ -339,37 +372,26 @@ def test_lower_thrust_reverses_the_miss_safe_mirror_choice(long_miss_safe_result
     assert front.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
         600.0, abs=0.01
     )
-    assert front.hydrogen_spent_fraction == pytest.approx(0.56140, abs=1e-5)
-    assert front.impactor_mass_fraction == pytest.approx(0.01639, abs=1e-5)
-    assert (
-        front.impactor_mass_fraction / front.hydrogen_spent_fraction
-        == pytest.approx(0.02919, abs=1e-5)
-    )
-    assert front.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
-        6.52635, abs=0.00002
-    )
-    assert front.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
-        458.29, abs=0.05
-    )
-    assert front.delivered_fraction == pytest.approx(0.43860, abs=1e-5)
-    assert front.delivered_fraction > visible.delivered_fraction
+    assert front.impactor_mass_fraction == pytest.approx(0.01128, abs=1e-5)
+    assert front.delivered_fraction == pytest.approx(0.35510, abs=1e-5)
+    assert visible.delivered_fraction > front.delivered_fraction
 
 
 @pytest.mark.slow
-def test_5000_second_burn_still_closes_but_costs_more(
+def test_5000_second_burn_reverses_the_miss_safe_mirror_choice(
     long_miss_safe_results, very_long_miss_safe_results
 ):
-    """The very-low-thrust case is feasible but loses another 6% delivered mass."""
+    """At 5,000 s the front side wins, and every burn loses more mass."""
 
-    _, front_2500 = long_miss_safe_results
+    visible_2500, _ = long_miss_safe_results
     visible, front = very_long_miss_safe_results
     assert visible.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        9321.1, abs=0.2
+        8945.7, abs=0.2
     )
-    assert visible.delivered_fraction == pytest.approx(0.39446, abs=1e-5)
+    assert visible.delivered_fraction == pytest.approx(0.31725, abs=1e-5)
 
     assert front.reference_periapsis_altitude.to_value(u.km) == pytest.approx(
-        6904.8, abs=0.2
+        7414.9, abs=0.2
     )
     assert front.seconds_before_reference_periapsis.to_value(u.s) == pytest.approx(
         0.0, abs=0.01
@@ -377,26 +399,20 @@ def test_5000_second_burn_still_closes_but_costs_more(
     assert front.missed_projectile_periapsis_altitude.to_value(u.km) == pytest.approx(
         600.0, abs=0.01
     )
-    assert front.hydrogen_spent_fraction == pytest.approx(0.58840, abs=1e-5)
-    assert front.impactor_mass_fraction == pytest.approx(0.01750, abs=1e-5)
-    assert (
-        front.impactor_mass_fraction / front.hydrogen_spent_fraction
-        == pytest.approx(0.02975, abs=1e-5)
-    )
+    assert front.hydrogen_spent_fraction == pytest.approx(0.67214, abs=1e-5)
+    assert front.impactor_mass_fraction == pytest.approx(0.01199, abs=1e-5)
     assert front.integrated_thrust_delta_v.to_value(u.km / u.s) == pytest.approx(
-        7.00352, abs=0.00002
+        7.02706, abs=0.00002
     )
     assert front.impulsive_delta_v.to_value(u.km / u.s) == pytest.approx(
-        6.25543, abs=0.00002
+        6.32167, abs=0.00002
     )
     assert front.finite_burn_penalty.to_value(u.m / u.s) == pytest.approx(
-        748.09, abs=0.05
+        705.39, abs=0.05
     )
-    assert front.delivered_fraction == pytest.approx(0.41160, abs=1e-5)
+    assert front.delivered_fraction == pytest.approx(0.32786, abs=1e-5)
     assert front.delivered_fraction > visible.delivered_fraction
-    assert (
-        front.integrated_thrust_delta_v - front_2500.integrated_thrust_delta_v
-    ).to_value(u.km / u.s) == pytest.approx(0.47717, abs=0.00002)
+    assert front.delivered_fraction < visible_2500.delivered_fraction
 
 
 @pytest.mark.parametrize(
