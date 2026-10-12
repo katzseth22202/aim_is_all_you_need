@@ -369,6 +369,15 @@ methane chamber (212 m3, 1.33 m2) needs 278-336 ms to reach its fill pressure, s
 quoting the e-fold time as the blowdown (refill waits for ~97% of the mass to
 leave); crediting a bulged hydrogen chamber with the sphere's 4 Hz.
 
+**Cushioned wall**:
+An inner tile on a sealed gas cushion against a backwall, Orion's shock absorber
+applied to the chamber (`src/wall_cushion.py`, ADR 0054). The spike only gives
+the tile a speed; the cushion stops it over 1-3 cm, so the backwall carries
+1.1-1.5 times the steady load instead of the hoop overshoot `D` = 1.8-5.7.
+Proposed, pending the impact simulation. _Avoid_: calling local wrap thickening
+an alternative (it is already the design, and does not touch the steel's hoop
+cycling).
+
 **Overtake-only pusher at Earth**:
 A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S
 energy in 147.5 s, but Earth turns its incoming-stream-aligned trajectory only

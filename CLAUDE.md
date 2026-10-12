@@ -82,6 +82,7 @@ make lob-brake      # the booster's brake at each climb rate and the lob charge 
 make survivable-chamber # the 5 kg bulged methane chamber: ledger, AR100/300, redundancy, cost, seed (ADR 0044)
 make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/kg, exhaust tonnes (ADR 0050)
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
+make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 
 # Conda environment
@@ -244,6 +245,11 @@ slush_hydrogen.py            ← growth_cost_inputs + hardware_recovery: the
                                 solved hydrogen chamber with its charge stored as
                                 50% slush (chamber_isp.stored_as), with and
                                 without recovered tanks (ADR 0051)
+
+wall_cushion.py              ← leaf (numpy + scipy): a chamber wall tile on a gas
+                                cushion against a backwall, one degree of freedom
+                                per unit area; turns the microsecond spike into a
+                                1.1-1.5x backwall load (ADR 0054)
 
 carbon_hydrogen_equilibrium.py ← leaf (Cantera + scipy): B', the carbon hot
                                 hydrogen carries off a graphite wall at
