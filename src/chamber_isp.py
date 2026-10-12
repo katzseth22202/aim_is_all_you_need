@@ -156,6 +156,27 @@ HYDROGEN_5500K = ChamberPairing(
 )
 
 
+#: Hydrogen at 3000 K, the temperature NTR fuel and walls were tested to (ADR
+#: 0049, 0052).  A study point, not a solved chamber.  Equilibrium internal
+#: energy at the chamber's own density is 34.33 MJ/kg (Cantera ``gri30``, via
+#: :func:`src.orbit_turn_analysis.hydrogen_hot_energy`), so the 75 km/s rod
+#: and its 1.76 plug size the charge at ``k = 79.2``: 198 kg in 20 m^3, 1220
+#: bar peak.  The same solve gives 806 bar for the 5500 K pairing against the
+#: table's 818.  A thin wall's mass goes as ``p V``, fixed by the charge
+#: whatever the volume, so the copper-lined wall scales from 32 t by 1220/818.
+#: Only 0.3% of the nuclei are atomic, about 2% of the energy in bonds, so the
+#: ceiling is 1 - 0.02 x 0.06.  Its efficiency is a guess (ADR 0052).
+HYDROGEN_3000K = ChamberPairing(
+    "H2 3000 K",
+    3000.0 * u.K,
+    79.2,
+    32.0 * 1220.0 / 818.0 * u.t,
+    0.205,
+    1.0 - 0.02 * (1.0 - 0.94),
+    storage=LIQUID_HYDROGEN,
+)
+
+
 def stored_as(pairing: ChamberPairing, storage: HydrogenStorage) -> ChamberPairing:
     """A hydrogen pairing with its charge stored another way (ADR 0051).
 

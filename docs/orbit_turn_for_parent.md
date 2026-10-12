@@ -15,10 +15,11 @@ Status of each item for the paper:
 | 2 | Earth turns the vehicle during the burn, but through head-on, not away from it | **yes** |
 | 3 | A miss on the mass-optimal 600 km burn can hit Earth | **yes** |
 | 4 | An overtake-only plate cannot make the Earth departure | optional, one sentence |
-| 5 | The 3000 K hydrogen chamber | **physics yes, prices no** |
+| 5 | The 3000 K hydrogen chamber | **physics yes; it does not close on the chain** |
 | 6 | Why a pulsed chamber should beat a pulse detonation engine | **yes, with a caveat** |
 | 7 | Recycling spent tanks and chamber into rods (ADR 0050) | **yes, a sensitivity and a "why now"** |
 | 8 | Store the hydrogen charge as slush (ADR 0051) | **yes** |
+| 9 | Which chamber flies first, and at what pulse rate | **yes, framing** |
 | - | Rotating tether (ADR 0048), 3000/3500 K economics (ADRs 0046-0047) | no |
 
 ## 1. The favorable 3S mirror is behind Earth (ADR 0045)
@@ -137,6 +138,15 @@ What does **not** hold, and must not reach the paper:
   about `1/sqrt(gamma)`, **0.86**, of the NTR's: 8.3 km/s against 9.7 at 3000 K. NTR heritage
   shows what the wall survives, not what the chamber's specific impulse is. A pulsed wall
   sees the peak only briefly, which could allow a hotter peak, but that is not yet credited.
+
+**On the paper's chain it does not grow (ADR 0052).** Charged like the 5500 K
+chamber, the 3000 K chamber has `k = 79` at 75 km/s, 1,220 bar peak and a 48 t wall.
+It reaches only 606-625 s at 85% of ideal velocity, and about 750 s even at perfect
+efficiency. Its growth per cycle is 0.83 as liquid and 1.03 as slush with recovered
+tanks. The two-synodic cycles fall below 1. The cap on temperature caps the energy
+per kilogram at 34 MJ, against 105 at 5500 K. A third of the 5500 K energy is the
+dissociation store the cooler chamber was chosen to avoid. NTR heritage tells us
+what a wall survives, not how hot the chamber must run.
 
 Proposed wording, in `sec:ntr_departure`:
 
@@ -266,3 +276,42 @@ Proposed wording, in the hydrogen chamber's departure section:
 Cite McNelis et al., "A Summary of the Slush Hydrogen Technology Program for the
 National Aero-Space Plane" (NTRS 19950017766), and Hardy and Whalen's transfer and
 expulsion reports (NASA TM 105596, TM 105191).
+
+## 9. Which chamber flies first, and at what pulse rate
+
+**Performance target: 5500 K hydrogen, stored as slush, with recycled tanks.** It
+grows 2.88 per cycle at $105/kg. Its advantage over methane is recombination at
+the same area-ratio-300 nozzle, not a shorter nozzle. Hydrogen keeps 36% of the
+pulse in bonds and the nozzle returns 94% of it, a ceiling of 0.978. Methane at
+7000 K keeps 69% in bonds and gets back only 52%, because carbon never re-bonds;
+its ceiling is 0.669. The hot, light hydrogen also has a higher sound speed, so the
+same geometry empties faster.
+
+**Early version: methane, at 2 Hz.** Until a hydrogen wall passes the bench tests
+(`sec:chamber_wall_tests`), the survivable methane chamber flies first; the paper
+already calls the hydrogen wall unverified. Be realistic about its rate. The
+survivable chamber is bulged to 212 m3 at about 94 bar, ten times the sphere's
+volume. It fires 5 kg rods at 2 Hz, because 4 Hz cannot refill it. The paper's
+$162/kg already flies it at 2 Hz. The ledger's burns are 24-37 minutes (2,900-4,500
+pulses), not the 20-minute reference of the Earth-turn study. Each burn is charged
+its integrated finite-burn loss, 7-12% of the burn.
+
+Explain the blowdown problem in the paper. A pulse cannot start until the last one's
+gas has left and the next charge is in. Emptying time grows with chamber volume and
+falls with throat area and sound speed. A large, low-pressure methane chamber with
+heavy products empties slowly. Hydrogen's light gas empties fast, and a cooler,
+undissociated charge could use a wider throat (ADR 0049). Fewer pulses per second
+mean a longer burn, and a longer burn wastes more of the Oberth gain. In the
+Earth-turn study, each doubling of burn time cost about 8.5% of delivered mass.
+For the methane chamber, quote that study's 2,500 s case, not the 1,200 s
+reference.
+
+Proposed wording:
+
+> The methane chamber is the one we can build first, and it is slow. Its bulged
+> 212-cubic-metre shell cannot be emptied and recharged faster than twice a second,
+> so a departure takes 25 to 37 minutes instead of 20, and the burn spends more of
+> its time away from periapsis. We charge that loss in full. The hydrogen chamber
+> empties faster and recovers more of its energy, and stored as slush with its
+> tanks recycled it is the better machine. It flies once its wall is shown to
+> survive.

@@ -325,6 +325,9 @@ with a safe continuation after a miss; derating projectile momentum with nozzle
 efficiency, since it is a full signed control-volume term separate from the 0.85
 exhaust-velocity factor; scaling a hot-gas energy linearly in temperature from
 a dissociated reference (the retired 57.3 MJ/kg, ADR 0049).
+On the paper's chain, charged like any pairing (`chamber_isp.HYDROGEN_3000K`,
+`k = 79.2`, 1,220 bar, 47.7 t wall), it does not grow: 606-625 s, 750 s even at
+eta = 1, growth 0.83-1.03 (ADR 0052).
 
 **Blowdown energy budget**:
 A sealed chamber that thermalizes a pulse and then empties through its nozzle can

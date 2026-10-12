@@ -13,6 +13,7 @@ from astropy import units as u
 
 from src.chamber_isp import (
     GATE_THRUST_COST,
+    HYDROGEN_3000K,
     HYDROGEN_5500K,
     LIQUID_HYDROGEN,
     METHANE_7000K,
@@ -304,3 +305,17 @@ def test_the_slush_heat_sink_outlasts_the_hold() -> None:
     days = sink / 446.0 / LIQUID_HYDROGEN.boil_off_per_day
     assert sink / 446.0 == pytest.approx(0.18, abs=0.01)
     assert days > 20.0 * 2.5
+
+
+def test_the_3000_k_charge_is_sized_by_the_equilibrium_energy() -> None:
+    """``(k + 1 + P) u = w^2 / 2`` at 75 km/s, with ``u`` solved at the
+    charge's own density (ADR 0052)."""
+    from src.orbit_turn_analysis import hydrogen_hot_energy
+
+    density = HYDROGEN_3000K.reference_slug_ratio * ROD_MASS / (20.0 * u.m**3)
+    energy = hydrogen_hot_energy(3000.0 * u.K, density)
+    sized = (75.0 * u.km / u.s) ** 2 / (2.0 * energy) - 1.0 - PLUG_RATIO
+    assert HYDROGEN_3000K.reference_slug_ratio == pytest.approx(
+        float(sized.to_value(u.one)), abs=0.1
+    )
+    assert HYDROGEN_3000K.hydrogen
