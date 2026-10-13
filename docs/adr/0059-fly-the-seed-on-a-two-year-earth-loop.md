@@ -55,8 +55,7 @@ headline:
    stays only as `--staged`, to show the artifact.
 4. **The two-year loop, not the three-year one.** On the 40 t ship the three-year
    loop is marginally better (1.26 against 1.22); on the 60 t ship the two-year loop
-   is better (1.36 against 1.29). The two-year loop has half the delay, so less
-   rests on `delayed()`'s time shift (see Limits).
+   is better (1.36 against 1.29), and it returns 2.2 years sooner.
 
 ## The search (`src/seed_loop.py`, `make seed-loop`)
 
@@ -163,9 +162,13 @@ model assumes.
 
 - **The time shift.** `delayed()` slides the whole chain by 2.18 years as if the
   chain could start on any date, whereas its geometry repeats each synodic period
-  (1.09 yr). This is ADR 0039's simplification too. 2.18 years is two synodic
-  periods to within 0.2%, which is one more reason to prefer the two-year loop
-  over the three-year one (4.4 yr, 4.0 periods).
+  (1.09 yr). This costs nothing material. The launch date only involves Earth and
+  the Sun, so it is free, and the search picks it (and the loop's size) so that
+  the Earth flyby falls on a Jupiter window. Every loop's delay therefore lands
+  near a whole number of synodic periods (1 yr: 1.09 = 1.00 periods; 2 yr:
+  2.180 = 2.00; 3 yr: 4.37 = 4.00). The two-year loop is 1.5 days short of two
+  periods, about 0.04% of value at 10% a year, which a short wait or a trim of
+  the deep-space burn absorbs. This does not favour one loop over another.
 - **One stream, not two waves.** The seed's return is one stream held to the
   growth wave's speed. The 20-day split into growth and nozzle waves, and its
   correction, are not flown.
