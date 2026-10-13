@@ -2,8 +2,10 @@
 
 Date: 2026-10-12
 
-Status: Proposed. A one-degree-of-freedom estimate; the impact simulation has to
-confirm it.
+Status: Rejected by ADR 0055 (2026-10-13). The impact simulation solved the spike at
+9-77 kPa s, not the 2-5 kPa s assumed here, and uneven over a few centimetres. A tile on
+a soft gas foundation then bends at 0.9-8 GPa, and none of 390 cases lasts 4,200 pulses.
+The one-degree-of-freedom model below cannot see bending. Kept as the record.
 
 ## Context
 

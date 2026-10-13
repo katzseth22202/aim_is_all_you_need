@@ -4,12 +4,19 @@ The parent's S17 (``docs/survivable_chamber_asks_for_aim_repo.md`` there,
 applying the impact sim @ ``69d1f40``): the 20 m^3 sphere's bonded overwrap
 delaminates under the stopped rod's line blast, so the departure chamber is
 bulged to 212 m^3 and wrapped dry.  It fires a 5 kg rod at 2 Hz behind a 20 kg
-frozen-methane plug, on a 48.2 t wall (68.8 t maraging fallback), with a 4.9 t
-(A/A* = 100) or 14.7 t (A/A* = 300) extension.  Its pitch is 3.5-24 kg a pulse.
+frozen-methane plug.  ADR 0055 (impact sim @ 7afdba3) doubles its throat to
+2.66 m^2: a 46.2 t wall (68.8 t maraging fallback), a 9.8 t (A/A* = 100) or
+29.4 t (A/A* = 300) extension, and a 2.6 kg aramid throat film every shot,
+charged with the 3.5-24 kg of pitch as carried mass that leaves in the exhaust.
 :func:`src.chamber_isp.survivable_methane` builds the pairing, and its ``eta``
-is the one that reproduces the impact sim's 906 / 971 kN s per pulse at 75 km/s
-with the gate charged (:func:`src.chamber_isp.efficiency_for_impulse`): 0.488 at
-A/A* = 100 and 0.539 at 300, the latter the old solved 0.538.
+is the one that reproduces the impact sim's 868 / 899 kN s per pulse at 75 km/s
+with the gate and nozzle freeze charged
+(:func:`src.chamber_isp.efficiency_for_impulse`): 0.459 at A/A* = 100 and 0.483
+at 300.  ADR 0044's 906 / 971 kN s (0.488 / 0.539) charged neither.
+
+The impact sim sizes the wall for one departure of ~4,200 pulses
+(:data:`WALL_LIFE_PULSES`); the ledger reports the most pulses any one chamber
+fires so the longest cycles can be checked against it.
 
 Everything flies behind the vapor-shielded spray cup (ADR 0041/0042), its film
 carried as launched mass as the parent's tables carry it (ADR 0043), on the
@@ -35,9 +42,11 @@ from tabulate import tabulate
 
 from src.chamber_departure import chamber_unit_mass
 from src.chamber_isp import (
-    HYDROGEN_5500K,
+    HYDROGEN_BULGED,
+    HYDROGEN_BULGED_IMPULSE,
     SURVIVABLE_FALLBACK_WALL_MASS,
     SURVIVABLE_IMPULSE,
+    SURVIVABLE_THROAT_FILM,
     SURVIVABLE_WALL_MASS,
     ChamberPairing,
     absolute_efficiency,
@@ -88,6 +97,19 @@ CEILING_SHARES = (0.50, 0.70, 0.90, 1.00)
 WORKERS = 4
 #: The plate every row flies behind: the parent's tables carry its film (S21).
 PLATE = SPRAY_CUP_SHIELDED
+#: Pulses the impact sim sizes one chamber's wall for: one departure of a
+#: 500-600 t stack (its ``walled_nozzle_chamber_fatigue.md``).
+WALL_LIFE_PULSES = 4200
+#: Two 2.5 kg chambers' walls together: ADR 0044's 49.8 t against 48.2 t for
+#: one 5 kg chamber, scaled to the doubled throat's 46.2 t.
+SPLIT_WALL_MASS = 46.2 * 49.8 / 48.2 * u.t
+#: The bulged hydrogen chamber at 2 Hz, at the impact sim's A/A* = 300 impulse
+#: (ADR 0055).  The sphere's solved row stays beside it as the record.
+HYDROGEN_BULGED_DESIGN = Design(
+    "Hydrogen, bulged, 2 Hz",
+    HYDROGEN_BULGED,
+    efficiency_for_impulse(HYDROGEN_BULGED_IMPULSE, HYDROGEN_BULGED),
+)
 
 
 def survivable_efficiency(area_ratio: int) -> float:
@@ -117,6 +139,7 @@ def survivable_design(
     Args:
         area_ratio: 100 or 300.
         pitch: Pitch each 5 kg pulse spends; split chambers spend their share.
+            The throat film is added to it: both leave in the exhaust.
         wall_mass: Wall of one 5 kg chamber, or of all the split ones.
         rods_split: As in :func:`src.chamber_isp.survivable_methane`.
         chambers: Fly exactly this many chambers; None picks the best count.
@@ -137,7 +160,8 @@ def survivable_design(
         + (f", {rods_split}x{5 / rods_split:g} kg" if rods_split > 1 else "")
         + (f", n={chambers}" if chambers is not None else "")
     )
-    return Design(label, pairing, eta, pitch / rods_split, chambers)
+    carried = (pitch + SURVIVABLE_THROAT_FILM) / rods_split
+    return Design(label, pairing, eta, carried, chambers)
 
 
 @dataclass(frozen=True)
@@ -224,6 +248,7 @@ def ledger_row(case: Case) -> Dict[str, object]:
             [d.chambers * chamber_unit_mass(pairing).to_value(u.t) for d in deps], ".1f"
         ),
         "pulses": _span([d.pulses for d in deps]),
+        "max/chamber": f"{max(d.pulses / d.chambers for d in deps):.0f}",
         "burn min": _span([d.burn_time.to_value(u.min) for d in deps]),
         "loss m/s": _span([d.finite_burn_loss.to_value(u.m / u.s) for d in deps]),
         "loss %": _span([100.0 * b for b in shares], ".1f"),
@@ -279,8 +304,14 @@ def ledger_cases() -> List[Case]:
             ),
             Case(
                 "3. Redundancy, 24 kg pitch (n = count flown)",
-                f"AR{ar}: 2.5 kg chambers (24.9 t each), best count",
-                survivable_design(ar, wall_mass=49.8 * u.t, rods_split=2),
+                f"AR{ar}: 2.5 kg chambers "
+                f"({SPLIT_WALL_MASS.to_value(u.t) / 2:.1f} t each), best count",
+                survivable_design(ar, wall_mass=SPLIT_WALL_MASS, rods_split=2),
+            ),
+            Case(
+                "4. Sensitivities, 24 kg pitch",
+                f"AR{ar}: two 5 kg chambers (wall life)",
+                survivable_design(ar, chambers=2),
             ),
             Case(
                 "4. Sensitivities, 24 kg pitch",
@@ -336,7 +367,8 @@ _SPHERE_UNIT = 19.0 + 2.19
 
 def cost_designs() -> List[Design]:
     """The designs the cost book prices: methalox, both survivable area
-    ratios at both pitch edges, and solved hydrogen (wall unverified).
+    ratios at both pitch edges, the sphere's solved hydrogen (wall
+    unverified) and the bulged hydrogen chamber.
 
     Returns:
         The designs.
@@ -348,7 +380,7 @@ def cost_designs() -> List[Design]:
             for ar in AREA_RATIOS
             for p in SURVIVABLE_PITCH_RANGE
         ]
-        + [DESIGNS[4]]
+        + [DESIGNS[4], HYDROGEN_BULGED_DESIGN]
     )
 
 
@@ -386,7 +418,8 @@ def cost_report() -> str:
     out = [
         f"Spray cup, film carried as launched mass; lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
         f"(1.1 km/s climb, brake held back).  Seed ${low:.0f} / ${high:.0f} per kg; "
-        "'a / b' is cheap / dear seed.  Hydrogen's wall is unverified (S18).",
+        "'a / b' is cheap / dear seed.  The hydrogen sphere's wall is unverified "
+        "(S18); the bulged one is solved (ADR 0055).",
         "Hardware per launch unit, cycle 0\n" + hardware(inputs),
     ]
     for prices in books:
@@ -400,7 +433,7 @@ def cost_report() -> str:
         scaled = [
             (d, i)
             for d, i in zip(designs, inputs)
-            if d.pairing not in (None, HYDROGEN_5500K)
+            if d.pairing is not None and not d.pairing.hydrogen
         ]
         out.append(
             f"{book.label} with each methane chamber priced by its mass against the "

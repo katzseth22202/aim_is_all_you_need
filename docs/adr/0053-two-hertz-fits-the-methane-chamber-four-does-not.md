@@ -2,7 +2,10 @@
 
 Date: 2026-10-12
 
-Status: Accepted.
+Status: Accepted; amended by ADR 0055. The impact simulation's real-gas blowdown
+confirms the fast end (281 ms to fill pressure), but sealing the throat film below
+its 400 °C rating takes 0.3 bar and leaves the 1.33 m2 throat 48 ms short of 2 Hz.
+The throat doubles to 2.66 m2, and a bulged hydrogen chamber runs at ~2-3 Hz.
 
 ## Context
 

@@ -15,6 +15,8 @@ from src.chamber_isp import (
     GATE_THRUST_COST,
     HYDROGEN_3000K,
     HYDROGEN_5500K,
+    HYDROGEN_BULGED,
+    HYDROGEN_BULGED_IMPULSE,
     HYDROGEN_SPHERE_GAS,
     LIQUID_HYDROGEN,
     METHANE_7000K,
@@ -25,7 +27,9 @@ from src.chamber_isp import (
     SPHERE_THROAT_AREA,
     SPHERE_VOLUME,
     SURVIVABLE_IMPULSE,
+    SURVIVABLE_IMPULSE_S17,
     SURVIVABLE_THROAT_AREA,
+    SURVIVABLE_THROAT_AREA_S17,
     SURVIVABLE_VOLUME,
     ChamberPairing,
     absolute_efficiency,
@@ -237,13 +241,14 @@ def test_efficiency_is_quoted_as_a_share_of_that_ceiling(
 
 
 @pytest.mark.parametrize(
-    "area_ratio, impulse_kn_s, isp_s", [(100, 906.0, 788.0), (300, 971.0, 845.0)]
+    "area_ratio, impulse_kn_s, isp_s", [(100, 868.0, 756.0), (300, 899.0, 783.0)]
 )
 def test_the_survivable_chambers_eta_gives_the_impact_sims_pulse(
     area_ratio: int, impulse_kn_s: float, isp_s: float
 ) -> None:
-    """Parent S17: 906 / 971 kN s per 5 kg pulse is 788 / 845 s on the 117 kg
-    of charge and plug, and A/A* = 300 lands on the sphere's solved 0.538."""
+    """ADR 0055: 868 / 899 kN s per 5 kg pulse (gate and nozzle freeze
+    charged) is 756 / 783 s on the 117 kg of charge and plug.  A/A* = 300
+    comes out at 0.483, beside the impact sim's own eta_net of 0.484."""
     pairing = survivable_methane(area_ratio)
     eta = efficiency_for_impulse(SURVIVABLE_IMPULSE[area_ratio], pairing)
     isp = effective_isp(
@@ -260,14 +265,39 @@ def test_the_survivable_chambers_eta_gives_the_impact_sims_pulse(
     ) == pytest.approx(impulse_kn_s, rel=1e-9)
     assert isp.to_value(u.s) == pytest.approx(isp_s, abs=2.0)
     if area_ratio == 300:
-        assert eta == pytest.approx(0.538, abs=0.001)
+        assert eta == pytest.approx(0.484, abs=0.002)
+
+
+def test_s17s_impulse_charged_neither_gate_nor_freeze() -> None:
+    """ADR 0044's 906 / 971 kN s gave A/A* = 300 the sphere's solved 0.538;
+    charging the freeze costs the chamber about a tenth of its eta."""
+    pairing = survivable_methane(300)
+    old = efficiency_for_impulse(SURVIVABLE_IMPULSE_S17[300], pairing)
+    new = efficiency_for_impulse(SURVIVABLE_IMPULSE[300], pairing)
+    assert old == pytest.approx(0.538, abs=0.001)
+    assert 0.85 < new / old < 0.92
+
+
+def test_the_bulged_hydrogen_chamber_is_the_spheres_charge_in_the_bulge() -> None:
+    """ADR 0055: the 60 kg charge on the 2.5 kg rod, 37 t wrap, 2 Hz, and an
+    extension scaled to its 0.84 m^2 throat; its eta sits below the sphere's."""
+    pairing = HYDROGEN_BULGED
+    assert pairing.hydrogen
+    charge = pairing.reference_slug_ratio * pairing.rod_mass
+    assert charge.to_value(u.kg) == pytest.approx(60.0)
+    assert pairing.pulse_rate == 2.0 / u.s
+    assert pairing.extension_mass.to_value(u.t) == pytest.approx(9.3, abs=0.05)
+    bulged = efficiency_for_impulse(HYDROGEN_BULGED_IMPULSE, pairing)
+    sphere = efficiency_for_impulse(697.0 * u.kN * u.s, HYDROGEN_5500K)
+    assert bulged < sphere
+    assert bulged == pytest.approx(0.773, abs=0.002)
 
 
 def test_a_split_survivable_chamber_shares_the_rod_wall_and_extension() -> None:
     whole = survivable_methane(100)
     half = survivable_methane(100, 49.8 * u.t, rods_split=2)
     assert half.rod_mass == whole.rod_mass / 2
-    assert half.wall_mass == 24.9 * u.t
+    assert half.wall_mass.to_value(u.t) == pytest.approx(24.9)
     assert half.extension_mass == whole.extension_mass / 2
     assert half.pulse_rate == whole.pulse_rate
     assert (half.plug_ratio, half.reference_slug_ratio) == (
@@ -340,16 +370,27 @@ def test_two_hertz_leaves_the_methane_chamber_time_to_refill_and_four_does_not()
     None
 ):
     """Emptying the 212 m^3 chamber to its ~1 bar warm fill takes 278 ms at
-    this solve's sound speed and 336 ms at the parent's 3.7 km/s (ADR 0053)."""
+    this solve's sound speed and 336 ms at the parent's 3.7 km/s through
+    ADR 0053's 1.33 m^2 throat.  The impact sim's real-gas solve gives 281 ms."""
     gas = METHANE_SURVIVABLE_GAS
     to_fill = (1.0 / 94.0) ** (1.0 / gas.gamma)
-    fast = blowdown_time(SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill)
-    slow = blowdown_time(
-        SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill, 3.7 * u.km / u.s
-    )
+    throat = SURVIVABLE_THROAT_AREA_S17
+    fast = blowdown_time(SURVIVABLE_VOLUME, throat, gas, to_fill)
+    slow = blowdown_time(SURVIVABLE_VOLUME, throat, gas, to_fill, 3.7 * u.km / u.s)
     assert fast.to_value(u.ms) == pytest.approx(278.0, abs=3.0)
     assert slow.to_value(u.ms) == pytest.approx(336.0, abs=3.0)
     assert 250.0 < fast.to_value(u.ms) < slow.to_value(u.ms) < 500.0 - 150.0
+
+
+def test_the_doubled_throat_halves_the_blowdown() -> None:
+    """ADR 0055: time goes as V/A*, so 2.66 m^2 empties in half the time
+    (139 ms to fill pressure in the impact sim's real-gas solve)."""
+    gas = METHANE_SURVIVABLE_GAS
+    to_fill = (1.0 / 94.0) ** (1.0 / gas.gamma)
+    old = blowdown_time(SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA_S17, gas, to_fill)
+    new = blowdown_time(SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill)
+    assert (new / old).to_value(u.one) == pytest.approx(0.5)
+    assert new.to_value(u.ms) == pytest.approx(139.0, abs=3.0)
 
 
 def test_blowdown_rejects_an_impossible_target() -> None:

@@ -209,12 +209,12 @@ def test_a_fixed_chamber_count_is_flown_as_given() -> None:
 def test_the_pairing_sets_the_rod_rate_and_extension() -> None:
     """The survivable chamber's 5 kg rod at 2 Hz and its own extension."""
     pairing = survivable_methane(100)
-    assert chamber_unit_mass(pairing).to_value(u.t) == pytest.approx(53.1)
+    assert chamber_unit_mass(pairing).to_value(u.t) == pytest.approx(56.0)
     assert chamber_unit_mass(METHANE_7000K).to_value(u.t) == pytest.approx(
         (METHANE_7000K.wall_mass + NOZZLE_EXTENSION_MASS).to_value(u.t)
     )
     stack = 600.0 * u.t
-    dep = price_departure(stack, V_PERI, BURN, WAVE, pairing, 0.488, chambers=1)
+    dep = price_departure(stack, V_PERI, BURN, WAVE, pairing, 0.459, chambers=1)
     rods = dep.rod_mass_fraction * stack
     assert dep.pulses == pytest.approx((rods / (5.0 * u.kg)).to_value(u.one))
     assert dep.burn_time.to_value(u.s) == pytest.approx(dep.pulses / 2.0)

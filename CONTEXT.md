@@ -363,20 +363,38 @@ tank's structure (its mass is volume and loads, not pressure).
 
 **Chamber blowdown**:
 The time a pulsed chamber takes to empty through its choked throat
-(`chamber_isp.blowdown_time`, ADR 0053); it goes as `V / (A* a)`. The survivable
-methane chamber (212 m3, 1.33 m2) needs 278-336 ms to reach its fill pressure, so
-2 Hz fits and 4 Hz cannot. The hydrogen sphere needs 135 ms at 4 Hz. _Avoid_:
-quoting the e-fold time as the blowdown (refill waits for ~97% of the mass to
-leave); crediting a bulged hydrogen chamber with the sphere's 4 Hz.
+(`chamber_isp.blowdown_time`, ADR 0053); it goes as `V / (A* a)`. Through ADR
+0053's 1.33 m2 throat the survivable methane chamber needed 278-336 ms to reach
+its fill pressure (the impact simulation's real-gas solve: 281 ms). The throat is
+now 2.66 m2 (ADR 0055), which halves it to ~139 ms and leaves 150-200 ms of the
+2 Hz period with the throat film sealed at 0.3 bar. Methane still cannot reach
+4 Hz (~2.8-3.4 Hz at best). _Avoid_: quoting the e-fold time as the blowdown
+(refill waits for ~97% of the mass to leave); crediting a bulged hydrogen chamber
+with the sphere's 4 Hz; shrinking the chamber to buy time (it fails the wall).
+
+**Throat film**:
+The film laid across the throat between pulses (ADR 0055). It cannot go across
+a sonic jet, so it seals only once the flow fades, and the ~4,100 K residue it
+traps joins the next charge. A polymer film under its 400 °C rating must wait for
+~0.3 bar. Its mass goes as `p r^3`: 2.6 kg of aramid per shot on the 2.66 m2
+throat, charged with the pitch as carried mass (`SURVIVABLE_THROAT_FILM`).
+_Avoid_: grams.
+
+**Bulged hydrogen chamber**:
+The sphere's 60 kg hydrogen charge in the methane chamber's r 3.0 m bulge
+(`chamber_isp.HYDROGEN_BULGED`, ADR 0055): 106 m3, 2.5 kg rod, 0.84 m2 throat,
+37.0 t dry wrap (2.20% flung strain against 2.4%), 657 kN s at A/A* = 300 against
+the sphere's 697, flown at 2 Hz. The first hydrogen chamber with a solved wall;
+the 20 m3 sphere's is unresolved at ~2.95 GPa. _Avoid_: giving it a doubled
+throat (its wrap fails at the taper).
 
 **Cushioned wall**:
 An inner tile on a sealed gas cushion against a backwall, Orion's shock absorber
-applied to the chamber (`src/wall_cushion.py`, ADR 0054). The spike only gives
-the tile a speed; the cushion stops it over 1-3 cm, so the backwall carries
-1.1-1.5 times the steady load instead of the hoop overshoot `D` = 1.8-5.7.
-Proposed, pending the impact simulation. _Avoid_: calling local wrap thickening
-an alternative (it is already the design, and does not touch the steel's hoop
-cycling).
+applied to the chamber (`src/wall_cushion.py`, ADR 0054). **Rejected** (ADR
+0055): the solved spike is 9-77 kPa s, not 2-5, and uneven over centimetres, so
+the tiles bend at 0.9-8 GPa and none of 390 cases lasts 4,200 pulses. Stand-off
+(the bulge) is the only lever on the spike. _Avoid_: reviving it for a smaller
+chamber.
 
 **Overtake-only pusher at Earth**:
 A 4 g plate given perfect transfer and no carried-mass penalty reaches the 3S

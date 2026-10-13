@@ -1,5 +1,9 @@
 # The survivable methane chamber, for the parent paper (S17)
 
+> **Superseded in part, 2026-10-13 (ADR 0055).** The impulses (906 / 971 kN s), the 48.2 t
+> wall, the extensions and every methane row below predate the impact simulation's
+> corrections and the doubled throat. Use `docs/hydrocode_answers_for_parent.md`.
+
 Raised 2026-10-08 in `aim_is_all_you_need` (ADR 0044). It answers the parent's S17, asked in
 `docs/survivable_chamber_asks_for_aim_repo.md`, which applies `puffsat_impact_simulation` @ `69d1f40`.
 Every row flies behind the spray cup with its film left to the cost book, on the 20-day orbit,

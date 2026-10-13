@@ -230,10 +230,12 @@ harvest.py                   ← seed_cost + growth_ledger + water_plate: the se
 
 survivable_chamber.py        ← growth_ledger + growth_cost_report + seed_cost: the
                                 parent's S17. The bulged 5 kg methane chamber
-                                (chamber_isp.survivable_methane: 2 Hz, P = 4, 48.2 t
-                                wall, AR 100/300 extension) through the ledger, cost
-                                book and seed, in worker processes passed by index
-                                (pickled pairings break `is HYDROGEN_5500K`) (ADR 0044)
+                                (chamber_isp.survivable_methane: 2 Hz, P = 4, 2.66 m^2
+                                throat, 46.2 t wall, 2.6 kg throat film a shot, AR
+                                100/300 extension) and the bulged hydrogen chamber
+                                (HYDROGEN_BULGED) through the ledger, cost book and
+                                seed, in worker processes passed by index (pickled
+                                pairings break `is HYDROGEN_5500K`) (ADR 0044, 0055)
 
 hardware_recovery.py         ← growth_cost + survivable_chamber: spent tanks and
                                 chamber cut up in flight and flown back as rods

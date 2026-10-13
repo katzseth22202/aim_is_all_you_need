@@ -177,6 +177,31 @@ HYDROGEN_3000K = ChamberPairing(
 )
 
 
+#: The bulged hydrogen chamber (ADR 0055; impact sim @ 7afdba3, its
+#: ``walled_nozzle_hydrocode_asks.md`` section 6).  The 20 m^3 sphere's wall is
+#: unresolved at ~2.95 GPa, so the methane chamber's r 3.0 m bulge is filled
+#: with hydrogen: 106 m^3, the same 60 kg charge on the 2.5 kg rod (fixed
+#: charge, so 4884 K at 142 bar), a 0.84 m^2 throat and a 37.0 t dry Kevlar
+#: wrap, which passes on a thin margin (2.20% flung strain against 2.4%).  Its
+#: cold residue lets a polymer film seal at 0.3 bar, so it cycles at ~2.2-2.4 Hz;
+#: it is flown at 2 Hz.  Doubling its throat fails the wrap.  The extension is
+#: the sphere's scaled by exit area, ~18 m at A/A* = 300.
+HYDROGEN_BULGED = ChamberPairing(
+    "H2 bulged 106 m^3",
+    4884.0 * u.K,
+    24.0,
+    37.0 * u.t,
+    0.205,
+    HYDROGEN_5500K.chemistry_ceiling,
+    pulse_rate=2.0 / u.s,
+    extension_mass=(2.19 * u.t * 0.84 * 300.0 / 59.4468).to(u.t),
+    storage=LIQUID_HYDROGEN,
+)
+#: Its net impulse per pulse at A/A* = 300, gate and nozzle freeze charged:
+#: 656-658 kN s over 0.75-1.0 m^2 of throat, against the sphere's 697.
+HYDROGEN_BULGED_IMPULSE = 657.0 * u.kN * u.s
+
+
 def stored_as(pairing: ChamberPairing, storage: HydrogenStorage) -> ChamberPairing:
     """A hydrogen pairing with its charge stored another way (ADR 0051).
 
@@ -217,26 +242,42 @@ METHANE_7000K = ChamberPairing(
 #: The survivable methane chamber (parent S17, impact sim @ 69d1f40, its
 #: ``walled_nozzle_chamber_blast.md`` section 3h, decided 2026-10-08).  The 20 m^3
 #: sphere's bonded overwrap delaminates under the stopped rod's line blast, so
-#: the chamber is bulged to 212 m^3 at ~94 bar and wrapped dry: 48.2 t of
-#: Kevlar 49 over a 10 mm Cr-Mo shell.  It fires a 5 kg rod at 2 Hz (4 Hz cannot
-#: refill) behind a 20 kg frozen-methane plug, ``P`` = 4.  The charge and plug
-#: together are ~117 kg per rod, so ``k + P`` = 23.4 at 75 km/s: taken as given.
-#: (Holding the old chamber's energy per kilogram would need 29.3.)
+#: the chamber is bulged to 212 m^3 at ~94 bar and wrapped dry in Kevlar 49 over
+#: a 10 mm Cr-Mo shell.  It fires a 5 kg rod at 2 Hz (4 Hz cannot refill) behind
+#: a 20 kg frozen-methane plug, ``P`` = 4.  The charge and plug together are
+#: ~117 kg per rod, so ``k + P`` = 23.4 at 75 km/s: taken as given.  (Holding
+#: the old chamber's energy per kilogram would need 29.3.)
+#:
+#: ADR 0055 (impact sim @ 7afdba3, its ADR-0056 and 2026-10-13 amendment): the
+#: throat doubles from 1.33 to 2.66 m^2 so the 2 Hz cycle keeps 150-200 ms
+#: spare.  The cone is 1 m shorter and the dry wrap falls to 46.2 t (the 1.33
+#: m^2 chamber re-solved needs 52.4 t, not 48.2).  Net impulse per pulse is
+#: 868 / 899 kN s with the 1% gate and the H + H + M nozzle freeze charged; the
+#: old 906 / 971 charged neither.  Each shot spends a 2.6 kg aramid throat
+#: film, sealed at 0.3 bar, which leaves with the exhaust as the pitch does.
 SURVIVABLE_ROD_MASS = 5.0 * u.kg
 SURVIVABLE_PULSE_RATE = 2.0 / u.s
 SURVIVABLE_PLUG_RATIO = 4.0
 SURVIVABLE_CARRIED_PER_ROD = 117.0 / 5.0
-SURVIVABLE_WALL_MASS = 48.2 * u.t
+SURVIVABLE_WALL_MASS = 46.2 * u.t
 #: The impact sim's fallback wall: a maraging-steel band.
 SURVIVABLE_FALLBACK_WALL_MASS = 68.8 * u.t
-#: The impact sim's net impulse per pulse, head-on debit taken, gate charged.
-SURVIVABLE_IMPULSE = {100: 906.0 * u.kN * u.s, 300: 971.0 * u.kN * u.s}
-#: Its nozzle extensions: the 2.19 t scaled by exit area, 13.0 m and 22.5 m exits.
-SURVIVABLE_EXTENSION_MASS = {100: 4.9 * u.t, 300: 14.7 * u.t}
+#: The impact sim's net impulse per pulse, head-on debit taken, gate and
+#: nozzle freeze charged, on the 2.66 m^2 throat.
+SURVIVABLE_IMPULSE = {100: 868.0 * u.kN * u.s, 300: 899.0 * u.kN * u.s}
+#: ADR 0044's figures (S17), gate and freeze uncharged, 1.33 m^2 throat.
+SURVIVABLE_IMPULSE_S17 = {100: 906.0 * u.kN * u.s, 300: 971.0 * u.kN * u.s}
+#: The aramid throat film each shot spends (sealed at 0.3 bar, mass ~ p r^3).
+SURVIVABLE_THROAT_FILM = 2.6 * u.kg
+#: Its nozzle extensions, scaled by exit area from the 2.19 t at 8.7 m: the
+#: doubled throat doubles them, ~18 m and ~32 m exits (4.9 / 14.7 t at 1.33 m^2).
+SURVIVABLE_EXTENSION_MASS = {100: 9.8 * u.t, 300: 29.4 * u.t}
 
 #: The survivable chamber's volume and throat (parent ``tab:one_chamber``).
 SURVIVABLE_VOLUME = 212.0 * u.m**3
-SURVIVABLE_THROAT_AREA = 1.33 * u.m**2
+SURVIVABLE_THROAT_AREA = 2.66 * u.m**2
+#: The throat ADR 0053 timed: the narrowest that fitted 2 Hz.
+SURVIVABLE_THROAT_AREA_S17 = 1.33 * u.m**2
 #: The 20 m^3 sphere's throat at A/A* = 300 behind the 8.7 m exit.
 SPHERE_VOLUME = 20.0 * u.m**3
 SPHERE_THROAT_AREA = 59.4468 / 300.0 * u.m**2

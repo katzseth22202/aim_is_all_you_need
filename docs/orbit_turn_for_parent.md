@@ -279,6 +279,12 @@ expulsion reports (NASA TM 105596, TM 105191).
 
 ## 9. Which chamber flies first, and at what pulse rate
 
+> **Amended 2026-10-13 (ADR 0055).** The hydrogen figures below are the 20 m3 sphere's
+> at 4 Hz, whose wall is unresolved. The bulged hydrogen chamber the impact simulation
+> solved runs at 2 Hz and leads methane by only $10-25/kg with recovered hardware. The
+> methane chamber's impulse and throat also changed. See
+> `docs/hydrocode_answers_for_parent.md` items 3, 5 and 7.
+
 **Performance target: 5500 K hydrogen, stored as slush, with recycled tanks.** It
 grows 2.88 per cycle at $105/kg. Its advantage over methane is recombination at
 the same area-ratio-300 nozzle, not a shorter nozzle. Hydrogen keeps 36% of the

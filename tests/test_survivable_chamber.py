@@ -12,19 +12,22 @@ from src.growth_cost import ESTIMATE, Program, _fleet_lines
 from src.growth_ledger import METHANE_PITCH, SPRAY_CUP_SHIELDED
 from src.seed_cost import DESIGNS, Design
 from src.survivable_chamber import (
+    HYDROGEN_BULGED_DESIGN,
     PLATE,
     SURVIVABLE_PITCH_RANGE,
+    cost_designs,
     ledger_cases,
     survivable_design,
     survivable_efficiency,
 )
 
 
-def test_the_pitch_is_charged_per_kilogram_of_each_chambers_rod() -> None:
-    assert survivable_design(100, 24.0 * u.kg).pitch_ratio == pytest.approx(4.8)
-    assert survivable_design(100, 3.5 * u.kg).pitch_ratio == pytest.approx(0.7)
+def test_the_pitch_and_throat_film_are_charged_per_kilogram_of_rod() -> None:
+    # ADR 0055: the 2.6 kg throat film leaves in the exhaust with the pitch.
+    assert survivable_design(100, 24.0 * u.kg).pitch_ratio == pytest.approx(5.32)
+    assert survivable_design(100, 3.5 * u.kg).pitch_ratio == pytest.approx(1.22)
     split = survivable_design(100, 24.0 * u.kg, rods_split=2)
-    assert split.pitch_ratio == pytest.approx(4.8)
+    assert split.pitch_ratio == pytest.approx(5.32)
     assert Design("x", METHANE_7000K, 0.5).pitch_ratio == pytest.approx(
         (METHANE_PITCH / (2.5 * u.kg)).to_value(u.one)
     )
@@ -33,8 +36,8 @@ def test_the_pitch_is_charged_per_kilogram_of_each_chambers_rod() -> None:
 
 
 def test_the_area_ratios_fly_the_impact_sims_eta() -> None:
-    assert survivable_efficiency(100) == pytest.approx(0.488, abs=0.001)
-    assert survivable_efficiency(300) == pytest.approx(0.539, abs=0.001)
+    assert survivable_efficiency(100) == pytest.approx(0.459, abs=0.001)
+    assert survivable_efficiency(300) == pytest.approx(0.483, abs=0.001)
     assert survivable_design(300).efficiency == survivable_efficiency(300)
 
 
@@ -63,3 +66,16 @@ def test_every_row_carries_the_film_the_parents_tables_carry() -> None:
     # tables fly the shielded one, so their hydrogen rows disagreed by $2/kg.
     assert PLATE is SPRAY_CUP_SHIELDED
     assert PLATE.carries_film
+
+
+def test_the_bulged_hydrogen_chamber_is_priced_beside_the_sphere() -> None:
+    names = [d.label for d in cost_designs()]
+    assert HYDROGEN_BULGED_DESIGN.label in names
+    assert DESIGNS[4].label in names
+    assert HYDROGEN_BULGED_DESIGN.pitch_ratio == 0.0
+    assert HYDROGEN_BULGED_DESIGN.efficiency == pytest.approx(0.773, abs=0.002)
+
+
+def test_the_wall_life_case_flies_two_chambers() -> None:
+    forced = [c for c in ledger_cases() if "wall life" in c.label]
+    assert {c.design.chambers for c in forced} == {2}

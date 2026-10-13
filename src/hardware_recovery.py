@@ -56,6 +56,7 @@ from src.growth_cost_report import _break_evens, climbing_lob, risked
 from src.lob_rise import OPERATING_RISE_SPEED
 from src.seed_cost import DESIGNS, Design
 from src.survivable_chamber import (
+    HYDROGEN_BULGED_DESIGN,
     SURVIVABLE_PITCH,
     _by_mass,
     _in_workers,
@@ -80,8 +81,14 @@ COMPOSITE_CARBON = 0.88
 
 
 def _designs() -> List[Design]:
-    """The survivable AR 300 methane chamber and solved hydrogen."""
-    return [survivable_design(300, SURVIVABLE_PITCH), DESIGNS[4]]
+    """The survivable methane chamber at A/A* = 100, which leads once its
+    throat doubles (ADR 0055), solved hydrogen in the sphere, and the bulged
+    hydrogen chamber."""
+    return [
+        survivable_design(100, SURVIVABLE_PITCH),
+        DESIGNS[4],
+        HYDROGEN_BULGED_DESIGN,
+    ]
 
 
 def _geometric_growth(inputs: DesignInputs) -> float:

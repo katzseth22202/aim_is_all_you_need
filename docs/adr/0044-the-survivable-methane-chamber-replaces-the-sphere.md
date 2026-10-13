@@ -1,6 +1,7 @@
 # The survivable methane chamber replaces the 20 m^3 sphere in the ledger and cost book
 
-Status: accepted
+Status: accepted; amended by ADR 0055 (the impulse was gross of the gate and nozzle freeze;
+the throat doubles to 2.66 m2, the wall is 46.2 t, and A/A* = 100 now beats 300)
 
 Answers: the parent's S17 (`docs/survivable_chamber_asks_for_aim_repo.md` in
 `Balloon-Pulse-Propulsion`, raised 2026-10-08, applying `puffsat_impact_simulation` @ `69d1f40`).

@@ -31,6 +31,7 @@ from tabulate import tabulate
 from src.chamber_isp import (
     HYDROGEN_3000K,
     HYDROGEN_5500K,
+    HYDROGEN_BULGED,
     SLUSH_HYDROGEN,
     stored_as,
 )
@@ -47,7 +48,7 @@ from src.growth_ledger import SOLVED_EFFICIENCY
 from src.hardware_recovery import HYDROGEN_RECOVERY
 from src.lob_rise import OPERATING_RISE_SPEED
 from src.seed_cost import DESIGNS, Design
-from src.survivable_chamber import PLATE
+from src.survivable_chamber import HYDROGEN_BULGED_DESIGN, PLATE
 
 #: Slush priced this much above liquid hydrogen, $/kg, in the sensitivity.
 SLUSH_PREMIUM = 2.0
@@ -60,8 +61,9 @@ def designs() -> List[Design]:
     """The 5500 K chamber as liquid, slush, and slush with 5% cryostats, at its
     solved efficiency; the 3000 K chamber as liquid and slush at 85% of ideal
     velocity, and as slush at the 5500 K chamber's solved efficiency.  The
-    5500 K slush chamber also at 2 Hz, the rate a bulged hydrogen chamber
-    would likely need (ADR 0053)."""
+    5500 K slush chamber also at 2 Hz, the rate ADR 0053 expected a bulged
+    hydrogen chamber to need; and the bulged chamber itself as the impact sim
+    solved it (ADR 0055), liquid and slush."""
     eta = SOLVED_EFFICIENCY[HYDROGEN_5500K.name]
     slush = stored_as(HYDROGEN_5500K, SLUSH_HYDROGEN)
     heavy = stored_as(
@@ -77,6 +79,12 @@ def designs() -> List[Design]:
             "Hydrogen, slush, 2 Hz",
             replace(slush, name=f"{slush.name}, 2 Hz", pulse_rate=2.0 / u.s),
             eta,
+        ),
+        HYDROGEN_BULGED_DESIGN,
+        replace(
+            HYDROGEN_BULGED_DESIGN,
+            label=f"{HYDROGEN_BULGED_DESIGN.label}, slush",
+            pairing=stored_as(HYDROGEN_BULGED, SLUSH_HYDROGEN),
         ),
         Design("H2 3000 K", HYDROGEN_3000K, EFFICIENCY_3000K),
         Design("H2 3000 K, slush", cool, EFFICIENCY_3000K),
