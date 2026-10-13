@@ -1645,8 +1645,22 @@ refuelled by twelve tankers in low orbit and **expended**. The baseline ship is
 40-60 t dry) and sends 72-92 t. The stock 85 t ship's 50.5 t is a comparison
 (ADR 0035, ADR 0036). Under the bank flight prices the tankers are about 90% of
 the bill, so the ship's payload moves $/kg far more than its hull price does.
+Its price ends are $2172/kg (40 t, $5M hull, SpaceX's $150/kg to low orbit) and
+$9293/kg (60 t, $20M hull, Morgan Stanley's $500/kg) (ADR 0057). Every report
+flies it on the **two-year Earth loop** (ADR 0059):
+- a launch at 5.2 km/s;
+- a 0.56 km/s deep-space burn at 370 s;
+- a 2.7 km/s powered Earth flyby onto the arc to Jupiter;
+- a return at the chain's 59.29 km/s.
+
+That is x0.67 / x0.60 per kilogram, 2.18 years later. At these prices the seed is
+about a third of the methane chamber's break-even. An argon tug that lifts the fuelled ship to a high ellipse does not
+beat EEJ (ADR 0058).
 _Avoid_: quoting the stock ship's $910-14 840/kg as the seed's price; reusing the
-six-engine 31 m/s loss for a three-engine burn (117 m/s).
+six-engine 31 m/s loss for a three-engine burn (117 m/s); Musk's $2M a flight as
+the cheap end (it made the seed look nearly free; ADR 0057); scoring a seed route
+against ADR 0039's 51.134 km/s return (slower than the cycle the seed starts), or
+dropping the hull after departure (that is staging, not trajectory; ADR 0059).
 
 **Harvest** / **liquidation** / **steady state**:
 Ways to turn the fleet into cargo at L1 instead of growth. **Liquidation**
@@ -1688,7 +1702,11 @@ vehicle at fixed thrust-to-weight. The lob stays at $25 per kilogram lofted.
 _Avoid_: claiming today's booster lofts 1500 t with its brake; a vacuum second
 stage as the fix (the lob's loss is gravity loss, set by liftoff thrust).
 
-**Stepped cost of capital**:
+**Stepped cost of capital** (retired, ADR 0057):
+ADR 0040's expected value (10% a year, 50% odds the cycle works, settled once at
+the first growth return) replaced it; ADR 0057 dropped it and the flat 30% from the
+reports, since the venture hurdle prices speculative science and markets. The code
+keeps `DiscountSchedule.stepped`. As ADR 0037 defined it:
 30% a year (Gompers et al.'s venture target) until the design's **first growth
 return** (`times[1]`: 5.46 yr for the chambers, 6.55 yr for methalox), then a late
 rate: 10% headline (the author's judgment, unsourced), 15% and 20% swept, because one

@@ -4,7 +4,7 @@ Prints the outputs the parent asked for (``docs/growth_cost_for_parent.md``,
 asks G1-G4): the hardware each launch unit carries, the steady-state cost per
 kilogram at L1 by line, break-even sale prices and value per seed dollar
 as expected values (ADR 0040: 10% a year, 50% odds the cycle works) with
-the stepped and flat rates as comparisons, the chamber and package
+the seed flown on the headline route (ADR 0059: the two-year Earth loop), the chamber and package
 prices at which a chamber matches methalox, plate learning, and one-line
 sensitivities.  Building the chains takes several minutes.
 """
@@ -33,7 +33,13 @@ from src.growth_cost import (
     steady_state_cost,
     value_per_seed_dollar,
 )
-from src.growth_cost_inputs import design_inputs, seed_prices
+from src.growth_cost_inputs import (
+    DIRECT,
+    HEADLINE_SEED,
+    SeedFlight,
+    design_inputs,
+    seed_prices,
+)
 from src.growth_ledger import PLATE_DESIGNS, PLATE_DESIGNS_BY_NAME, PlateDesign
 from src.harvest import PLATE_PRICES, solve_rate
 from src.learning_curve import LearningCurve
@@ -47,11 +53,10 @@ from src.seed_cost import DESIGNS
 TIME_RATE = 0.10
 SUCCESS = 0.5
 SUCCESS_BAND = (0.5, 0.25, 1.0)
-#: ADR 0037's stepped schedule, kept as a comparison: 30% until the first
-#: growth return (ASKS G2), then a late rate.
-LATE_RATES = (0.10, 0.15, 0.20)
-EARLY_RATE = 0.30
-FLAT_RATES = (0.076, 0.30)
+#: Damodaran's aerospace rate, flat, the one comparison kept.  ADR 0057 drops
+#: ADR 0037's stepped 30% schedule and the flat 30%: the venture hurdle prices
+#: speculative science and markets, which this program does not carry.
+FLAT_RATES = (0.076,)
 LINES = (
     "lob",
     "plate",
@@ -91,19 +96,6 @@ def risked(inputs: DesignInputs, success: float = SUCCESS) -> DiscountSchedule:
     return DiscountSchedule.risked(TIME_RATE, success, inputs.proof_years)
 
 
-def stepped(inputs: DesignInputs, late: float = LATE_RATES[0]) -> DiscountSchedule:
-    """30% until the design's first growth return, ``late`` after (ask G2).
-
-    Args:
-        inputs: The design.
-        late: The rate once the cycle is proven.
-
-    Returns:
-        The schedule.
-    """
-    return DiscountSchedule.stepped(EARLY_RATE, late, inputs.proof_years)
-
-
 def _fmt(price: Optional[float]) -> str:
     return ">3000" if price is None else f"{price:.0f}"
 
@@ -117,21 +109,28 @@ def _break_evens(
     prices: PriceBook,
     schedule: DiscountSchedule,
     steady: bool = True,
+    seed: SeedFlight = HEADLINE_SEED,
 ) -> str:
     return _pair(
-        [break_even_price(inputs, prices, s, schedule, steady) for s in seed_prices()]
+        [
+            break_even_price(inputs, prices, s, schedule, steady)
+            for s in seed_prices(seed)
+        ]
     )
 
 
 def validation(designs: Sequence[DesignInputs]) -> str:
-    """Growth uncharged, plate flat at $114/kg: ``tab:seed_return`` at $500."""
+    """Growth uncharged, plate flat at $114/kg: ``tab:seed_return`` at $500.
+
+    Flown on the direct seed: pass :func:`design_inputs` with ``DIRECT``.
+    """
     prices = legacy_prices(PLATE_PRICES["learned"])
     rows = []
     for inputs in designs:
         row: List[str] = [inputs.label]
         for steady in (False, True):
             irrs = []
-            for seed in seed_prices():
+            for seed in seed_prices(DIRECT):
 
                 def value(rate: float, s: float = seed, held: bool = steady) -> float:
                     flat = DiscountSchedule.flat(rate)
@@ -215,9 +214,6 @@ def rates(designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE) -> st
         row = [inputs.label]
         row += [_break_evens(inputs, estimate, risked(inputs, p)) for p in SUCCESS_BAND]
         row += [
-            _break_evens(inputs, estimate, stepped(inputs, late)) for late in LATE_RATES
-        ]
-        row += [
             _break_evens(inputs, estimate, DiscountSchedule.flat(r)) for r in FLAT_RATES
         ]
         row += [
@@ -228,7 +224,6 @@ def rates(designs: Sequence[DesignInputs], estimate: PriceBook = ESTIMATE) -> st
         rows,
         ["Design"]
         + [f"10%, {p:.0%} odds" for p in SUCCESS_BAND]
-        + [f"30%->{late:.0%}" for late in LATE_RATES]
         + [f"flat {r:.1%}" for r in FLAT_RATES]
         + ["10%, 50% odds, growth uncharged"],
     )
@@ -373,7 +368,7 @@ def seed_routes(
     """Steady break-even, ADR 0040's schedule, with the seed flown on each route.
 
     Args:
-        designs: The designs.
+        designs: The designs on the direct seed's schedule (``DIRECT``).
         routes: The routes; each applies to its own ship's seed price.
 
     Returns:
@@ -381,10 +376,13 @@ def seed_routes(
     """
     if not routes:
         return "(none: no route listed; ADR 0039)"
-    prices = seed_prices()
+    prices = seed_prices(DIRECT)
     rows = []
     for inputs in designs:
-        row = [inputs.label, _break_evens(inputs, estimate, risked(inputs))]
+        row = [
+            inputs.label,
+            _break_evens(inputs, estimate, risked(inputs), seed=DIRECT),
+        ]
         for route in routes:
             row.append(
                 _fmt(
@@ -491,7 +489,8 @@ def plate_report(plate: PlateDesign, quick: bool = False) -> None:
         f"Plate {plate.label} (ADR 0041); lob x{booster_growth(OPERATING_RISE_SPEED):.4f} "
         f"for a {OPERATING_RISE_SPEED / 1e3:g} km/s climb at 400 km, brake held "
         "back (ADR 0042, 0043). "
-        f"Seed ${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed."
+        f"Seed ${low:.0f} / ${high:.0f} per kg on {HEADLINE_SEED.label}; 'a / b' is "
+        "cheap / dear seed."
     )
     print("\n2. Hardware per launch unit, cycle 0")
     print(hardware(designs))
@@ -512,7 +511,8 @@ def plate_report(plate: PlateDesign, quick: bool = False) -> None:
     print("\n8. One line at a time from the Estimate: steady $/kg and BE")
     print(sensitivities(pick, estimate, pessimistic))
     print("\n9. Seed routes (ADR 0039): steady BE")
-    print(seed_routes(designs, estimate=estimate))
+    direct = [design_inputs(d, plate, DIRECT) for d in DESIGNS]
+    print(seed_routes(direct, estimate=estimate))
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -542,7 +542,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         growth = " / ".join(f"{booster_growth(v):.3f}" for v in RISE_SPEEDS)
         print(
             f"Plate designs (ADR 0041), Estimate book, 10% a year, 50% odds. Seed "
-            f"${low:.0f} / ${high:.0f} per kg; 'a / b' is cheap / dear seed. The lob "
+            f"${low:.0f} / ${high:.0f} per kg on {HEADLINE_SEED.label}; 'a / b' is "
+            "cheap / dear seed. The lob "
             f"climbs at {RISE_SPEEDS[0] / 1e3:g} | {RISE_SPEEDS[1] / 1e3:g} km/s at "
             f"400 km, brake held back: booster and lob price x{growth} (ADR 0043)."
         )
@@ -551,14 +552,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     designs = [design_inputs(d) for d in DESIGNS]
     low, high = seed_prices()
     print(
-        f"Seed ${low:.0f} / ${high:.0f} per kg. Entries 'a / b' are cheap / dear seed."
+        f"Seed ${low:.0f} / ${high:.0f} per kg on {HEADLINE_SEED.label}. Entries "
+        "'a / b' are cheap / dear seed."
     )
     print("Break-even (BE) is the L1 sale price, $/kg, that repays the seed and every")
     print(
         "growth cost. Steady $/kg is undiscounted, seed excluded, a lap into steady state.\n"
     )
     print("1. Validation: growth uncharged, plate $114/kg flat (tab:seed_return)")
-    print(validation(designs))
+    direct = [design_inputs(d, seed=DIRECT) for d in DESIGNS]
+    print(validation(direct))
     print("\n2. Hardware per launch unit, cycle 0")
     print(hardware(designs))
     for prices in SCENARIOS:
@@ -582,7 +585,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print("\n8. One line at a time from the Estimate: steady $/kg and BE (ADR 0040)")
     print(sensitivities(pick))
     print("\n9. Seed routes (ADR 0039): steady BE, ADR 0040's schedule, Estimate")
-    print(seed_routes(designs))
+    print(seed_routes(direct))
 
 
 if __name__ == "__main__":

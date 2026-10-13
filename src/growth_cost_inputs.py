@@ -19,6 +19,7 @@ PuffSats and departure rods, so it is split in the ratio the next cycle
 consumes them, wrapping to cycle 0 as the chain repeats.
 """
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Optional, Tuple
 
@@ -32,6 +33,7 @@ from src.growth_cost import (
     DeliveryOption,
     Departure,
     DesignInputs,
+    delayed,
 )
 from src.growth_ledger import (
     ADR_0033_PLATE,
@@ -54,6 +56,40 @@ from src.seed_cost import (
 )
 from src.two_wave_growth import VE_METHALOX, TwoWaveCycle
 from src.water_plate import PlatePush
+
+
+@dataclass(frozen=True)
+class SeedFlight:
+    """How the seed reaches Jupiter, relative to the direct route (ADR 0039).
+
+    The route scales the seed's price per kilogram on each ship and delays the
+    whole program, exactly as :func:`src.growth_cost.route_break_even` does.
+
+    Attributes:
+        label: The route.
+        cheap_ratio: Its dollars per seed kilogram over direct's, 40 t ship.
+        dear_ratio: The same on the 60 t ship.
+        delay_years: How much later its first return comes.
+    """
+
+    label: str
+    cheap_ratio: float
+    dear_ratio: float
+    delay_years: float
+
+
+DIRECT = SeedFlight("direct (EJ)", 1.0, 1.0, 0.0)
+#: ADR 0039's Earth loop with methalox, ADR 0057's headline.  Its ratios were
+#: searched at a 51.134 km/s return floor with the hull dropped after
+#: departure, both of which flatter it (ADR 0059).
+EEJ = SeedFlight("EEJ, methalox (ADR 0039)", 0.6991, 0.6112, 2.184)
+#: ADR 0059's two-year Lucy-style loop: 86.03 / 128.65 t on the 40 t ship and
+#: 66.03 / 110.56 t on the 60 t ship (direct / loop), ship carried through
+#: every burn, return at the chain's 59.29 km/s.  The loop returns 2.166 and
+#: 2.180 yr after direct; the larger is charged to both.
+LOOP_2YR = SeedFlight("2-yr Earth loop, DSM at 370 s (ADR 0059)", 0.6687, 0.5972, 2.180)
+#: The route every report prices the seed on (ADR 0059).
+HEADLINE_SEED = LOOP_2YR
 
 
 def _kg(mass: u.Quantity) -> float:
@@ -179,17 +215,28 @@ def _deliveries(
     )
 
 
-@lru_cache(maxsize=32)
-def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> DesignInputs:
-    """One design's chain, priced per seed of one launch unit (cached).
+def design_inputs(
+    design: Design,
+    plate: PlateDesign = ADR_0033_PLATE,
+    seed: SeedFlight = HEADLINE_SEED,
+) -> DesignInputs:
+    """One design's chain, priced per seed of one launch unit.
 
     Args:
         design: The departure design.
         plate: The plate every growth unit and delivery flies (ADR 0041).
+        seed: The seed's route; the program slides by its delay (ADR 0057).
+            Pair it with :func:`seed_prices` on the same route.
 
     Returns:
         The inputs.
     """
+    return delayed(_direct_inputs(design, plate), seed.delay_years)
+
+
+@lru_cache(maxsize=32)
+def _direct_inputs(design: Design, plate: PlateDesign) -> DesignInputs:
+    """:func:`design_inputs` on the direct seed's schedule (cached)."""
     chain = design_chain(design, plate)
     returns = chain_returns(chain)
     if design.pairing is None:
@@ -219,13 +266,17 @@ def design_inputs(design: Design, plate: PlateDesign = ADR_0033_PLATE) -> Design
     )
 
 
-def seed_prices() -> Tuple[float, float]:
-    """The seed's cheap and dear ends, dollars per kilogram (ADR 0036).
+def seed_prices(seed: SeedFlight = HEADLINE_SEED) -> Tuple[float, float]:
+    """The seed's cheap and dear ends, dollars per kilogram (ADR 0036, 0057).
+
+    Args:
+        seed: The seed's route; pair it with :func:`design_inputs`'s.
 
     Returns:
-        ($337, $9293): the 40 t stripped ship at a $5M hull and Musk's flight
-        price, and the 60 t ship at a $20M hull and Morgan Stanley's.
+        Direct, ($2172, $9293): the 40 t stripped ship at a $5M hull and
+        $150/kg flights, and the 60 t ship at a $20M hull and Morgan Stanley's
+        $500/kg.  Each is scaled by the route's ratio on that ship.
     """
     flown, _ = chains()
     prices = seed_price_range(seed_excess_speed(flown[0]))
-    return prices.low, prices.high
+    return prices.low * seed.cheap_ratio, prices.high * seed.dear_ratio

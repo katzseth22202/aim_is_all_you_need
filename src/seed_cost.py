@@ -111,12 +111,15 @@ SHIP_PRICES = (5.0e6, 20.0e6)
 #: The stock ship keeps ADR 0035's $20-100M, so its $910-14 840/kg ends stay
 #: reproducible, plus $5M to compare against the stripped ship at the same hull.
 STOCK_SHIP_PRICES = (5.0e6, 20.0e6, 50.0e6, 100.0e6)
-#: Price of one Starship flight, three ways the parent already quotes:
-#: Musk's $2M a flight (``spacex_starship_cost``), and Goldman's $183/kg
-#: (``pethokoukis2026_goldman``) and Morgan Stanley's $500/kg
-#: (``investing2026_ms_spacex``), each over 100 t.
+#: Price of one Starship flight, each over 100 t: SpaceX at $150/kg to low
+#: orbit, the baseline (author, 2026-10-13), and the analysts' dearer figures
+#: the parent already quotes, Goldman's $183/kg (``pethokoukis2026_goldman``)
+#: and Morgan Stanley's $500/kg (``investing2026_ms_spacex``).  Musk's $2M a
+#: flight (``spacex_starship_cost``) was the cheap end until ADR 0057, which
+#: dropped it as misleading: it made the seed look nearly free.
+BASELINE_FLIGHT = "SpaceX $150/kg"
 FLIGHT_PRICES: Dict[str, float] = {
-    "Musk": 2.0e6,
+    BASELINE_FLIGHT: 150.0 * 100.0e3,
     "Goldman": 183.0 * 100.0e3,
     "Morgan Stanley": 500.0 * 100.0e3,
 }
@@ -280,13 +283,14 @@ class SeedPriceRange:
     high_label: str
 
 
-#: The ends every harvest, steady-state and IRR output is quoted at (ADR 0036):
-#: the stripped ship from (40 t, $5M hull, Musk) to (60 t, $20M hull, Morgan
-#: Stanley): the stripped ship's whole sweep.
-STRIPPED_LOW = (STRIPPED_SHIPS[0], SHIP_PRICES[0], "Musk")
+#: The ends every harvest, steady-state and IRR output is quoted at (ADR 0036,
+#: ADR 0057): the stripped ship from (40 t, $5M hull, $150/kg) to (60 t, $20M
+#: hull, Morgan Stanley).
+STRIPPED_LOW = (STRIPPED_SHIPS[0], SHIP_PRICES[0], BASELINE_FLIGHT)
 STRIPPED_HIGH = (STRIPPED_SHIPS[1], SHIP_PRICES[1], "Morgan Stanley")
-#: ADR 0035's ends on the stock ship, kept for the comparison.
-STOCK_LOW = (STOCK_SHIP, STOCK_SHIP_PRICES[1], "Musk")
+#: ADR 0035's ends on the stock ship, kept for the comparison; its cheap end
+#: moved from Musk's flight to the baseline with ADR 0057.
+STOCK_LOW = (STOCK_SHIP, STOCK_SHIP_PRICES[1], BASELINE_FLIGHT)
 STOCK_HIGH = (STOCK_SHIP, STOCK_SHIP_PRICES[-1], "Morgan Stanley")
 
 

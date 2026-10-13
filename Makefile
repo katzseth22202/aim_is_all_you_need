@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -67,6 +67,12 @@ carbon-equilibrium:  ## B' of graphite in hot hydrogen: the carbon a pitch coat 
 
 seed-cost:  ## The expended seed ship's $/kg and tab:seed_amortization, stripped baseline and stock comparison (ADR 0035/0036)
 	python -m src.seed_cost
+
+seed-sep-tug:  ## Can an argon tug lift the fuelled seed ship to a high ellipse? Perigee pump vs direct at 10%/yr (ADR 0058)
+	python -m src.seed_sep_tug
+
+seed-loop:  ## Lucy-style Earth loops for the seed: DSM at 370 s, powered Earth flyby, 1/2/3-yr loops vs direct (ADR 0059; ~30 min)
+	python -W ignore -m src.seed_loop
 
 seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1, liquidation, steady state, IRR, break-even price (ADR 0036)
 	python -m src.harvest

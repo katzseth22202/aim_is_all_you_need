@@ -4,6 +4,7 @@ import pytest
 from astropy import units as u
 
 from src.seed_cost import (
+    BASELINE_FLIGHT,
     DESIGNS,
     FLIGHT_PRICES,
     SEED_LAUNCHES,
@@ -52,9 +53,10 @@ def test_the_stock_ship_reproduces_adr_0035() -> None:
     assert flown.payload.to_value(u.t) == pytest.approx(50.53, abs=0.01)
 
 
-def test_the_stock_ends_are_the_parents_910_to_14_800() -> None:
+def test_the_stock_ends_run_from_the_baseline_to_the_parents_14_800() -> None:
+    """ADR 0035's $910 cheap end was Musk's flight, dropped by ADR 0057."""
     low = seed_price_range(EXCESS, STOCK_LOW, STOCK_HIGH)
-    assert low.low == pytest.approx(910.4, abs=0.5)
+    assert low.low == pytest.approx(4254.9, abs=0.5)
     assert low.high == pytest.approx(14843.0, abs=2.0)
 
 
@@ -84,16 +86,23 @@ def test_the_stripped_ship_nearly_halves_the_price_per_kilogram() -> None:
         assert ratio == pytest.approx(0.549, abs=0.001)
 
 
-def test_under_bank_prices_the_tankers_are_most_of_the_bill() -> None:
+def test_at_every_flight_price_the_tankers_are_most_of_the_bill() -> None:
     for name in ("Goldman", "Morgan Stanley"):
         assert tanker_share(FLIGHT_PRICES[name], SHIP_PRICES[0]) > 0.90
-    assert tanker_share(FLIGHT_PRICES["Musk"], SHIP_PRICES[0]) < 0.8
+    assert tanker_share(FLIGHT_PRICES[BASELINE_FLIGHT], SHIP_PRICES[0]) == (
+        pytest.approx(0.90)
+    )
+
+
+def test_musks_flight_price_is_gone() -> None:
+    """ADR 0057: $2M a flight made the seed look nearly free."""
+    assert min(FLIGHT_PRICES.values()) == pytest.approx(15.0e6)
 
 
 def test_the_stripped_baseline_ends() -> None:
-    """(40 t, $5M, Musk) to (60 t, $20M, Morgan Stanley)."""
+    """(40 t, $5M, $150/kg) to (60 t, $20M, Morgan Stanley), ADR 0057."""
     ends = seed_price_range(EXCESS)
-    assert ends.low == pytest.approx(336.6, abs=0.5)
+    assert ends.low == pytest.approx(2171.6, abs=0.5)
     assert ends.high == pytest.approx(9293.0, abs=2.0)
 
 

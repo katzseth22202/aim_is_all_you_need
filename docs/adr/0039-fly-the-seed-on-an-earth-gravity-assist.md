@@ -1,6 +1,11 @@
 # Fly the seed on an Earth gravity assist; SEP is out of scope
 
-Status: accepted
+Status: accepted; amended by ADR 0059. Its ratios are flattered twice. First,
+returns were held only to 51.134 km/s, below the 59.29 km/s of the chain's first
+growth wave, which the cost model credits the seed with. Second, the node burns
+fly on a light stage after the 40 t hull is dropped, which is staging rather than
+trajectory. ADR 0059's two-year loop, searched on the chain's floor with the ship
+carried, replaces EEJ as the headline seed.
 
 Builds on: ADR 0035/0036 (the expended, refuelled seed ship and its price),
 ADR 0040 (the valuation: 10% a year, 50% odds the cycle works), ADR 0007/0008

@@ -20,7 +20,7 @@ from src.growth_cost import (
     steady_state_cost,
     value_per_seed_dollar,
 )
-from src.growth_cost_inputs import design_inputs, seed_prices
+from src.growth_cost_inputs import DIRECT, design_inputs, seed_prices
 from src.growth_ledger import LAUNCH_UNIT, PLATE_MASS
 from src.harvest import ABSORBER_MASS, PLATE_PRICES, solve_rate
 from src.seed_cost import DESIGNS, design_chain
@@ -75,9 +75,10 @@ def test_a_launch_unit_spends_what_the_ledger_launched() -> None:
 
 @pytest.mark.parametrize(
     "design, liquidation, steady",
-    # ADR 0038 (onward burn); tab:seed_return printed 45 / 3, 39 / 10 and
-    # 87 / 33, 84 / 36.
-    [(DESIGNS[0], (42, 2), (38, 9)), (DESIGNS[4], (81, 29), (80, 33))],
+    # Direct seed at ADR 0057's $150/kg baseline.  tab:seed_return printed
+    # 45 / 3, 39 / 10 and 87 / 33, 84 / 36 at Musk's $2M a flight; ADR 0038's
+    # onward burn gave 42 / 2, 38 / 9 and 81 / 29, 80 / 33 there.
+    [(DESIGNS[0], (17.9, 1.7), (18.9, 8.7)), (DESIGNS[4], (49.8, 29.2), (51.1, 33.1))],
     ids=["methalox", "hydrogen solved"],
 )
 def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
@@ -85,10 +86,10 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
 ) -> None:
     # Ask G1's validation: no growth charge and the plate flat at $114/kg give
     # back the parent's tab:seed_return at $500 (IRR %, cheap / dear seed).
-    inputs = design_inputs(design)
+    inputs = design_inputs(design, seed=DIRECT)
     prices = legacy_prices(plate_per_kg=PLATE_PRICES["learned"])
     for held, expected in ((False, liquidation), (True, steady)):
-        for seed_price, irr in zip(seed_prices(), expected):
+        for seed_price, irr in zip(seed_prices(DIRECT), expected):
 
             def value(rate: float) -> float:
                 schedule = DiscountSchedule.flat(rate)
@@ -102,18 +103,19 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
 @pytest.mark.parametrize(
     "design, steady_cost, break_even",
     [
-        (DESIGNS[0], 169, (360, 1919)),
-        (DESIGNS[2], 100, (135, 240)),
-        (DESIGNS[4], 100, (132, 206)),
+        (DESIGNS[0], 169, (522, 1110)),
+        (DESIGNS[2], 100, (151, 199)),
+        (DESIGNS[4], 100, (144, 178)),
     ],
     ids=["methalox", "methane solved", "hydrogen solved"],
 )
 def test_the_estimates_headline_figures(design, steady_cost, break_even) -> None:
-    # ADR 0037's headline: steady-state $/kg at L1 and the stepped-rate
-    # steady-state break-even, cheap / dear seed.  Pinned to the dollar.
+    # The headline: steady-state $/kg at L1 and the steady-state break-even,
+    # cheap / dear seed, at ADR 0040's 10% and 50% odds with the seed on ADR
+    # 0059's two-year loop at ADR 0057's prices.  Pinned to the dollar.
     inputs = design_inputs(design)
     assert steady_state_cost(inputs, ESTIMATE)[0] == pytest.approx(steady_cost, abs=1.0)
-    schedule = DiscountSchedule.stepped(0.30, 0.10, inputs.proof_years)
+    schedule = DiscountSchedule.risked(0.10, 0.5, inputs.proof_years)
     for seed_price, expected in zip(seed_prices(), break_even):
         found = break_even_price(inputs, ESTIMATE, seed_price, schedule, steady=True)
         assert found == pytest.approx(expected, abs=1.0)

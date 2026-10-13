@@ -553,6 +553,56 @@ class SeedRoute:
     value: float
 
 
+def _close_on_earth(
+    sequence: str,
+    priced: _LadderPricing,
+    earth_longitude: float,
+    leg_years: Sequence[float],
+    bend_sign: float,
+    params: _AssistChainParams,
+) -> Optional[RouteFlight]:
+    """The fastest return that lands on Earth, solving Jupiter's perijove.
+
+    Scans the perijove, roots the Earth-phase mismatch in every bracket that
+    changes sign, and keeps the root whose return is fastest.
+
+    Args:
+        sequence: Bodies, for the flight's label.
+        priced: The ladder to Jupiter.
+        earth_longitude: Earth's longitude at launch (rad).
+        leg_years: Each leg's duration (yr), for the flight's record.
+        bend_sign: Which side Jupiter is passed on.
+        params: The parameter block.
+
+    Returns:
+        The flight, or None if no perijove lands the return on Earth.
+    """
+
+    def mismatch(log_perijove: float) -> float:
+        bent = _bend(priced, log_perijove, bend_sign, earth_longitude, params)
+        return float("nan") if bent is None else bent[1]
+
+    grid = np.linspace(*_LOG_PERIJOVE, _PERIJOVE_SCAN)
+    values = [mismatch(g) for g in grid]
+    best: Optional[RouteFlight] = None
+    for lo, hi, f_lo, f_hi in zip(grid, grid[1:], values, values[1:]):
+        if not (np.isfinite(f_lo) and np.isfinite(f_hi)) or f_lo * f_hi > 0.0:
+            continue
+        if abs(f_hi - f_lo) > np.pi:  # the wrap at +-pi, not a crossing
+            continue
+        try:
+            root = float(brentq(mismatch, lo, hi, xtol=1e-12))
+        except ValueError:  # the bend fails somewhere inside this bracket
+            continue
+        bent = _bend(priced, root, bend_sign, earth_longitude, params)
+        if bent is None:
+            continue
+        flight = _flight(sequence, priced, bent[0], bent[1], leg_years, params)
+        if best is None or flight.collision_speed > best.collision_speed:
+            best = flight
+    return best
+
+
 class _RouteProblem:
     """pygmo problem: launch date and leg times; perijove is solved inside."""
 
@@ -567,7 +617,9 @@ class _RouteProblem:
         rate: float,
         late_rate: Optional[float] = None,
         switch_years: float = float("inf"),
+        floor: float = RETURN_FLOOR,
     ) -> None:
+        self.floor = floor
         self.sequence = sequence
         self.ship_dollars = ship_dollars
         self.rate = rate
@@ -607,31 +659,9 @@ class _RouteProblem:
         )
         if priced is None:
             return None
-
-        def mismatch(log_perijove: float) -> float:
-            bent = _bend(
-                priced, log_perijove, self.bend_sign, longitudes[0], self.params
-            )
-            return float("nan") if bent is None else bent[1]
-
-        grid = np.linspace(*_LOG_PERIJOVE, _PERIJOVE_SCAN)
-        values = [mismatch(g) for g in grid]
-        best: Optional[RouteFlight] = None
-        for lo, hi, f_lo, f_hi in zip(grid, grid[1:], values, values[1:]):
-            if not (np.isfinite(f_lo) and np.isfinite(f_hi)) or f_lo * f_hi > 0.0:
-                continue
-            if abs(f_hi - f_lo) > np.pi:  # the wrap at +-pi, not a crossing
-                continue
-            try:
-                root = float(brentq(mismatch, lo, hi, xtol=1e-12))
-            except ValueError:  # the bend fails somewhere inside this bracket
-                continue
-            bent = _bend(priced, root, self.bend_sign, longitudes[0], self.params)
-            if bent is None:
-                continue
-            flight = _flight(self.sequence, priced, bent[0], bent[1], legs, self.params)
-            if best is None or flight.collision_speed > best.collision_speed:
-                best = flight
+        best = _close_on_earth(
+            self.sequence, priced, longitudes[0], legs, self.bend_sign, self.params
+        )
         return None if best is None else (best, launch)
 
     def fitness(self, x: Sequence[float]) -> List[float]:
@@ -654,7 +684,7 @@ class _RouteProblem:
             self.late_rate,
             self.switch_years,
         )
-        slow = max(0.0, RETURN_FLOOR - flight.collision_speed)
+        slow = max(0.0, self.floor - flight.collision_speed)
         # Log value, so a km/s of shortfall weighs like a factor of e^10.
         return [-float(np.log(value)) + 10.0 * gap + 10.0 * slow]
 
@@ -674,16 +704,18 @@ def _evolve_island(
         int,
         Optional[float],
         float,
+        float,
     ],
 ) -> Tuple[List[float], float]:
     """One independent island: build the problem here, evolve, return its champion."""
     import pygmo as pg
 
     (sequence, sign, propulsion, stage, ship, dollars, rate, population, generations,
-     evolutions, seed, late_rate, switch_years) = task  # fmt: skip
+     evolutions, seed, late_rate, switch_years, floor) = task  # fmt: skip
     udp = _RouteProblem(
-        sequence, sign, propulsion, stage, ship, dollars, rate, late_rate, switch_years
-    )
+        sequence, sign, propulsion, stage, ship, dollars, rate, late_rate,
+        switch_years, floor,
+    )  # fmt: skip
     pop = pg.population(pg.problem(udp), population, seed=seed)
     algo = pg.algorithm(pg.sade(gen=generations, seed=seed))
     for _ in range(evolutions):
@@ -739,6 +771,7 @@ def best_route(
     population: int = 40,
     generations: int = 150,
     evolutions: int = 3,
+    floor: float = RETURN_FLOOR,
 ) -> Optional[SeedRoute]:
     """Most discounted seed per dollar on ``sequence``, launched in the window.
 
@@ -767,6 +800,8 @@ def best_route(
         population: Individuals per island.
         generations: Generations per evolution.
         evolutions: Evolutions per island.
+        floor: Slowest acceptable return (km/s); ADR 0059 raises it to the
+            chain's first growth wave.
 
     Returns:
         The best feasible route, or None if no candidate closes at the floor.
@@ -776,7 +811,8 @@ def best_route(
 
     tasks = [
         (sequence, sign, propulsion, stage, ship, ship_dollars, rate, population,
-         generations, evolutions, seed + 2 * island + side, late_rate, switch_years)
+         generations, evolutions, seed + 2 * island + side, late_rate, switch_years,
+         floor)
         for side, sign in enumerate((1.0, -1.0))
         for island in range(islands)
     ]  # fmt: skip
@@ -796,6 +832,7 @@ def best_route(
             rate,
             late_rate,
             switch_years,
+            floor,
         )
         route = _price(udp, x)
         if route is not None and (best is None or route.value > best.value):
@@ -809,7 +846,7 @@ def _price(udp: _RouteProblem, x: Sequence[float]) -> Optional[SeedRoute]:
     if solved is None:
         return None
     flight, launch = solved
-    if flight.collision_speed < RETURN_FLOOR - 1e-6:
+    if flight.collision_speed < udp.floor - 1e-6:
         return None
     stack = float(
         seed_payload(udp.ship, flight.v_infinity * u.km / u.s).payload.to_value(u.kg)

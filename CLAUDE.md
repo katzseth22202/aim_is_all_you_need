@@ -70,8 +70,10 @@ make sep-split      # can argon SEP buy the 20-day split's corrections? (ADR 002
 make sep-split-10d  # the same at the 10-day gap the paper flies (ADR 0026 addendum)
 make dsm-bound      # free the split's correction burn in time and place (ADR 0028)
 make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
+make seed-sep-tug   # an argon tug lifting the fuelled seed ship: does not beat EEJ (ADR 0058)
+make seed-loop      # Lucy-style Earth loops for the seed, DSM at 370 s (ADR 0059; ~30 min)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
-make growth-cost    # every growth launch unit charged, stepped cost of capital (ADR 0037)
+make growth-cost    # every growth launch unit charged; 10%/yr, 50% odds, seed on EEJ (ADR 0037, 0040, 0057)
 make plate-designs  # the impact-sim's spray cup / plug through the growth ledger (ADR 0041)
 make plate-designs-cost # the same through the cost model, lob climbing at 400 km (ADR 0041, 0042)
 make plate-grid     # full ledger matrix + sensitivities behind the spray cup and plug (ADR 0042)
@@ -293,6 +295,18 @@ seed_route.py                ← seed_cost + retrograde_return_legs + jovian_fly
                                 (EEJ) with methalox, 1.16-1.33x direct under ADR
                                 0040's valuation; SEP is out of scope, its
                                 capacity test necessary but not sufficient (ADR 0039)
+
+seed_sep_tug.py              ← seed_cost + seed_route + finite_burn_loss: an argon
+                                tug lifting the fuelled seed ship to a high ellipse
+                                (perigee pump, orbit-averaged) against direct at
+                                10%/yr; pays only at ~$10/W with no boil-off and the
+                                array sold at L1 (ADR 0058)
+
+seed_loop.py                 ← seed_route + retrograde_return_legs: Lucy-style
+                                ΔV-EGA seed routes (launch, deep-space burn at 370 s,
+                                powered Earth flyby onto the Jupiter arc, return at
+                                the chain's 59.29 km/s), ship carried through every
+                                burn; pygmo islands per 1/2/3-yr band (ADR 0059)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem
