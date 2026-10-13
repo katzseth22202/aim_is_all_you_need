@@ -27,7 +27,9 @@ from src.chamber_isp import (
     SPHERE_THROAT_AREA,
     SPHERE_VOLUME,
     SURVIVABLE_IMPULSE,
+    SURVIVABLE_IMPULSE_CARBON_FROZEN,
     SURVIVABLE_IMPULSE_S17,
+    SURVIVABLE_IMPULSE_SUDDEN_FREEZE,
     SURVIVABLE_THROAT_AREA,
     SURVIVABLE_THROAT_AREA_S17,
     SURVIVABLE_VOLUME,
@@ -40,6 +42,7 @@ from src.chamber_isp import (
     momentum_debit_share,
     slug_ratio_at,
     stored_as,
+    survivable_cycle,
     survivable_methane,
 )
 
@@ -241,14 +244,15 @@ def test_efficiency_is_quoted_as_a_share_of_that_ceiling(
 
 
 @pytest.mark.parametrize(
-    "area_ratio, impulse_kn_s, isp_s", [(100, 868.0, 756.0), (300, 899.0, 783.0)]
+    "area_ratio, impulse_kn_s, isp_s",
+    [(100, 885.0, 771.0), (150, 908.0, 791.0), (300, 941.0, 820.0)],
 )
 def test_the_survivable_chambers_eta_gives_the_impact_sims_pulse(
     area_ratio: int, impulse_kn_s: float, isp_s: float
 ) -> None:
-    """ADR 0055: 868 / 899 kN s per 5 kg pulse (gate and nozzle freeze
-    charged) is 756 / 783 s on the 117 kg of charge and plug.  A/A* = 300
-    comes out at 0.483, beside the impact sim's own eta_net of 0.484."""
+    """ADR 0056: 885 / 908 / 941 kN s per 5 kg pulse (gate and finite-rate
+    recombination charged) is 771 / 791 / 820 s on the 117 kg of charge and
+    plug."""
     pairing = survivable_methane(area_ratio)
     eta = efficiency_for_impulse(SURVIVABLE_IMPULSE[area_ratio], pairing)
     isp = effective_isp(
@@ -264,18 +268,28 @@ def test_the_survivable_chambers_eta_gives_the_impact_sims_pulse(
         u.kN * u.s
     ) == pytest.approx(impulse_kn_s, rel=1e-9)
     assert isp.to_value(u.s) == pytest.approx(isp_s, abs=2.0)
-    if area_ratio == 300:
-        assert eta == pytest.approx(0.484, abs=0.002)
+
+
+def test_finite_rate_sits_between_the_carbon_floor_and_the_sudden_freeze() -> None:
+    """ADR 0056: the sudden freeze tripled hydrogen's loss, so the finite-rate
+    impulse beats ADR 0055's; carbon frozen is the floor under both."""
+    for ar in (100, 300):
+        assert (
+            SURVIVABLE_IMPULSE_CARBON_FROZEN[ar]
+            < SURVIVABLE_IMPULSE_SUDDEN_FREEZE[ar]
+            < SURVIVABLE_IMPULSE[ar]
+        )
+    assert SURVIVABLE_IMPULSE_CARBON_FROZEN[300] < SURVIVABLE_IMPULSE[150]
 
 
 def test_s17s_impulse_charged_neither_gate_nor_freeze() -> None:
     """ADR 0044's 906 / 971 kN s gave A/A* = 300 the sphere's solved 0.538;
-    charging the freeze costs the chamber about a tenth of its eta."""
+    charging the finite-rate freeze costs the chamber about 5% of its eta."""
     pairing = survivable_methane(300)
     old = efficiency_for_impulse(SURVIVABLE_IMPULSE_S17[300], pairing)
     new = efficiency_for_impulse(SURVIVABLE_IMPULSE[300], pairing)
     assert old == pytest.approx(0.538, abs=0.001)
-    assert 0.85 < new / old < 0.92
+    assert 0.92 < new / old < 0.97
 
 
 def test_the_bulged_hydrogen_chamber_is_the_spheres_charge_in_the_bulge() -> None:
@@ -391,6 +405,27 @@ def test_the_doubled_throat_halves_the_blowdown() -> None:
     new = blowdown_time(SURVIVABLE_VOLUME, SURVIVABLE_THROAT_AREA, gas, to_fill)
     assert (new / old).to_value(u.one) == pytest.approx(0.5)
     assert new.to_value(u.ms) == pytest.approx(139.0, abs=3.0)
+
+
+@pytest.mark.parametrize(
+    "throat, seal, period_ms",
+    [(1.33, 1.11, 439.0), (1.33, 0.3, 548.0), (2.66, 1.11, 297.0), (2.66, 0.3, 351.0)],
+)
+def test_the_cycle_reproduces_the_impact_sims_periods(
+    throat: float, seal: float, period_ms: float
+) -> None:
+    """ADR 0055/0056: the impact sim's 439 / 548 ms and 297 / 351 ms."""
+    period = survivable_cycle(throat * u.m**2, seal)
+    assert period.to_value(u.ms) == pytest.approx(period_ms, abs=2.0)
+
+
+def test_the_doubled_throat_fits_three_hertz_only_with_a_faster_fill() -> None:
+    """ADR 0056: a polymer film at 0.3 bar and the 1 t/s fill run 352 ms,
+    past 3 Hz's 333; a 2 t/s fill brings it to 298 ms.  4 Hz never fits."""
+    throat = SURVIVABLE_THROAT_AREA
+    assert survivable_cycle(throat, 0.3) > (1.0 / 3.0) * u.s
+    assert survivable_cycle(throat, 0.3, 2.0 * u.t / u.s) < (1.0 / 3.0) * u.s
+    assert survivable_cycle(throat, 0.3, 2.0 * u.t / u.s) > 0.25 * u.s
 
 
 def test_blowdown_rejects_an_impossible_target() -> None:

@@ -79,7 +79,7 @@ make plate-cost     # whole cost report behind the spray cup; plug and ADR 0033 
 make plate-seed     # seed amortization, L1 deliveries, grow-or-harvest behind the spray cup (ADR 0042)
 make plate-film     # the spray cup's film carried as launched mass, ledger and cost headline (ADR 0043)
 make lob-brake      # the booster's brake at each climb rate and the lob charge it sets (ADR 0043)
-make survivable-chamber # the 5 kg bulged methane chamber: ledger, AR100/300, redundancy, cost, seed (ADR 0044)
+make survivable-chamber # the 5 kg bulged methane chamber: ledger, AR100/150/300 at 2 and 3 Hz, cycle, cost, seed (ADR 0044, 0056)
 make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/kg, exhaust tonnes (ADR 0050)
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
@@ -232,10 +232,13 @@ survivable_chamber.py        ← growth_ledger + growth_cost_report + seed_cost:
                                 parent's S17. The bulged 5 kg methane chamber
                                 (chamber_isp.survivable_methane: 2 Hz, P = 4, 2.66 m^2
                                 throat, 46.2 t wall, 2.6 kg throat film a shot, AR
-                                100/300 extension) and the bulged hydrogen chamber
+                                100/150/300 extension, finite-rate impulse with the
+                                carbon-frozen floor; survivable_cycle says 3 Hz needs
+                                a 2 t/s fill) and the bulged hydrogen chamber
                                 (HYDROGEN_BULGED) through the ledger, cost book and
                                 seed, in worker processes passed by index (pickled
-                                pairings break `is HYDROGEN_5500K`) (ADR 0044, 0055)
+                                pairings break `is HYDROGEN_5500K`) (ADR 0044, 0055,
+                                0056)
 
 hardware_recovery.py         ← growth_cost + survivable_chamber: spent tanks and
                                 chamber cut up in flight and flown back as rods

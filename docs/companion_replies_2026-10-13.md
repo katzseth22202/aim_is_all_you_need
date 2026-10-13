@@ -37,7 +37,9 @@ exhaust-speed ratio):
 
 - **Use ~78% for S24.** Interpolating the share rows of `survivable_chamber_for_parent.md`
   (70% at 3.61 yr, 80.5% at 2.76 yr) puts it near 2.9 yr. That is a rough read; the ledger
-  should be re-run.
+  should be re-run. **Superseded by ADR 0056:** re-flown on the finite-rate impulse,
+  doubling is 3.36 / 3.33 yr (A/A* 100 / 300). The share rows predate ADR 0055's film and
+  doubled extension, which is why the read was low.
 - **The carbon-frozen floor falls below the 70% row**, so it would not grow faster than 3.6 yr.
   The sim judges the floor unlikely, though it cannot be ruled out. Keeping carbon in step needs
   a three-body coefficient about 100x below the only carbon measurement there is.

@@ -252,8 +252,9 @@ METHANE_7000K = ChamberPairing(
 #: throat doubles from 1.33 to 2.66 m^2 so the 2 Hz cycle keeps 150-200 ms
 #: spare.  The cone is 1 m shorter and the dry wrap falls to 46.2 t (the 1.33
 #: m^2 chamber re-solved needs 52.4 t, not 48.2).  Net impulse per pulse is
-#: 868 / 899 kN s with the 1% gate and the H + H + M nozzle freeze charged; the
-#: old 906 / 971 charged neither.  Each shot spends a 2.6 kg aramid throat
+#: 885 / 941 kN s with the 1% gate and finite-rate H + H + M recombination
+#: charged (ADR 0056; ADR 0055's 868 / 899 froze it suddenly, and the old
+#: 906 / 971 charged neither).  Each shot spends a 2.6 kg aramid throat
 #: film, sealed at 0.3 bar, which leaves with the exhaust as the pitch does.
 SURVIVABLE_ROD_MASS = 5.0 * u.kg
 SURVIVABLE_PULSE_RATE = 2.0 / u.s
@@ -262,16 +263,32 @@ SURVIVABLE_CARRIED_PER_ROD = 117.0 / 5.0
 SURVIVABLE_WALL_MASS = 46.2 * u.t
 #: The impact sim's fallback wall: a maraging-steel band.
 SURVIVABLE_FALLBACK_WALL_MASS = 68.8 * u.t
-#: The impact sim's net impulse per pulse, head-on debit taken, gate and
-#: nozzle freeze charged, on the 2.66 m^2 throat.
-SURVIVABLE_IMPULSE = {100: 868.0 * u.kN * u.s, 300: 899.0 * u.kN * u.s}
+#: The impact sim's net impulse per pulse, head-on debit taken, gate charged,
+#: on the 2.66 m^2 throat, with H + H + M recombining at its measured rate
+#: through the nozzle and carbon trading atoms freely (ADR 0056, the sim's S26
+#: answer @ df4bc6e).  A/A* = 150 is S24's option (a): the 22.5 m exit kept.
+SURVIVABLE_IMPULSE = {
+    100: 885.0 * u.kN * u.s,
+    150: 908.0 * u.kN * u.s,
+    300: 941.0 * u.kN * u.s,
+}
+#: The same with carbon frozen at the chamber state: the floor (ADR 0056).
+SURVIVABLE_IMPULSE_CARBON_FROZEN = {
+    100: 810.0 * u.kN * u.s,
+    150: 827.0 * u.kN * u.s,
+    300: 849.0 * u.kN * u.s,
+}
+#: ADR 0055's figures: hydrogen recombination frozen suddenly, which tripled
+#: its loss.
+SURVIVABLE_IMPULSE_SUDDEN_FREEZE = {100: 868.0 * u.kN * u.s, 300: 899.0 * u.kN * u.s}
 #: ADR 0044's figures (S17), gate and freeze uncharged, 1.33 m^2 throat.
 SURVIVABLE_IMPULSE_S17 = {100: 906.0 * u.kN * u.s, 300: 971.0 * u.kN * u.s}
 #: The aramid throat film each shot spends (sealed at 0.3 bar, mass ~ p r^3).
 SURVIVABLE_THROAT_FILM = 2.6 * u.kg
 #: Its nozzle extensions, scaled by exit area from the 2.19 t at 8.7 m: the
 #: doubled throat doubles them, ~18 m and ~32 m exits (4.9 / 14.7 t at 1.33 m^2).
-SURVIVABLE_EXTENSION_MASS = {100: 9.8 * u.t, 300: 29.4 * u.t}
+#: A/A* = 150 keeps the 22.5 m exit, and so the 14.7 t extension.
+SURVIVABLE_EXTENSION_MASS = {100: 9.8 * u.t, 150: 14.7 * u.t, 300: 29.4 * u.t}
 
 #: The survivable chamber's volume and throat (parent ``tab:one_chamber``).
 SURVIVABLE_VOLUME = 212.0 * u.m**3
@@ -358,20 +375,65 @@ def blowdown_time(
     return ((mass_left ** (-q) - 1.0) / (q * rate)).to(u.ms)
 
 
+#: The impact sim's real-gas time to seal the throat film on ADR 0053's
+#: 1.33 m^2 throat, by the pressure it is sealed at (bar): 1.11 bar is the
+#: fill pressure, which leaves a ~1,100 K residue under the film; 0.3 bar keeps
+#: a polymer film under its 400 C rating (its ``walled_nozzle_hydrocode_asks.md``
+#: section 3).
+SEAL_TIME_S17 = {1.11: 281.0 * u.ms, 0.3: 389.0 * u.ms}
+#: The impact sim's mechanism times, stated by it as assumptions: both films
+#: laid, the next charge, the lock before the rod arrives.
+FILM_LAY_TIME = 30.0 * u.ms
+FILL_MASS = 108.0 * u.kg
+FILL_RATE = 1.0 * u.t / u.s
+LOCK_TIME = 20.0 * u.ms
+
+
+def survivable_cycle(
+    throat_area: u.Quantity,
+    seal_pressure: float = 0.3,
+    fill_rate: u.Quantity = FILL_RATE,
+) -> u.Quantity:
+    """The shortest period the 212 m^3 methane chamber can fire at.
+
+    Seal the throat film, lay both films, fill, lock (the impact sim's
+    ``cycle.py``).  The seal time is its real-gas solve on the 1.33 m^2 throat
+    scaled as ``V / A*``, which holds exactly because the gas state depends only
+    on energy per volume.  The fill cannot overlap an open throat; the plug
+    goes in during the fill.
+
+    Args:
+        throat_area: Throat area.
+        seal_pressure: Pressure the throat film is sealed at, a key of
+            :data:`SEAL_TIME_S17`.
+        fill_rate: Injector flow while filling.
+
+    Returns:
+        The period.
+    """
+    seal = SEAL_TIME_S17[seal_pressure] * float(
+        (SURVIVABLE_THROAT_AREA_S17 / throat_area).to_value(u.one)
+    )
+    fill = FILL_MASS / fill_rate
+    return (seal + FILM_LAY_TIME + fill + LOCK_TIME).to(u.ms)
+
+
 def survivable_methane(
     area_ratio: int,
     wall_mass: u.Quantity = SURVIVABLE_WALL_MASS,
     rods_split: int = 1,
+    pulse_rate: u.Quantity = SURVIVABLE_PULSE_RATE,
 ) -> ChamberPairing:
     """The survivable methane chamber at one nozzle area ratio.
 
     Args:
-        area_ratio: 100 or 300.
+        area_ratio: 100, 150 (S24's option (a)) or 300.
         wall_mass: The wall of one 5 kg chamber, or of all ``rods_split``.
         rods_split: Split the 5 kg rod's flow across this many smaller
             chambers, each firing ``5 / rods_split`` kg at 2 Hz with the same
             ``k`` and ``P``, sharing ``wall_mass`` evenly, and each with an
             extension of its share of the exit area (parent S17 item 3).
+        pulse_rate: Pulses per second; :func:`survivable_cycle` says which fit.
 
     Returns:
         The pairing; its ``eta`` is :func:`efficiency_for_impulse` at
@@ -380,7 +442,12 @@ def survivable_methane(
     share = 1.0 / rods_split
     return ChamberPairing(
         f"CH4 survivable AR{area_ratio}"
-        + (f" x{rods_split}" if rods_split > 1 else ""),
+        + (f" x{rods_split}" if rods_split > 1 else "")
+        + (
+            f" {pulse_rate.to_value(1 / u.s):g} Hz"
+            if pulse_rate != SURVIVABLE_PULSE_RATE
+            else ""
+        ),
         7000.0 * u.K,
         SURVIVABLE_CARRIED_PER_ROD - SURVIVABLE_PLUG_RATIO,
         (wall_mass * share).to(u.t),
@@ -388,7 +455,7 @@ def survivable_methane(
         METHANE_7000K.chemistry_ceiling,
         rod_mass=SURVIVABLE_ROD_MASS * share,
         plug_ratio=SURVIVABLE_PLUG_RATIO,
-        pulse_rate=SURVIVABLE_PULSE_RATE,
+        pulse_rate=pulse_rate,
         extension_mass=(SURVIVABLE_EXTENSION_MASS[area_ratio] * share).to(u.t),
     )
 

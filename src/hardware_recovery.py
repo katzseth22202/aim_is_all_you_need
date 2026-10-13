@@ -81,9 +81,9 @@ COMPOSITE_CARBON = 0.88
 
 
 def _designs() -> List[Design]:
-    """The survivable methane chamber at A/A* = 100, which leads once its
-    throat doubles (ADR 0055), solved hydrogen in the sphere, and the bulged
-    hydrogen chamber."""
+    """The survivable methane chamber at A/A* = 100 (ADR 0055's lead; within
+    0.1 yr of the other nozzles on the finite-rate impulse, ADR 0056), solved
+    hydrogen in the sphere, and the bulged hydrogen chamber."""
     return [
         survivable_design(100, SURVIVABLE_PITCH),
         DESIGNS[4],

@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -112,8 +112,11 @@ lob-brake:  ## The booster's brake and reserve at each climb rate, and the lob c
 
 survivable-chamber: survivable-ledger survivable-cost  ## The survivable 5 kg methane chamber (parent S17): ledger, AR100/300, redundancy, cost book and seed (ADR 0044)
 
-survivable-ledger:  ## The survivable chamber through the growth ledger: both area ratios and pitch edges, redundancy, sensitivities (ADR 0044)
+survivable-ledger:  ## The survivable chamber through the growth ledger: both area ratios and pitch edges, redundancy, sensitivities, S24 cycle table and 2 / 3 Hz grid (ADR 0044, 0056)
 	python -m src.survivable_chamber --ledger
+
+survivable-paper-grid:  ## The paper's methane cells of tab:growth_ledger_doubling and _ten_year on the doubled throat, by plate (ADR 0056)
+	python -m src.survivable_chamber --paper-grid
 
 survivable-cost:  ## The survivable chamber through the cost book and tab:seed_amortization behind the spray cup (ADR 0044)
 	python -m src.survivable_chamber --cost

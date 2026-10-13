@@ -7,7 +7,11 @@ the designs it flies.
 import pytest
 from astropy import units as u
 
-from src.chamber_isp import HYDROGEN_5500K, METHANE_7000K
+from src.chamber_isp import (
+    HYDROGEN_5500K,
+    METHANE_7000K,
+    SURVIVABLE_IMPULSE_CARBON_FROZEN,
+)
 from src.growth_cost import ESTIMATE, Program, _fleet_lines
 from src.growth_ledger import METHANE_PITCH, SPRAY_CUP_SHIELDED
 from src.seed_cost import DESIGNS, Design
@@ -17,6 +21,9 @@ from src.survivable_chamber import (
     SURVIVABLE_PITCH_RANGE,
     cost_designs,
     ledger_cases,
+    paper_cost_designs,
+    paper_grid_designs,
+    s24_rates,
     survivable_design,
     survivable_efficiency,
 )
@@ -36,9 +43,24 @@ def test_the_pitch_and_throat_film_are_charged_per_kilogram_of_rod() -> None:
 
 
 def test_the_area_ratios_fly_the_impact_sims_eta() -> None:
-    assert survivable_efficiency(100) == pytest.approx(0.459, abs=0.001)
-    assert survivable_efficiency(300) == pytest.approx(0.483, abs=0.001)
+    assert survivable_efficiency(100) == pytest.approx(0.472, abs=0.001)
+    assert survivable_efficiency(150) == pytest.approx(0.490, abs=0.001)
+    assert survivable_efficiency(300) == pytest.approx(0.515, abs=0.001)
     assert survivable_design(300).efficiency == survivable_efficiency(300)
+    assert survivable_efficiency(
+        300, SURVIVABLE_IMPULSE_CARBON_FROZEN
+    ) == pytest.approx(0.446, abs=0.001)
+
+
+def test_s24_flies_two_and_three_hertz_not_four() -> None:
+    """ADR 0056: with a 2 t/s fill the doubled throat's period is 298 ms."""
+    assert [r.to_value(1 / u.s) for r in s24_rates()] == [2.0, 3.0]
+    s24 = [c for c in ledger_cases() if c.group.startswith("S24")]
+    assert len(s24) == 2 * 2 * 3
+    rates = {c.design.pairing.pulse_rate.to_value(1 / u.s) for c in s24}
+    assert rates == {2.0, 3.0}
+    # The film rides every rate: it is sealed at 0.3 bar whatever the period.
+    assert {round(c.design.pitch_ratio, 2) for c in s24} == {5.32}
 
 
 def test_every_s17_item_has_its_cases() -> None:
@@ -79,3 +101,14 @@ def test_the_bulged_hydrogen_chamber_is_priced_beside_the_sphere() -> None:
 def test_the_wall_life_case_flies_two_chambers() -> None:
     forced = [c for c in ledger_cases() if "wall life" in c.label]
     assert {c.design.chambers for c in forced} == {2}
+
+
+def test_the_paper_grid_flies_the_papers_methane_rows() -> None:
+    """ADR 0056: the shares of tab:growth_ledger_doubling with the solved row
+    in its place, all on the doubled throat at A/A* = 300."""
+    rows = paper_grid_designs()
+    assert [label for label, _ in rows][2] == "Methane, solved (77%)"
+    assert len(rows) == 5
+    assert all(d.pairing.extension_mass.to_value(u.t) == 29.4 for _, d in rows)
+    plates = {plate.label for _, plate in paper_cost_designs()}
+    assert PLATE.label in plates and len(plates) == 4

@@ -7,6 +7,10 @@ Raised 2026-10-13 in `aim_is_all_you_need` (ADR 0055). It takes
 amendment. Reproduce the ledger with `make survivable-chamber` and the hydrogen rows with
 `make slush-hydrogen` and `make hardware-recovery`.
 
+**Items 1, 3 and 4 are superseded by ADR 0056** (`docs/throat_answers_for_parent.md`): the
+868 / 899 kN s froze hydrogen recombination suddenly. At the finite rate they are 885 / 941,
+the methane rows double in 3.36 / 3.33 yr, and A/A* = 100 no longer leads.
+
 Status of each item for the paper:
 
 | # | item | for the paper? |

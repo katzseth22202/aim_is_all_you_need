@@ -6,6 +6,9 @@ Status: Accepted. Takes the impact simulation's answers to
 `docs/hydrocode_asks_2026-10-12.md` (B1-B6), `puffsat_impact_simulation` @ `7afdba3`: its
 ADR-0056 with the 2026-10-13 amendment, `docs/hydrocode_asks_handoff.md` and
 `docs/walled_nozzle_hydrocode_asks.md`. Amends ADR 0044 and ADR 0053; rejects ADR 0054.
+Amended by ADR 0056: the 868 / 899 kN s froze hydrogen recombination suddenly. At the
+finite rate they are 885 / 941, the ledger doubles in 3.36 / 3.33 yr, not 3.57 / 3.86, and
+A/A* = 100 no longer leads.
 
 ## Context
 

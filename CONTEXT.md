@@ -367,8 +367,9 @@ The time a pulsed chamber takes to empty through its choked throat
 0053's 1.33 m2 throat the survivable methane chamber needed 278-336 ms to reach
 its fill pressure (the impact simulation's real-gas solve: 281 ms). The throat is
 now 2.66 m2 (ADR 0055), which halves it to ~139 ms and leaves 150-200 ms of the
-2 Hz period with the throat film sealed at 0.3 bar. Methane still cannot reach
-4 Hz (~2.8-3.4 Hz at best). _Avoid_: quoting the e-fold time as the blowdown
+2 Hz period with the throat film sealed at 0.3 bar. The whole cycle
+(`chamber_isp.survivable_cycle`, ADR 0056) runs 352 ms at the 1 t/s fill, so
+3 Hz needs the fill doubled to 2 t/s (298 ms) and 4 Hz never fits. _Avoid_: quoting the e-fold time as the blowdown
 (refill waits for ~97% of the mass to leave); crediting a bulged hydrogen chamber
 with the sphere's 4 Hz; shrinking the chamber to buy time (it fails the wall).
 
