@@ -1760,6 +1760,16 @@ cannot fly the delivery optimum's plate.
 _Avoid_: scoring the lob per PuffSat (a smaller unit spends proportionally fewer, so its
 lost mass does not show); a dollar objective (the prices are guesses).
 
+**Powered 3S flyby**:
+A 3S cycle that flies out slower on a cheaper Earth departure and burns at
+Jupiter's perijove to keep the 3S return (`src/powered_resonance.py`, ADR 0070).
+**Rejected**: beyond the first ~0.1 km/s it costs 1.5-5 km/s of methalox at
+Jupiter per km/s of chamber burn saved at Earth. The fixed clock shortens the
+return, so Jupiter must add much more energy, and the two legs' turn pins the
+perijove at 5.7-11 R_J, where the leverage is moderate. A deeper pass would
+over-turn by ~54 degrees. _Avoid_: blaming the slower arrival's lower
+perijove speed (only ~3%); assuming the perijove can be chosen freely.
+
 **Departure visibility**:
 A departure burn must keep every incoming PuffSat route in view of Earth for its whole
 length (`src/departure_visibility.py`, ADR 0066). The flown chain's streams arrive

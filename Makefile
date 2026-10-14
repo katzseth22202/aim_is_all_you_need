@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -82,6 +82,9 @@ light-plate-push:  ## Abandoned: smaller plate pulses flown against gravity abov
 
 departure-levers:  ## Rank departure levers on the flown chain, each stream kept in view: 3 Hz, two chambers, light pitch, hydrogen, hydrogen solved at 4884-7000 K (ADR 0063, 0064, 0066; ~25 min)
 	python -W ignore -m src.departure_levers
+
+powered-resonance:  ## A slower outbound leg and a powered Jupiter flyby on the circular 3S cycle: rejected (ADR 0070; ~30 s)
+	python -W ignore -m src.powered_resonance
 
 impact-angle:  ## What Earth's bending of the impact angle is worth on each flown departure, and the chambers' Isp (ADR 0066; ~5 min)
 	python -W ignore -m src.impact_angle
