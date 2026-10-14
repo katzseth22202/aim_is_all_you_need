@@ -133,9 +133,11 @@ def test_the_chain_seed_leaves_at_the_parents_excess_speed() -> None:
         # ADR 0038 (onward burn); the parent printed 72.7 / 19% / 5.1 / 12.5,
         # 80.81 / 51% / 69.5 / 34.4 and 80.73 / 57% / 104.2 / 44.3.  Hydrogen
         # stored as liquid gave 83.25 / 0.548 / 75.07 / 32.85 (before ADR 0065).
+        # With the burn centred (before ADR 0066) the chambers' rows were
+        # 83.08 / 0.488 / 49.66 / 25.28 and 83.65 / 0.582 / 95.52 / 38.36.
         (0, 72.71, 0.185, 5.071, 10.70),
-        (2, 83.08, 0.488, 49.66, 25.28),
-        (4, 83.65, 0.582, 95.52, 38.36),
+        (2, 82.03, 0.477, 46.55, 23.89),
+        (4, 82.54, 0.573, 90.28, 36.44),
     ],
 )
 def test_tab_seed_amortization_reproduces(

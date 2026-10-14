@@ -60,17 +60,18 @@ def test_methalox_flies_no_rods_and_chambers_do() -> None:
 
 
 def test_a_launch_unit_spends_what_the_ledger_launched() -> None:
-    # Solved methane, cycle 0: one chamber, 13.5 t of tanks, 468 t of departure
-    # mass (gas, plugs and pitch) and 580 t of argon.  The ASKS v1 table's
+    # Solved methane, cycle 0: one chamber, 13.4 t of tanks, 464 t of departure
+    # mass (gas, plugs and pitch) and 591 t of argon, with the stream kept in
+    # view (ADR 0066; centred, 13.5 t, 468 t and 580 t).  The ASKS v1 table's
     # 11.3 t, 392 t and 577 t predate ADR 0038: cycle 0's payload now flies
     # cycle 1's 2S burn (7.17 km/s), not its own 3S burn (5.33).
     cycle = design_inputs(DESIGNS[2]).cycles[0]
     assert cycle.departure_units == 1
-    assert cycle.tanks / 1e3 == pytest.approx(13.54, abs=0.05)
+    assert cycle.tanks / 1e3 == pytest.approx(13.44, abs=0.05)
     assert (cycle.gas + cycle.plugs + cycle.pitch) / 1e3 == pytest.approx(
-        467.7, abs=0.5
+        464.0, abs=0.5
     )
-    assert cycle.argon / 1e3 == pytest.approx(580.4, abs=0.5)
+    assert cycle.argon / 1e3 == pytest.approx(591.4, abs=0.5)
 
 
 @pytest.mark.parametrize(
@@ -78,8 +79,9 @@ def test_a_launch_unit_spends_what_the_ledger_launched() -> None:
     # Direct seed at ADR 0057's $150/kg baseline.  tab:seed_return printed
     # 45 / 3, 39 / 10 and 87 / 33, 84 / 36 at Musk's $2M a flight; ADR 0038's
     # onward burn gave 42 / 2, 38 / 9 and 81 / 29, 80 / 33 there.  Hydrogen
-    # stored as liquid gave 49.8 / 29.2 and 51.1 / 33.1 here, before ADR 0065.
-    [(DESIGNS[0], (17.9, 1.7), (18.9, 8.7)), (DESIGNS[4], (52.6, 31.6), (54.0, 35.5))],
+    # stored as liquid gave 49.8 / 29.2 and 51.1 / 33.1 here, before ADR 0065;
+    # as slush with the burn centred, 52.6 / 31.6 and 54.0 / 35.5 (ADR 0066).
+    [(DESIGNS[0], (17.9, 1.7), (18.9, 8.7)), (DESIGNS[4], (51.7, 30.9), (53.1, 34.8))],
     ids=["methalox", "hydrogen solved"],
 )
 def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
@@ -105,9 +107,11 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
     "design, steady_cost, break_even",
     [
         (DESIGNS[0], 169, (567, 1396)),
-        (DESIGNS[2], 100, (155, 222)),
-        # Stored as liquid, before ADR 0065: 100, (146, 194).
-        (DESIGNS[4], 96, (135, 174)),
+        # Burn centred, before ADR 0066: 100, (155, 222).
+        (DESIGNS[2], 102, (160, 232)),
+        # Stored as liquid, before ADR 0065: 100, (146, 194); as slush with
+        # the burn centred, 96, (135, 174).
+        (DESIGNS[4], 98, (138, 180)),
     ],
     ids=["methalox", "methane solved", "hydrogen solved"],
 )

@@ -2,9 +2,10 @@
 
 Date: 2026-10-14
 
-Status: Accepted for the lever ranking (`make departure-levers-visible`). Not
-yet the ledger's default: the cost book, seed and harvest reports still fly the
-centred loss table (see "Not yet done").
+Status: Accepted. Amended by ADR 0067, which makes the constraint the ledger's
+default, stores the tables in `data/departure_visibility.csv`, and renames the
+reports: `make departure-levers` now keeps the stream in view and `make
+departure-levers-centred` gives the centred ranking.
 
 ## Context
 

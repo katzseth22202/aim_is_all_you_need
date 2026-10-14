@@ -92,6 +92,7 @@ from src.growth_ledger import (
     _orbit_loss,
     chain_growth,
     departure_at_altitude,
+    hydrogen_boil_off,
     parking_period,
     summarize_chain,
 )
@@ -231,18 +232,27 @@ def _fly(case: Case, plate: PlateDesign = PLATE) -> List[CycleGrowth]:
     flown, _ = chains(DEFAULT_PARKING_DAYS)
     pairing = case.design.pairing
     assert pairing is not None and case.design.efficiency is not None
-    loss = _orbit_loss(steered_loss, parking_period(flown[0])) if case.steered else None
+    # The steered loss is a sensitivity on the centred burn; everything else
+    # keeps its stream in view (ADR 0066).
+    steered = _orbit_loss(steered_loss, parking_period(flown[0]))
+    storage = pairing.storage
     return chain_growth(
         flown,
         plate.efficiency,
         pairing,
         case.design.efficiency,
         case.design.pitch_ratio,
-        loss_model=loss,
         max_slug_ratio=plate.max_slug_ratio,
         impactor_bond_energy=plate.impactor_bond_energy,
         film_per_impulse=plate.film_per_impulse,
+        cryostat_fraction=0.0 if storage is None else storage.cryostat_fraction,
+        boil_off=(
+            0.0
+            if storage is None
+            else hydrogen_boil_off(flown, storage.boil_off_per_day)
+        ),
         chambers=case.design.chambers,
+        loss_model=steered if case.steered else None,
     )
 
 

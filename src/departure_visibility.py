@@ -20,6 +20,9 @@ Three pieces:
   loss among those that keep every incoming route visible.  Blocking always
   falls at the start of a burn, on the approach leg, so the latest admissible
   start is found by bisection and the loss is minimised below it.
+* :func:`stored_loss_models` reads the flown chain's tables from
+  :data:`VISIBILITY_CSV` (the flown and three-synodic-only chains on the 10-
+  and 20-day orbits), which ``make departure-visibility`` regenerates.
 * :func:`visible_loss_model` tabulates that loss over burn length for one
   stream (:func:`visible_loss_table`) and returns a :data:`src.chamber_departure.LossModel`.  A burn with
   no admissible placement raises ``ValueError``, which the ledger's chamber
@@ -31,9 +34,13 @@ check uses the same trajectory.  Planar and two-body; the parking orbit's plane
 is taken to contain both excess vectors, which its apoapsis burns can arrange.
 """
 
+import argparse
+import csv
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from astropy import units as u
@@ -64,6 +71,13 @@ VISIBILITY_SAMPLES = 241
 TABLE_TIMES = np.arange(0.0, 7200.01, 400.0)
 #: Bisection steps on the share of the burn flown before periapsis.
 _BISECTION_STEPS = 12
+#: Parking orbits whose chains are stored (days).
+STORED_PERIODS = (20.0, 10.0)
+#: The chains' tables, stored so the reports need not rebuild them
+#: (about 6 min a process).  Regenerate with ``make departure-visibility``.
+VISIBILITY_CSV = (
+    Path(__file__).resolve().parent.parent / "data" / "departure_visibility.csv"
+)
 
 
 @dataclass(frozen=True)
@@ -222,15 +236,30 @@ def _fly(
         float(np.radians(stream.aim_separation)),
     )
     blocked = sum(
-        not any(
-            route.visible
-            for route in _incoming_routes(
-                mu, earth_radius, position, stream.return_vinf, incoming
-            )
-        )
+        not _in_view(mu, earth_radius, position, stream.return_vinf, incoming)
         for position in states[:2].T
     )
     return ideal - impulsive, blocked / VISIBILITY_SAMPLES
+
+
+def _in_view(
+    mu: float,
+    earth_radius: float,
+    position: np.ndarray,
+    return_vinf: float,
+    incoming: np.ndarray,
+) -> bool:
+    """Whether any incoming route reaches ``position`` before Earth.
+
+    A vehicle exactly on the stream's asymptote line, upstream of Earth, is
+    reached by the radial route of zero impact parameter, which the conic
+    solver cannot represent; that route falls inbound to the vehicle first.
+    """
+    try:
+        routes = _incoming_routes(mu, earth_radius, position, return_vinf, incoming)
+    except ZeroDivisionError:
+        return True
+    return any(route.visible for route in routes)
 
 
 def visible_burn(
@@ -343,3 +372,193 @@ def visible_loss_model(stream: OnwardStream, period_days: float = 20.0) -> LossM
         The loss model.
     """
     return loss_model_from_table(visible_loss_table(stream, period_days))
+
+
+_Key = Tuple[float, float, float, float]
+
+
+def _key(
+    departure_jd: float, return_jd: float, onward_burn: float, period_days: float
+) -> _Key:
+    """A cycle's identity: its dates, the onward window it feeds and its orbit.
+
+    Two chains can share a cycle's dates yet fly different onward windows, and
+    the onward departure sets the stream's geometry.
+    """
+    return (
+        round(departure_jd, 6),
+        round(return_jd, 6),
+        round(onward_burn, 6),
+        round(period_days, 6),
+    )
+
+
+@lru_cache(maxsize=1)
+def _stored() -> Dict[_Key, Tuple[OnwardStream, Tuple[float, ...]]]:
+    """The stored tables, keyed by departure date and parking period."""
+    return _read(VISIBILITY_CSV)
+
+
+def _read(
+    path: Path,
+) -> Dict[_Key, Tuple[OnwardStream, Tuple[float, ...]]]:
+    out: Dict[_Key, Tuple[OnwardStream, Tuple[float, ...]]] = {}
+    with path.open() as handle:
+        for row in csv.DictReader(handle):
+            stream = OnwardStream(
+                int(row["index"]),
+                int(row["synodic_multiple"]),
+                float(row["departure_vinf"]),
+                float(row["return_vinf"]),
+                float(row["aim_separation"]),
+            )
+            table = tuple(float(row[f"loss_{t:.0f}s"]) for t in TABLE_TIMES)
+            key = _key(
+                float(row["departure_jd"]),
+                float(row["return_jd"]),
+                float(row["onward_burn"]),
+                float(row["period_days"]),
+            )
+            out[key] = (
+                stream,
+                table,
+            )
+    return out
+
+
+def stored_tables(
+    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0
+) -> List[Tuple[OnwardStream, Tuple[float, ...]]]:
+    """Each cycle's stream and visible-loss table, read from :data:`VISIBILITY_CSV`.
+
+    Args:
+        cycles: Flown cycles.
+        period_days: Parking-orbit period.
+
+    Returns:
+        One (stream, table) per cycle.
+
+    Raises:
+        KeyError: If a cycle is not stored; pass a loss model explicitly or
+            regenerate the file for that chain.
+    """
+    stored = _stored()
+    out = []
+    for cycle in cycles:
+        key = _key(cycle.departure_jd, cycle.return_jd, cycle.onward_burn, period_days)
+        if key not in stored:
+            raise KeyError(
+                f"no stored departure visibility for the cycle leaving JD "
+                f"{cycle.departure_jd} on a {period_days:g}-day orbit; run "
+                "`make departure-visibility` for its chain"
+            )
+        out.append(stored[key])
+    return out
+
+
+def stored_loss_models(
+    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0
+) -> List[LossModel]:
+    """Each cycle's visible loss, from :func:`stored_tables`.
+
+    Args:
+        cycles: Flown cycles.
+        period_days: Parking-orbit period.
+
+    Returns:
+        One loss model per cycle.
+    """
+    return [
+        loss_model_from_table(table) for _, table in stored_tables(cycles, period_days)
+    ]
+
+
+def write_tables(
+    chains: Sequence[Tuple[Sequence[TwoWaveCycle], float, float]],
+    path: Path,
+    workers: int,
+) -> None:
+    """Build every cycle's table and write them to ``path``.
+
+    Args:
+        chains: (cycles, parking-orbit period in days, the chain's 2S/3S
+            threshold in m/s) triples; a cycle two chains share is written
+            once.
+        path: The CSV to write.
+        workers: Worker processes.
+    """
+    rows: Dict[_Key, Tuple[TwoWaveCycle, float, OnwardStream]] = {}
+    for cycles, period_days, threshold in chains:
+        for cycle, stream in zip(cycles, onward_streams(cycles, threshold)):
+            rows.setdefault(
+                _key(
+                    cycle.departure_jd, cycle.return_jd, cycle.onward_burn, period_days
+                ),
+                (cycle, period_days, stream),
+            )
+    entries = list(rows.values())
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        tables = list(
+            pool.map(
+                visible_loss_table,
+                [stream for _, _, stream in entries],
+                [period for _, period, _ in entries],
+            )
+        )
+    columns = [
+        "index",
+        "synodic_multiple",
+        "departure_jd",
+        "return_jd",
+        "onward_burn",
+        "period_days",
+        "aim_separation",
+        "departure_vinf",
+        "return_vinf",
+    ] + [f"loss_{t:.0f}s" for t in TABLE_TIMES]
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(columns)
+        for (cycle, period_days, stream), table in zip(entries, tables):
+            writer.writerow(
+                [
+                    stream.index,
+                    stream.synodic_multiple,
+                    f"{cycle.departure_jd:.6f}",
+                    f"{cycle.return_jd:.6f}",
+                    f"{cycle.onward_burn:.9f}",
+                    f"{period_days:g}",
+                    f"{stream.aim_separation:.6f}",
+                    f"{stream.departure_vinf:.9f}",
+                    f"{stream.return_vinf:.9f}",
+                ]
+                + [f"{value:.9f}" for value in table]
+            )
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    """Regenerate :data:`VISIBILITY_CSV`: the flown and three-synodic-only
+    chains on the 20-day orbit and on the 10-day one the growth ledger compares.
+
+    Args:
+        argv: ``--workers``.
+    """
+    # Imported here: seed_cost sits above this module in the import graph.
+    from src.seed_cost import chains
+
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--workers", type=int, default=3)
+    args = parser.parse_args(argv)
+    pairs: List[Tuple[Sequence[TwoWaveCycle], float, float]] = []
+    for period_days in STORED_PERIODS:
+        flown, three = chains(period_days)
+        pairs += [
+            (flown, period_days, _DEFAULT_THRESHOLD_M_S),
+            (three, period_days, 0.0),
+        ]
+    write_tables(pairs, VISIBILITY_CSV, args.workers)
+    print(f"wrote {len(_read(VISIBILITY_CSV))} cycles to {VISIBILITY_CSV}")
+
+
+if __name__ == "__main__":
+    main()

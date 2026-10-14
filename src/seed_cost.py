@@ -429,6 +429,9 @@ def design_chain(
 ) -> DesignChain:
     """Fly one design over its chain, as the growth ledger's matrix does (cached).
 
+    A chamber's departure keeps its stream in view of Earth (ADR 0066), from
+    the stored tables; methalox needs no stream.
+
     Args:
         design: The design.
         plate: The plate; ADR 0033's by default (ADR 0041 adds the others).

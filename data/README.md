@@ -14,6 +14,7 @@ with its provenance rather than fetched.
 | file | source | regenerate with |
 | --- | --- | --- |
 | `plume_state.csv` | `puffsat_impact_simulation` @ `0216a09`, `data/results/plume_state.csv` | `make analysis-plume` there |
+| `departure_visibility.csv` | this repository (ADR 0066) | `make departure-visibility` |
 
 ## `plume_state.csv`
 
@@ -33,3 +34,15 @@ the enclosed volume is a live design variable, a single row would not serve.
 `e(rho, T) = e_dissipated` with nothing subtracted. Subtracting an atomisation
 enthalpy first double-charges the bond and lands 4 672 K instead of 15 165 K at
 the cold anchor.
+
+## `departure_visibility.csv`
+
+Unlike the file above, this one is regenerable here; it is stored only because
+building it takes about 6 minutes a process, and every cost report needs it.
+One row per flown-chain cycle on the 20-day parking orbit: the stream its
+onward departure meets (aim separation, both excess speeds) and the least
+finite-burn loss (km/s) over burn placements that keep every incoming route in
+view of Earth, at burn lengths 0-7,200 s on 400 s nodes
+(`src/departure_visibility.py`). `stored_tables` refuses any cycle not in it.
+`tests/test_departure_visibility.py` regenerates the streams and one node.
+Rebuild it whenever the chain, the parking orbit or the loss integrator changes.

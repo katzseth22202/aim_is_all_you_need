@@ -1758,7 +1758,8 @@ A departure burn must keep every incoming PuffSat route in view of Earth for its
 length (`src/departure_visibility.py`, ADR 0066). The flown chain's streams arrive
 154-175.5 degrees from the departure (the *aim separation*), so a long burn centred on
 periapsis loses them on its approach leg; the burn starts later instead. Costs about
-0.2 yr of doubling (`make departure-levers-visible`). _Avoid_: quoting ADR 0045's
+0.2 yr of doubling. The ledger's default since ADR 0067 (`growth_ledger.visible_loss`,
+tables stored in `data/departure_visibility.csv`, rebuilt by `make departure-visibility`). _Avoid_: quoting ADR 0045's
 20-minute, 144.9-degree check for the ledger's 25-60 minute burns; choosing the other
 departure mirror (it is marginal or blocked on every cycle).
 

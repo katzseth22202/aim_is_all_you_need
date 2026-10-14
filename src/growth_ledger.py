@@ -37,6 +37,7 @@ from src.chamber_isp import (
     absolute_efficiency,
     stored_as,
 )
+from src.departure_visibility import stored_loss_models
 from src.finite_burn_loss import fixed_direction_loss, steered_loss
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
 from src.nozzle_analysis import apoapsis_reversal_dv
@@ -148,6 +149,23 @@ def _orbit_loss(
 ) -> LossModel:
     """A tabulated finite-burn loss bound to one parking orbit."""
     return lambda burn, burn_time: table(burn, burn_time, period)
+
+
+def visible_loss(cycle: TwoWaveCycle) -> LossModel:
+    """The cycle's departure loss with its stream kept in view of Earth (ADR 0066).
+
+    Read from the stored tables, which cover the flown and three-synodic-only
+    chains on the 10- and 20-day orbits.  A synthetic cycle has no stream, so it
+    must pass a loss model explicitly.
+
+    Args:
+        cycle: A cycle of a stored chain.
+
+    Returns:
+        Its loss model.
+    """
+    period = float(parking_period(cycle).to_value(u.day))
+    return stored_loss_models([cycle], period)[0]
 
 
 def parking_period(cycle: TwoWaveCycle) -> u.Quantity:
@@ -299,8 +317,8 @@ def price_cycle_growth(
         initial_water_price: Starting water price of the plate's schedule.
         gate_thrust_cost: As in :func:`src.chamber_isp.effective_isp`.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: Finite-burn loss; None uses the fixed-direction table on
-            the cycle's own parking orbit.
+        loss_model: Finite-burn loss; None keeps the departure's stream in
+            view (:func:`visible_loss`, ADR 0066).
         max_slug_ratio: Cap on the plate's water loading; None leaves it free.
         slug: What the plate sprays; argon by default.
         impactor_bond_energy: The PuffSat's bond energy per kilogram.
@@ -327,7 +345,7 @@ def price_cycle_growth(
     departure_burn = departure_at_altitude(
         cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
     )
-    model = loss_model or _orbit_loss(fixed_direction_loss, parking_period(cycle))
+    model = loss_model or visible_loss(cycle)
 
     def depart(stack: u.Quantity) -> DepartureLedger:
         return best_departure(
@@ -448,8 +466,8 @@ def best_cycle_growth(
         departure_efficiency: The chamber's energy efficiency.
         gate_thrust_cost: As in :func:`src.chamber_isp.effective_isp`.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: Finite-burn loss; None uses the fixed-direction table on
-            the cycle's own parking orbit.
+        loss_model: Finite-burn loss; None keeps the departure's stream in
+            view (:func:`visible_loss`, ADR 0066).
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.
@@ -551,8 +569,8 @@ def chain_growth(
         pairing: The departure chamber.
         departure_efficiency: The chamber's energy efficiency.
         pitch_ratio: As in :func:`src.chamber_isp.effective_isp`.
-        loss_model: Finite-burn loss; None uses the fixed-direction table on
-            the cycle's own parking orbit.
+        loss_model: Finite-burn loss; None keeps the departure's stream in
+            view (:func:`visible_loss`, ADR 0066).
         max_slug_ratio: As in :func:`price_cycle_growth`.
         slug: As in :func:`price_cycle_growth`.
         impactor_bond_energy: As in :func:`price_cycle_growth`.

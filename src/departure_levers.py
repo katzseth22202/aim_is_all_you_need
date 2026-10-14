@@ -42,16 +42,14 @@ from src.chamber_isp import (
     efficiency_for_impulse,
     stored_as,
 )
-from src.departure_visibility import (
-    TABLE_TIMES,
-    loss_model_from_table,
-    onward_streams,
-    visible_loss_table,
-)
+from src.departure_visibility import stored_tables
+from src.finite_burn_loss import fixed_direction_loss
 from src.growth_ledger import (
     DEFAULT_PARKING_DAYS,
+    _orbit_loss,
     chain_growth,
     hydrogen_boil_off,
+    parking_period,
     summarize_chain,
 )
 from src.seed_cost import Design, chains
@@ -159,16 +157,13 @@ def cases() -> List[Tuple[str, Design]]:
     return rows
 
 
-def lever_row(
-    index: int, tables: Optional[Sequence[Tuple[float, ...]]] = None
-) -> Dict[str, object]:
+def lever_row(index: int, centred: bool = False) -> Dict[str, object]:
     """Fly one case over the flown chain (runs in a worker, passed by index).
 
     Args:
         index: The case's index in :func:`cases`.
-        tables: One :func:`src.departure_visibility.visible_loss_table` per
-            flown cycle, to keep each departure's stream in view (ADR 0066);
-            None flies the centred loss table.
+        centred: Fly the burn centred on periapsis, stream ignored (the
+            ranking before ADR 0066), instead of keeping it in view.
 
     Returns:
         The row.
@@ -195,10 +190,10 @@ def lever_row(
                 else hydrogen_boil_off(flown, storage.boil_off_per_day)
             ),
             chambers=design.chambers,
-            loss_models=(
-                None
-                if tables is None
-                else [loss_model_from_table(table) for table in tables]
+            loss_model=(
+                _orbit_loss(fixed_direction_loss, parking_period(flown[0]))
+                if centred
+                else None
             ),
         )
     except (RuntimeError, ValueError) as error:
@@ -227,49 +222,32 @@ def lever_row(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Print every lever's chain growth.
+    """Print each cycle's stream and every lever's chain growth.
 
     Args:
-        argv: ``--workers``; ``--visible`` keeps each departure's stream in
-            view (ADR 0066), building every cycle's loss table first.
+        argv: ``--workers``; ``--centred`` flies the burn centred on periapsis
+            with the stream ignored, the ranking before ADR 0066.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workers", type=int, default=2)
-    parser.add_argument("--visible", action="store_true")
+    parser.add_argument("--centred", action="store_true")
     args = parser.parse_args(argv)
+    flown, _ = chains(DEFAULT_PARKING_DAYS)
+    streams = [
+        {
+            "cycle": stream.index,
+            "S": stream.synodic_multiple,
+            "aim sep deg": stream.aim_separation,
+            "v_inf out": stream.departure_vinf,
+            "v_inf in": stream.return_vinf,
+        }
+        for stream, _ in stored_tables(flown, DEFAULT_PARKING_DAYS)
+    ]
+    print(tabulate(streams, headers="keys", floatfmt=".4g") + "\n")
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        tables = None
-        if args.visible:
-            flown, _ = chains(DEFAULT_PARKING_DAYS)
-            streams = onward_streams(flown)
-            tables = list(pool.map(visible_loss_table, streams))
-            print(
-                tabulate(
-                    [
-                        {
-                            "cycle": s.index,
-                            "S": s.synodic_multiple,
-                            "aim sep deg": s.aim_separation,
-                            "v_inf out": s.departure_vinf,
-                            "v_inf in": s.return_vinf,
-                            "longest visible min": max(
-                                (
-                                    t
-                                    for t, v in zip(TABLE_TIMES, table)
-                                    if np.isfinite(v)
-                                ),
-                                default=0.0,
-                            )
-                            / 60.0,
-                        }
-                        for s, table in zip(streams, tables)
-                    ],
-                    headers="keys",
-                    floatfmt=".4g",
-                )
-                + "\n"
-            )
-        rows = list(pool.map(partial(lever_row, tables=tables), range(len(cases()))))
+        rows = list(
+            pool.map(partial(lever_row, centred=args.centred), range(len(cases())))
+        )
     print(tabulate(rows, headers="keys", floatfmt=".3g"))
 
 
