@@ -136,9 +136,13 @@ the current state rather than applying the differences to the paper's numbers.
 The two-wave split's departure is not charged (ADR 0067, "Open"). The growth
 wave's solved trajectory leaves Earth 0.52-0.95 km/s away from the nozzle
 wave's, though both leave on one burn. Every growth figure since ADR 0013
-omits this. Its real cost depends on how the split is flown, and it is being
-priced next. Treat section 4's growth and cost figures as current but
-optimistic by an amount not yet known.
+omits this. ADRs 0068-0069 priced it: dividing the batch at Jupiter costs about
+a third of the doubling time, and dedicating launch units by role (growth
+carriers and rod carriers, each on its own trajectory) about 15%. Treat
+section 4's growth and cost figures as optimistic by about 15% of doubling
+until the role split is built into the ledger. The author's earlier, faster 3S
+growth wave (68 km/s at 2.8 synodic periods) gains only about 2% and is
+declined.
 
 ## 5. The impact angle
 

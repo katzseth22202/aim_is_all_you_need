@@ -491,8 +491,10 @@ two differ by roughly a square — 3.81 against 1.93 per cycle at `e = 0.6`,
 growth wave with its own Earth departure, which no burn pays for (0.52-0.95 km/s
 per cycle at 20 d). Dividing at Jupiter for real (`split="shared"`) costs
 0.48-0.82 km/s on the nozzle wave plus 0.14-0.56 km/s of departure burn: methane
-3.36 -> 4.46 yr, hydrogen 2.42 -> 2.96 yr. A split by role, launch units
-dedicated to growth or to rods, may avoid it. _Avoid_: pricing a growth loop without saying which of the two it is
+3.36 -> 4.46 yr, hydrogen 2.42 -> 2.96 yr. A **split by role** (launch units
+dedicated to growth or to rods, each departing on its own trajectory) halves that:
+3.91 and 2.77 yr (ADR 0069, a scout, not yet the ledger's). An earlier, faster 3S
+growth wave gains only ~2% and is declined. _Avoid_: pricing a growth loop without saying which of the two it is
 (it is the largest single number in the accounting); reading ADR 0009's "the
 split must be bought" as general — see **split gap**.
 
