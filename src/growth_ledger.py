@@ -32,8 +32,10 @@ from src.chamber_isp import (
     LIQUID_HYDROGEN,
     METHANE_7000K,
     ROD_MASS,
+    SLUSH_HYDROGEN,
     ChamberPairing,
     absolute_efficiency,
+    stored_as,
 )
 from src.finite_burn_loss import fixed_direction_loss, steered_loss
 from src.jovian_flyby import puffsat_cycle_periapsis_speed
@@ -214,7 +216,7 @@ class CycleGrowth:
         departure: The chamber departure at its best chamber count.
         growth: PuffSats out over PuffSats in, both waves counted.
         initial_water_price: Starting water price of the plate's schedule.
-        cryostats: Cryostat mass dropped with the plate before departure.
+        cryostats: Cryostat mass dropped just before the departure burn.
         boiled_off: Gas lost over the parking-orbit hold.
     """
 
@@ -345,7 +347,10 @@ def price_cycle_growth(
 
     # The gas launched is what the burn spends over (1 - boil-off), and its
     # cryostats and boil-off never depart, so the departing stack is solved
-    # self-consistently with the burn it has to fly.
+    # self-consistently with the burn it has to fly.  The cryostats ride the
+    # apoapsis reversal and the coast, keeping the hold's insulation on, and
+    # drop just before ignition; nothing burns between the reversal and
+    # ignition, so they are charged here, after it.
     def launched_gas(stack: u.Quantity, departure: DepartureLedger) -> u.Quantity:
         spent = 1.0 - departure.delivered_fraction
         plug = pairing.plug_ratio
@@ -898,11 +903,12 @@ def _mean(values: Sequence[float]) -> float:
     return float(np.mean(values))
 
 
-#: Hydrogen's cryostat mass and boil-off, per kilogram launched, for the
-#: liquid (:data:`src.chamber_isp.LIQUID_HYDROGEN`).  The matrix carries the
-#: middle of both; :func:`_hold_sweep` shows the range.
-HYDROGEN_CRYOSTAT = LIQUID_HYDROGEN.cryostat_fraction
-HYDROGEN_BOIL_OFF_PER_DAY = LIQUID_HYDROGEN.boil_off_per_day
+#: Hydrogen's cryostat mass and boil-off, per kilogram launched, for slush
+#: (:data:`src.chamber_isp.SLUSH_HYDROGEN`, ADR 0065): the liquid's middle
+#: cryostat and no boil-off over the hold.  :func:`_hold_sweep` shows the
+#: liquid's range.
+HYDROGEN_CRYOSTAT = SLUSH_HYDROGEN.cryostat_fraction
+HYDROGEN_BOIL_OFF_PER_DAY = SLUSH_HYDROGEN.boil_off_per_day
 
 
 def hydrogen_boil_off(cycles: Sequence[TwoWaveCycle], per_day: float) -> float:
@@ -995,14 +1001,18 @@ def _methalox_row(
 
 
 def _hold_sweep(cycles: Sequence[TwoWaveCycle]) -> str:
-    """The solved hydrogen chamber behind a 0.7 plate, across the hold's range."""
+    """The solved hydrogen chamber behind a 0.7 plate, across the hold's range.
+
+    Flown as liquid, whose boil-off the range brackets; slush boils none.
+    """
     periods = [c.period_years for c in cycles]
+    liquid = stored_as(HYDROGEN_5500K, LIQUID_HYDROGEN)
     rows = []
     for cryostat in (0.0, 0.01, 0.03, 0.05):
         row: Dict[str, object] = {"cryostat": cryostat}
         for per_day in (0.0, 0.001, 0.003, 0.005):
             grown = chain_growth(
-                cycles, 0.7, HYDROGEN_5500K, 0.858, cryostat_fraction=cryostat,
+                cycles, 0.7, liquid, 0.858, cryostat_fraction=cryostat,
                 boil_off=hydrogen_boil_off(cycles, per_day),
             )  # fmt: skip
             row[f"{100 * per_day:g}%/day"] = summarize_chain(

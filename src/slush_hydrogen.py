@@ -7,7 +7,8 @@ K-Site program, 1990-94).  Melting its solid and warming the liquid from the
 13.8 K triple point absorbs what would otherwise boil it, so the same
 insulation loses nothing over a 20-day hold (good for about 60 days).  The tank
 scales with volume and shrinks by the density ratio.  The chamber, the burn and
-everything else are unchanged.
+everything else are unchanged.  Every hydrogen pairing is now stored as slush
+(ADR 0065), so the liquid rows here are the comparison.
 
 The 3000 K chamber (:data:`src.chamber_isp.HYDROGEN_3000K`, ADR 0052) is a
 study point: NTR-tested temperature, equilibrium energy, wall scaled by peak
@@ -32,6 +33,7 @@ from src.chamber_isp import (
     HYDROGEN_3000K,
     HYDROGEN_5500K,
     HYDROGEN_BULGED,
+    LIQUID_HYDROGEN,
     SLUSH_HYDROGEN,
     stored_as,
 )
@@ -47,7 +49,7 @@ from src.growth_cost_report import _break_evens, climbing_lob, risked
 from src.growth_ledger import SOLVED_EFFICIENCY
 from src.hardware_recovery import HYDROGEN_RECOVERY
 from src.lob_rise import OPERATING_RISE_SPEED
-from src.seed_cost import DESIGNS, Design
+from src.seed_cost import Design
 from src.survivable_chamber import HYDROGEN_BULGED_DESIGN, PLATE
 
 #: Slush priced this much above liquid hydrogen, $/kg, in the sensitivity.
@@ -65,14 +67,15 @@ def designs() -> List[Design]:
     hydrogen chamber to need; and the bulged chamber itself as the impact sim
     solved it (ADR 0055), liquid and slush."""
     eta = SOLVED_EFFICIENCY[HYDROGEN_5500K.name]
-    slush = stored_as(HYDROGEN_5500K, SLUSH_HYDROGEN)
+    # The pairings are slush (ADR 0065); the liquid is the comparison.
+    slush = HYDROGEN_5500K
     heavy = stored_as(
         HYDROGEN_5500K,
         replace(SLUSH_HYDROGEN, name="slush 50%, 5% cryostats", cryostat_fraction=0.05),
     )
-    cool = stored_as(HYDROGEN_3000K, SLUSH_HYDROGEN)
+    cool = HYDROGEN_3000K
     return [
-        DESIGNS[4],
+        Design("Hydrogen, liquid", stored_as(HYDROGEN_5500K, LIQUID_HYDROGEN), eta),
         Design("Hydrogen, slush", slush, eta),
         Design("Hydrogen, slush, 5% cryostats", heavy, eta),
         Design(
@@ -80,13 +83,17 @@ def designs() -> List[Design]:
             replace(slush, name=f"{slush.name}, 2 Hz", pulse_rate=2.0 / u.s),
             eta,
         ),
-        HYDROGEN_BULGED_DESIGN,
         replace(
             HYDROGEN_BULGED_DESIGN,
-            label=f"{HYDROGEN_BULGED_DESIGN.label}, slush",
-            pairing=stored_as(HYDROGEN_BULGED, SLUSH_HYDROGEN),
+            label=f"{HYDROGEN_BULGED_DESIGN.label}, liquid",
+            pairing=stored_as(HYDROGEN_BULGED, LIQUID_HYDROGEN),
         ),
-        Design("H2 3000 K", HYDROGEN_3000K, EFFICIENCY_3000K),
+        replace(HYDROGEN_BULGED_DESIGN, label=f"{HYDROGEN_BULGED_DESIGN.label}, slush"),
+        Design(
+            "H2 3000 K, liquid",
+            stored_as(HYDROGEN_3000K, LIQUID_HYDROGEN),
+            EFFICIENCY_3000K,
+        ),
         Design("H2 3000 K, slush", cool, EFFICIENCY_3000K),
         Design(f"H2 3000 K, slush, eta {eta:g}", cool, eta),
     ]

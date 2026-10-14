@@ -331,13 +331,20 @@ def test_the_slug_ratio_holds_each_pairings_own_plug() -> None:
 
 
 def test_slush_shrinks_the_tank_by_its_density_and_keeps_the_chamber() -> None:
-    slush = stored_as(HYDROGEN_5500K, SLUSH_HYDROGEN)
+    liquid = stored_as(HYDROGEN_5500K, LIQUID_HYDROGEN)
+    slush = stored_as(liquid, SLUSH_HYDROGEN)
+    assert liquid.tank_fraction == pytest.approx(0.205)
     assert slush.tank_fraction == pytest.approx(0.205 / 1.15)
-    assert slush.wall_mass == HYDROGEN_5500K.wall_mass
-    assert slush.chemistry_ceiling == HYDROGEN_5500K.chemistry_ceiling
+    assert slush.wall_mass == liquid.wall_mass
+    assert slush.chemistry_ceiling == liquid.chemistry_ceiling
     assert slush.hydrogen and slush.storage is SLUSH_HYDROGEN
     assert SLUSH_HYDROGEN.boil_off_per_day == 0.0
-    assert HYDROGEN_5500K.storage is LIQUID_HYDROGEN
+
+
+def test_every_hydrogen_pairing_is_stored_as_slush() -> None:
+    for pairing in (HYDROGEN_5500K, HYDROGEN_3000K, HYDROGEN_BULGED):
+        assert pairing.storage is SLUSH_HYDROGEN
+        assert pairing.tank_fraction == pytest.approx(0.205 / 1.15)
 
 
 def test_only_a_hydrogen_pairing_has_a_storage_to_change() -> None:

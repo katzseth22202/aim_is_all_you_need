@@ -71,7 +71,7 @@ class CycleHardware:
         departure_units: Raptor 3s, or chambers.
         tanks: Expended tank mass.
         gas: Departure propellant launched: methane, hydrogen, or methalox.
-        cryostats: Hydrogen cryostats dropped with the plate.
+        cryostats: Hydrogen cryostats dropped just before the departure burn.
         plugs: Foam port plugs the departure burns.
         pitch: Wall pitch the methane chamber spends.
         pulses: Rods the departure fires, one per pulse (reported, not priced:

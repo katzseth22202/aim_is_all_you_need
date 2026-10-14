@@ -18,6 +18,11 @@ behind today's push (the spray cup, film carried), on the flown chain:
   estimates scaled by a chemistry ceiling; the sim found the bonds come back at
   60-71%, not 94%, and the hot charge stops shrinking because the rod and plug
   store little energy.  10 000 K fails the wrap and is not flown.
+
+Every hydrogen row is flown as 50% slush, as every hydrogen pairing now is
+(ADR 0065), with its cryostat and hold boil-off charged as :mod:`src.seed_cost`
+charges them; one liquid row is kept for comparison.  The rows used to charge
+no storage at all, which flattered hydrogen against methane.
 """
 
 import argparse
@@ -29,8 +34,19 @@ import numpy as np
 from astropy import units as u
 from tabulate import tabulate
 
-from src.chamber_isp import HYDROGEN_BULGED, ChamberPairing, efficiency_for_impulse
-from src.growth_ledger import DEFAULT_PARKING_DAYS, chain_growth, summarize_chain
+from src.chamber_isp import (
+    HYDROGEN_BULGED,
+    LIQUID_HYDROGEN,
+    ChamberPairing,
+    efficiency_for_impulse,
+    stored_as,
+)
+from src.growth_ledger import (
+    DEFAULT_PARKING_DAYS,
+    chain_growth,
+    hydrogen_boil_off,
+    summarize_chain,
+)
 from src.seed_cost import Design, chains
 from src.survivable_chamber import (
     HYDROGEN_BULGED_DESIGN,
@@ -54,9 +70,12 @@ SOLVED_HYDROGEN: Dict[float, Tuple[float, float, float, float]] = {
     6000.0: (12.65, 402.0, 2.94, 37.0),
     7000.0: (9.65, 327.0, 3.28, 29.8),
 }
-#: The temperature the bulged chamber is flown at (ADR 0064): the most impulse
-#: per kilogram carried that its own charge can still cool by regeneration.
-CHOSEN_TEMPERATURE = 5500.0
+#: The temperature the bulged chamber is flown at (ADR 0065, reversing ADR
+#: 0064's 5500 K): its fixed 60 kg charge.  A hotter charge's exhaust gains
+#: only 6% per kilogram carried, because the bonds come back at 60-71%; each
+#: rod then buys 27% less impulse, which nearly cancels it, and the thrust lost
+#: costs a second chamber.
+CHOSEN_TEMPERATURE = 4884.0
 
 
 def solved_hydrogen(temperature: float) -> Tuple[ChamberPairing, float]:
@@ -81,7 +100,7 @@ def solved_hydrogen(temperature: float) -> Tuple[ChamberPairing, float]:
 
 
 def cases() -> List[Tuple[str, Design]]:
-    """Every lever, labelled."""
+    """Every lever, labelled.  Hydrogen flies as slush but for one liquid row."""
     light = SURVIVABLE_PITCH_RANGE[0]
     rows: List[Tuple[str, Design]] = [
         ("methane, baseline", survivable_design(100)),
@@ -91,6 +110,13 @@ def cases() -> List[Tuple[str, Design]]:
         (
             "methane, 3 Hz + 3.5 kg pitch",
             survivable_design(100, pitch=light, pulse_rate=3.0 / u.s),
+        ),
+        (
+            "hydrogen, baseline, liquid",
+            replace(
+                HYDROGEN_BULGED_DESIGN,
+                pairing=stored_as(HYDROGEN_BULGED, LIQUID_HYDROGEN),
+            ),
         ),
         ("hydrogen, baseline", HYDROGEN_BULGED_DESIGN),
         (
@@ -123,6 +149,7 @@ def lever_row(index: int) -> Dict[str, object]:
     pairing = design.pairing
     assert pairing is not None and design.efficiency is not None
     flown, _ = chains(DEFAULT_PARKING_DAYS)
+    storage = pairing.storage
     try:
         grown = chain_growth(
             flown,
@@ -133,6 +160,12 @@ def lever_row(index: int) -> Dict[str, object]:
             max_slug_ratio=PLATE.max_slug_ratio,
             impactor_bond_energy=PLATE.impactor_bond_energy,
             film_per_impulse=PLATE.film_per_impulse,
+            cryostat_fraction=0.0 if storage is None else storage.cryostat_fraction,
+            boil_off=(
+                0.0
+                if storage is None
+                else hydrogen_boil_off(flown, storage.boil_off_per_day)
+            ),
             chambers=design.chambers,
         )
     except (RuntimeError, ValueError) as error:

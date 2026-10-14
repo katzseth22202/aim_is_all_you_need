@@ -3,7 +3,12 @@
 import pytest
 from astropy import units as u
 
-from src.chamber_isp import HYDROGEN_BULGED, efficiency_for_impulse
+from src.chamber_isp import (
+    HYDROGEN_BULGED,
+    LIQUID_HYDROGEN,
+    SLUSH_HYDROGEN,
+    efficiency_for_impulse,
+)
 from src.departure_levers import (
     CHOSEN_TEMPERATURE,
     SOLVED_HYDROGEN,
@@ -34,7 +39,8 @@ def test_todays_solved_row_is_the_flown_bulge_less_its_wall_heat():
 
 
 def test_the_solved_rows_keep_the_bulged_chambers_tanks_and_ceiling():
-    pairing, _ = solved_hydrogen(CHOSEN_TEMPERATURE)
+    assert CHOSEN_TEMPERATURE == 4884.0
+    pairing, _ = solved_hydrogen(5500.0)
     assert pairing.temperature == 5500.0 * u.K
     assert pairing.tank_fraction == HYDROGEN_BULGED.tank_fraction
     assert pairing.wall_mass == HYDROGEN_BULGED.wall_mass
@@ -45,3 +51,17 @@ def test_every_lever_is_listed_once():
     labels = [label for label, _ in cases()]
     assert len(labels) == len(set(labels))
     assert len([label for label in labels if "solved" in label]) == len(SOLVED_HYDROGEN)
+
+
+def test_hydrogen_flies_as_slush_but_for_one_liquid_row():
+    hydrogen = [
+        (label, design.pairing)
+        for label, design in cases()
+        if design.pairing is not None and design.pairing.hydrogen
+    ]
+    liquid = [label for label, p in hydrogen if p.storage == LIQUID_HYDROGEN]
+    assert liquid == ["hydrogen, baseline, liquid"]
+    for label, pairing in hydrogen:
+        if label not in liquid:
+            assert pairing.storage == SLUSH_HYDROGEN
+            assert pairing.tank_fraction == pytest.approx(0.205 / 1.15)

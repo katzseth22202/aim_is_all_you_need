@@ -354,8 +354,10 @@ comparing exhaust metal with volcanic tonnage instead of meteoric ablation.
 
 **Slush hydrogen**:
 The hydrogen charge stored as 50% solid slush (`chamber_isp.SLUSH_HYDROGEN`,
-`make slush-hydrogen`, ADR 0051): 15% denser, so the tank is 0.178 kg per kg
-instead of 0.205, and 18% more heat sink, so a 20-day hold boils nothing. A
+`make slush-hydrogen`, ADR 0051), the default for every hydrogen pairing since
+ADR 0065 (`stored_as(p, LIQUID_HYDROGEN)` for the liquid): 15% denser, so the
+tank is 0.178 kg per kg instead of 0.205, and 18% more heat sink, so a 20-day
+hold boils nothing. Its cryostats drop just before ignition. A
 pairing is hydrogen when `ChamberPairing.storage` is set. Growth 2.418 -> 2.560;
 2.877 with recovered tanks. _Avoid_: `pairing is HYDROGEN_5500K` to mean "hydrogen"
 (a stored-as pairing is a different object); claiming solid hydrogen removes the
@@ -386,7 +388,9 @@ The sphere's 60 kg hydrogen charge in the methane chamber's r 3.0 m bulge
 (`chamber_isp.HYDROGEN_BULGED`, ADR 0055): 106 m3, 2.5 kg rod, 0.84 m2 throat,
 37.0 t dry wrap (2.20% flung strain against 2.4%), 683 kN s at A/A* = 300 with
 finite-rate recombination (ADR 0064; 657 before it) against the sphere's 697, flown
-at 2 Hz, at 4884 K. ADR 0064 chooses 5500 K for it, pending the sim's wrap at that fill. The first hydrogen chamber with a solved wall;
+at 2 Hz, at 4884 K, which ADR 0065 keeps (ADR 0064's 5500 K loses: its exhaust
+gains 6%, its rods buy 27% less impulse, and its lost thrust costs a second
+chamber). The first hydrogen chamber with a solved wall;
 the 20 m3 sphere's is unresolved at ~2.95 GPa. _Avoid_: giving it a doubled
 throat (its wrap fails at the taper).
 

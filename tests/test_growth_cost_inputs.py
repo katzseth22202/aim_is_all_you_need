@@ -54,8 +54,8 @@ def test_methalox_flies_no_rods_and_chambers_do() -> None:
     assert all(c.onward_rods == 0.0 for c in methalox.cycles)
     assert hydrogen.departure is Departure.HYDROGEN
     # Rods are 20% of solved hydrogen's first-cycle consumption (17% in ASKS H6,
-    # before ADR 0038's onward burn).
-    assert hydrogen.seed_rods / hydrogen.seed == pytest.approx(0.196, abs=0.005)
+    # before ADR 0038's onward burn; 19.6% stored as liquid, before ADR 0065).
+    assert hydrogen.seed_rods / hydrogen.seed == pytest.approx(0.201, abs=0.005)
     assert hydrogen.cycles[0].cryostats > 0.0
 
 
@@ -77,8 +77,9 @@ def test_a_launch_unit_spends_what_the_ledger_launched() -> None:
     "design, liquidation, steady",
     # Direct seed at ADR 0057's $150/kg baseline.  tab:seed_return printed
     # 45 / 3, 39 / 10 and 87 / 33, 84 / 36 at Musk's $2M a flight; ADR 0038's
-    # onward burn gave 42 / 2, 38 / 9 and 81 / 29, 80 / 33 there.
-    [(DESIGNS[0], (17.9, 1.7), (18.9, 8.7)), (DESIGNS[4], (49.8, 29.2), (51.1, 33.1))],
+    # onward burn gave 42 / 2, 38 / 9 and 81 / 29, 80 / 33 there.  Hydrogen
+    # stored as liquid gave 49.8 / 29.2 and 51.1 / 33.1 here, before ADR 0065.
+    [(DESIGNS[0], (17.9, 1.7), (18.9, 8.7)), (DESIGNS[4], (52.6, 31.6), (54.0, 35.5))],
     ids=["methalox", "hydrogen solved"],
 )
 def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
@@ -105,7 +106,8 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
     [
         (DESIGNS[0], 169, (567, 1396)),
         (DESIGNS[2], 100, (155, 222)),
-        (DESIGNS[4], 100, (146, 194)),
+        # Stored as liquid, before ADR 0065: 100, (146, 194).
+        (DESIGNS[4], 96, (135, 174)),
     ],
     ids=["methalox", "methane solved", "hydrogen solved"],
 )

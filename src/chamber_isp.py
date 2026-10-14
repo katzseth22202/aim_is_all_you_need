@@ -64,8 +64,8 @@ class HydrogenStorage:
     Attributes:
         name: Short label.
         density: Bulk density of the stored charge; the tank scales inversely.
-        cryostat_fraction: Cryostat mass dropped with the plate, per kilogram
-            of hydrogen launched.
+        cryostat_fraction: Cryostat mass dropped just before the departure
+            burn, per kilogram of hydrogen launched.
         boil_off_per_day: Hydrogen lost per day of the hold, per kilogram
             launched.
     """
@@ -89,6 +89,15 @@ LIQUID_HYDROGEN = HydrogenStorage("liquid", 70.8 * u.kg / u.m**3, 0.03, 0.003)
 #: insulation's 0.3%/day therefore boils nothing for about 60 days, so a
 #: 20-day hold loses none.  Same cryostat as the liquid (no active cooling).
 SLUSH_HYDROGEN = HydrogenStorage("slush 50%", 1.15 * 70.8 * u.kg / u.m**3, 0.03, 0.0)
+#: Tank per kilogram of normal-boiling-point liquid hydrogen, scaled from NASA's
+#: Mars reference drop tank (``sec:ntr_departure``).
+LIQUID_HYDROGEN_TANK_FRACTION = 0.205
+#: Every hydrogen chamber stores its charge as slush (ADR 0065), so its tank is
+#: the liquid's shrunk by the density gained.  :func:`stored_as` with
+#: :data:`LIQUID_HYDROGEN` gives the liquid back for comparison.
+SLUSH_HYDROGEN_TANK_FRACTION = LIQUID_HYDROGEN_TANK_FRACTION * float(
+    (LIQUID_HYDROGEN.density / SLUSH_HYDROGEN.density).to_value(u.one)
+)
 
 
 @dataclass(frozen=True)
@@ -142,7 +151,7 @@ REFERENCE_CLOSING_SPEED = 75.0 * u.km / u.s
 
 
 #: Hydrogen at 5500 K on a bare copper liner (``tab:wall_pairings``): 818 bar
-#: peak, about a 32 t wall; 0.205 kg of tank per kg of liquid hydrogen.  36% of
+#: peak, about a 32 t wall; stored as slush (ADR 0065).  36% of
 #: the pulse is in bonds at peak and the A/A* = 300 nozzle returns 94% of them
 #: (``tab:nozzle_area_ratio``), so the ceiling is 1 - 0.36 x 0.06 = 0.978.
 HYDROGEN_5500K = ChamberPairing(
@@ -150,9 +159,9 @@ HYDROGEN_5500K = ChamberPairing(
     5500.0 * u.K,
     24.0,
     32.0 * u.t,
-    0.205,
+    SLUSH_HYDROGEN_TANK_FRACTION,
     1.0 - 0.36 * (1.0 - 0.94),
-    storage=LIQUID_HYDROGEN,
+    storage=SLUSH_HYDROGEN,
 )
 
 
@@ -171,9 +180,9 @@ HYDROGEN_3000K = ChamberPairing(
     3000.0 * u.K,
     79.2,
     32.0 * 1220.0 / 818.0 * u.t,
-    0.205,
+    SLUSH_HYDROGEN_TANK_FRACTION,
     1.0 - 0.02 * (1.0 - 0.94),
-    storage=LIQUID_HYDROGEN,
+    storage=SLUSH_HYDROGEN,
 )
 
 
@@ -191,11 +200,11 @@ HYDROGEN_BULGED = ChamberPairing(
     4884.0 * u.K,
     24.0,
     37.0 * u.t,
-    0.205,
+    SLUSH_HYDROGEN_TANK_FRACTION,
     HYDROGEN_5500K.chemistry_ceiling,
     pulse_rate=2.0 / u.s,
     extension_mass=(2.19 * u.t * 0.84 * 300.0 / 59.4468).to(u.t),
-    storage=LIQUID_HYDROGEN,
+    storage=SLUSH_HYDROGEN,
 )
 #: Its net impulse per pulse at A/A* = 300, gate charged, with finite-rate
 #: H + H + M recombination through the nozzle (impact sim @ ca07938, its
