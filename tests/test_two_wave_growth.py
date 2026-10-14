@@ -350,3 +350,18 @@ def test_the_flown_chain_diverts_a_fifth_of_each_batch_to_projectiles() -> None:
         ]
         assert min(bends) == pytest.approx(low, abs=0.005), recovery
         assert max(bends) == pytest.approx(high, abs=0.005), recovery
+
+
+@pytest.mark.slow
+def test_a_shared_split_flies_one_outbound_leg_and_pays_to_divide():
+    """ADR 0068: both waves leave on one departure and meet Jupiter together."""
+    from src.two_wave_growth import shared_split, window_waves
+
+    departure = 2461354.139393  # the flown chain's first, 3S, departure
+    _, ret, nozzle, growth = window_waves(departure, split_days=20.0, split="shared")
+    assert nozzle.encounter_jd == growth.encounter_jd
+    assert nozzle.earth_departure_vinf == pytest.approx(growth.earth_departure_vinf)
+    assert nozzle.total_dv + growth.total_dv > 0.2
+    _, _, free, _ = window_waves(departure, split_days=20.0, split="independent")
+    assert nozzle.earth_departure_vinf > free.earth_departure_vinf
+    assert shared_split(departure, ret, ret - 20.0)[0] == nozzle

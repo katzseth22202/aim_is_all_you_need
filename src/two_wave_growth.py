@@ -12,10 +12,13 @@ Joins two machines that were built separately:
   and pushes the next payload, and a nozzle wave that supplies the head-on
   departure-burn projectiles for the payload the growth wave parked.
 
-The split is re-solved here per flown cycle against the same real ephemeris,
-as a second Earth-hit return leaving the same departure epoch and arriving
-``split_days`` earlier than the nozzle wave.  That gives the growth wave its
-own collision speed from geometry rather than by extrapolation.
+The split is solved here per flown cycle against the same real ephemeris, the
+growth wave arriving ``split_days`` earlier than the nozzle wave, which gives
+it its own collision speed from geometry.  Two ways are offered (ADR 0068).
+``split="independent"`` (ADR 0013, the default for now) re-solves the growth
+wave from Earth with its own departure, which no burn pays for.
+``split="shared"`` divides the batch at Jupiter: both waves fly the departure
+burn's one outbound leg, each on its own cheapest flyby.
 
 Run it with ``make two-wave``; it is not imported by ``src.main`` and is not
 part of ``make all``.
@@ -52,7 +55,14 @@ from src.real_orbit_resonance import (
     _DAYS_PER_YEAR,
     _EPHEMERIS,
     _FIXED_TWO_SYNODIC_DAYS,
+    _MANEUVER_ENCOUNTER_TOF_MIN_YEARS,
+    _MANEUVER_RETURN_TOF_MIN_YEARS,
+    _dsm_only_solution,
+    _encounter_geometry,
+    _heliocentric_state,
+    _hybrid_solution,
     _ManeuverSolution,
+    _perijove_only_solution,
     _resonance_epochs,
     _window_maneuver_solutions,
 )
@@ -86,6 +96,23 @@ _K_SAMPLES = 60
 _DEFAULT_RECOVERIES = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 _DEFAULT_FUDGES = (0.5, 0.6, 0.7, 0.8)
 _DEFAULT_SPLIT_OPTIONS = (10.0, 20.0, 30.0, 60.0)
+# How the batch divides (ADR 0068).  ``"shared"``: both waves fly the departure
+# burn's one outbound leg and divide at Jupiter, each on its own cheapest flyby
+# (unpowered, a perijove burn, or a deep-space maneuver).  ``"independent"``:
+# ADR 0013's re-solve, where the growth wave gets its own Earth departure that
+# no burn pays for.  It stays the default only until the split by role
+# replaces it, so the headlines move once; it understates the split's cost.
+SPLIT_MODES = ("shared", "independent")
+DEFAULT_SPLIT_MODE = "independent"
+# The shared encounter is chosen to maximise growth, not to minimise total
+# delta-v.  To first order, ln(growth) falls by the growth wave's burn over the
+# methalox exhaust speed, by the rods' share of consumption (about a fifth,
+# ADR 0063) times the nozzle wave's, and by the departure burn's change over
+# the chamber's effective exhaust (about 7-10 km/s; 8 is carried).  The ledger
+# then prices the chosen split exactly.
+_SPLIT_ROD_SHARE = 0.2
+_SPLIT_CHAMBER_EXHAUST = 8.0
+_SPLIT_ENCOUNTER_SAMPLES = 121
 # Operating point the split gap and the per-cycle table are reported at.
 _REFERENCE_RECOVERY = 0.6
 _REFERENCE_FUDGE = 0.8
@@ -115,8 +142,10 @@ class TwoWaveCycle:
             200 km speed (km/s).
         nozzle_wave_v_b: Collision speed of the wave that supplies the
             departure-burn projectiles (km/s at 200 km).
-        nozzle_wave_dsm: Deep-space-maneuver proxy the selected return needs
-            (km/s); the policy holds this under its threshold.
+        nozzle_wave_dsm: Correction the nozzle wave pays in methalox (km/s):
+            its share of the split at the shared encounter (ADR 0068), or the
+            selected return's deep-space-maneuver proxy under the independent
+            split.  The policy holds the proxy, not this, under its threshold.
         split_days: Gap by which the growth wave leads the nozzle wave, equal
             to the parking-orbit period the pushed payload coasts through.
         growth_wave_arrival_jd: TDB Julian date the growth wave reaches Earth.
@@ -179,6 +208,7 @@ def adaptive_two_wave_cycles(
     years: float = _DEFAULT_HORIZON_YEARS,
     threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
     split_days: float = DEFAULT_SPLIT_DAYS,
+    split: str = DEFAULT_SPLIT_MODE,
 ) -> List[TwoWaveCycle]:
     """Fly the adaptive 2S/3S cadence and return its cycles.
 
@@ -193,6 +223,8 @@ def adaptive_two_wave_cycles(
         threshold_m_s: Two-synodic maneuver proxy above which the cycle falls
             back to a three-synodic return.
         split_days: Gap by which the growth wave must lead the nozzle wave.
+        split: How the batch divides, one of :data:`SPLIT_MODES`; the policy's
+            choice of return does not depend on it.
 
     Returns:
         The flown cycles, in order, whose returns fit inside the horizon.
@@ -213,11 +245,12 @@ def adaptive_two_wave_cycles(
     one_synodic_days = _FIXED_TWO_SYNODIC_DAYS / 2.0
     cycles: List[TwoWaveCycle] = []
     while departure_jd + 2.0 * one_synodic_days <= horizon_end_jd:
-        multiple, return_jd, selected = _fly_window(departure_jd, threshold_m_s)
+        multiple, return_jd, selected, growth = window_waves(
+            departure_jd, threshold_m_s, split_days, split
+        )
         if return_jd > horizon_end_jd:
             break
         growth_arrival_jd = return_jd - split_days
-        growth = _cheapest_return(departure_jd, growth_arrival_jd)
         cycles.append(
             TwoWaveCycle(
                 index=len(cycles),
@@ -229,7 +262,7 @@ def adaptive_two_wave_cycles(
                     selected.earth_departure_periapsis_speed - _cycle_periapsis_speed()
                 ),
                 nozzle_wave_v_b=selected.earth_return_collision_speed,
-                nozzle_wave_dsm=selected.dsm,
+                nozzle_wave_dsm=selected.total_dv,
                 split_days=split_days,
                 growth_wave_arrival_jd=growth_arrival_jd,
                 growth_wave_v_b=growth.earth_return_collision_speed,
@@ -240,7 +273,9 @@ def adaptive_two_wave_cycles(
         departure_jd = return_jd
     if not cycles:
         raise RuntimeError("study horizon contains no complete cycle")
-    after_last = departure_burn_after(cycles[-1].return_jd, threshold_m_s)
+    after_last = departure_burn_after(
+        cycles[-1].return_jd, threshold_m_s, split_days, split
+    )
     return link_onward_burns(cycles, after_last)
 
 
@@ -267,18 +302,23 @@ def _fly_window(
 
 
 def departure_burn_after(
-    return_jd: float, threshold_m_s: float = _DEFAULT_THRESHOLD_M_S
+    return_jd: float,
+    threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
+    split_days: float = DEFAULT_SPLIT_DAYS,
+    split: str = DEFAULT_SPLIT_MODE,
 ) -> float:
     """The departure burn of the window that opens at ``return_jd`` (km/s).
 
     Args:
         return_jd: TDB Julian date a cycle returns, which is the next departure.
         threshold_m_s: As in :func:`adaptive_two_wave_cycles`.
+        split_days: As in :func:`adaptive_two_wave_cycles`.
+        split: As in :func:`adaptive_two_wave_cycles`.
 
     Returns:
         That window's periapsis speed increment above the closed-cycle speed.
     """
-    selected = _fly_window(return_jd, threshold_m_s)[2]
+    selected = window_waves(return_jd, threshold_m_s, split_days, split)[2]
     return float(selected.earth_departure_periapsis_speed - _cycle_periapsis_speed())
 
 
@@ -646,6 +686,147 @@ def _cheapest_return(departure_jd: float, return_jd: float) -> _ManeuverSolution
     if not solutions:
         raise RuntimeError(f"no return solution for window {departure_jd}->{return_jd}")
     return solutions[0]
+
+
+def _cheapest_flyby(
+    departure_jd: float,
+    return_jd: float,
+    encounter_jd: float,
+    outbound_low_path: bool,
+    departure_state: Tuple[np.ndarray, np.ndarray],
+) -> Optional[_ManeuverSolution]:
+    """One wave's cheapest Jupiter option from a fixed outbound leg.
+
+    The outbound leg is fixed by the departure epoch, the encounter epoch and
+    its path, so every wave sharing them shares the Earth departure.
+    """
+    return_position, return_velocity = _heliocentric_state("earth", return_jd)
+    best: Optional[_ManeuverSolution] = None
+    for return_low_path in (True, False):
+        geometry = _encounter_geometry(
+            departure_jd,
+            return_jd,
+            encounter_jd,
+            outbound_low_path,
+            return_low_path,
+            departure_state[0],
+            departure_state[1],
+            return_position,
+            return_velocity,
+        )
+        if geometry is None:
+            continue
+        for solve in (_dsm_only_solution, _perijove_only_solution, _hybrid_solution):
+            solution = solve(geometry)
+            if solution is not None and (
+                best is None or solution.total_dv < best.total_dv
+            ):
+                best = solution
+    return best
+
+
+def shared_split(
+    departure_jd: float, nozzle_return_jd: float, growth_return_jd: float
+) -> Tuple[_ManeuverSolution, _ManeuverSolution]:
+    """Divide one departing batch at Jupiter into its nozzle and growth waves.
+
+    Both waves fly the departure burn's single outbound leg; the encounter
+    epoch is chosen to maximise growth to first order (see
+    ``_SPLIT_ROD_SHARE``), searched on a grid and refined.
+
+    Args:
+        departure_jd: TDB Julian date the batch leaves Earth.
+        nozzle_return_jd: When the nozzle wave must reach Earth.
+        growth_return_jd: When the growth wave must reach Earth.
+
+    Returns:
+        (nozzle wave, growth wave), sharing ``encounter_jd`` and the Earth
+        departure.
+
+    Raises:
+        RuntimeError: If no shared encounter serves both waves.
+    """
+    state = _heliocentric_state("earth", departure_jd)
+    low = departure_jd + _MANEUVER_ENCOUNTER_TOF_MIN_YEARS * _DAYS_PER_YEAR
+    high = (
+        min(nozzle_return_jd, growth_return_jd)
+        - _MANEUVER_RETURN_TOF_MIN_YEARS * _DAYS_PER_YEAR
+    )
+    best: Optional[Tuple[float, _ManeuverSolution, _ManeuverSolution]] = None
+    for outbound_low_path in (True, False):
+
+        def pair(
+            encounter: float,
+        ) -> Optional[Tuple[_ManeuverSolution, _ManeuverSolution]]:
+            nozzle = _cheapest_flyby(
+                departure_jd, nozzle_return_jd, encounter, outbound_low_path, state
+            )
+            growth = _cheapest_flyby(
+                departure_jd, growth_return_jd, encounter, outbound_low_path, state
+            )
+            return None if nozzle is None or growth is None else (nozzle, growth)
+
+        def cost(encounter: float) -> float:
+            flown = pair(encounter)
+            if flown is None:
+                return 1.0e6
+            nozzle, growth = flown
+            return (
+                (growth.total_dv + _SPLIT_ROD_SHARE * nozzle.total_dv) / VE_METHALOX
+                + nozzle.earth_departure_periapsis_speed / _SPLIT_CHAMBER_EXHAUST
+            )
+
+        grid = np.linspace(low, high, _SPLIT_ENCOUNTER_SAMPLES)
+        values = [cost(float(e)) for e in grid]
+        for index in np.argsort(values)[:3]:
+            refined = minimize_scalar(
+                cost,
+                bounds=(
+                    float(grid[max(index - 1, 0)]),
+                    float(grid[min(index + 1, grid.size - 1)]),
+                ),
+                method="bounded",
+                options={"xatol": 1.0e-6},
+            )
+            flown = pair(float(refined.x))
+            if flown is not None and (best is None or refined.fun < best[0]):
+                best = (float(refined.fun), flown[0], flown[1])
+    if best is None:
+        raise RuntimeError(
+            f"no shared encounter serves both waves leaving JD {departure_jd}"
+        )
+    return best[1], best[2]
+
+
+def window_waves(
+    departure_jd: float,
+    threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
+    split_days: float = DEFAULT_SPLIT_DAYS,
+    split: str = DEFAULT_SPLIT_MODE,
+) -> Tuple[int, float, _ManeuverSolution, _ManeuverSolution]:
+    """One window's flown return and its two waves.
+
+    The adaptive policy (:func:`_fly_window`) picks the return; ``split`` says
+    how the batch divides.
+
+    Args:
+        departure_jd: TDB Julian date of the departure.
+        threshold_m_s: As in :func:`adaptive_two_wave_cycles`.
+        split_days: Gap by which the growth wave leads the nozzle wave.
+        split: One of :data:`SPLIT_MODES`.
+
+    Returns:
+        ``(synodic multiple, return date, nozzle wave, growth wave)``.  The
+        nozzle wave's departure is the window's departure burn.
+    """
+    if split not in SPLIT_MODES:
+        raise ValueError(f"split must be one of {SPLIT_MODES}")
+    multiple, return_jd, selected = _fly_window(departure_jd, threshold_m_s)
+    if split == "independent":
+        growth = _cheapest_return(departure_jd, return_jd - split_days)
+        return multiple, return_jd, selected, growth
+    nozzle, growth = shared_split(departure_jd, return_jd, return_jd - split_days)
+    return multiple, return_jd, nozzle, growth
 
 
 @dataclass(frozen=True)

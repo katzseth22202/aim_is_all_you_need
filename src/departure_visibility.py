@@ -58,8 +58,9 @@ from src.orbit_turn_analysis import (
 from src.real_orbit_resonance import _heliocentric_state, _lambert_pair
 from src.two_wave_growth import (
     _DEFAULT_THRESHOLD_M_S,
+    DEFAULT_SPLIT_MODE,
     TwoWaveCycle,
-    _fly_window,
+    window_waves,
 )
 
 #: The departure burn's periapsis altitude (``sec:jovian_meeting_altitudes``).
@@ -161,22 +162,29 @@ def _excess_vectors(
 
 
 def onward_streams(
-    cycles: Sequence[TwoWaveCycle], threshold_m_s: float = _DEFAULT_THRESHOLD_M_S
+    cycles: Sequence[TwoWaveCycle],
+    threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
+    split: str = DEFAULT_SPLIT_MODE,
 ) -> List[OnwardStream]:
     """The stream each flown cycle's onward departure meets.
 
     Cycle ``i``'s nozzle wave arrives at its return, which is cycle ``i + 1``'s
-    departure; the last cycle's departure is the window after the chain.
+    departure; the last cycle's departure is the window after the chain.  Each
+    window is re-flown as the chain flew it (its waves from
+    :func:`src.two_wave_growth.window_waves`), so the departure is the one the
+    split shares.
 
     Args:
         cycles: Consecutive flown cycles.
         threshold_m_s: The chain's 2S/3S policy threshold.
+        split: How the chain's batches divide.
 
     Returns:
         One stream per cycle.
     """
-    selected = [_fly_window(c.departure_jd, threshold_m_s) for c in cycles]
-    after = _fly_window(cycles[-1].return_jd, threshold_m_s)
+    gap = cycles[0].split_days
+    selected = [window_waves(c.departure_jd, threshold_m_s, gap, split) for c in cycles]
+    after = window_waves(cycles[-1].return_jd, threshold_m_s, gap, split)
     streams = []
     for i, cycle in enumerate(cycles):
         _, arrival = _excess_vectors(
