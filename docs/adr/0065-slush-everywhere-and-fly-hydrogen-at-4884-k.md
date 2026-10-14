@@ -106,9 +106,9 @@ and 4884 K wait for it.
 ## Reproduction
 
 - `make departure-levers`.
-- The cycle-0 temperature comparison was a scratch run (gitignored):
-  `solved_hydrogen(T)` at 4884 and 5500 K through `chain_growth` on
-  `flown[:1]` with the slush storage charged, and the 5500 K pairing with
-  `pulse_rate = 661 x 2.27 / 485 / s`.
+- The cycle-0 temperature comparison: `python -m src.departure_levers
+  --temperatures --centred` (`temperature_row`, `thrust_matched`). Without
+  `--centred` it keeps the stream in view (ADR 0066), and the ranking holds:
+  growth 1.687, 1.639 and 1.717.
 - Tests: `tests/test_chamber_isp.py`, `tests/test_departure_levers.py`;
   `make test-all`.

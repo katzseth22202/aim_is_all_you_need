@@ -147,13 +147,14 @@ declined.
 ## 5. The impact angle
 
 The paper says the head-on assumption is pessimistic "by a fraction of a
-percent". That holds on the flown chain. At its 154-175 degree streams,
-Earth's bending is worth 0.01-0.3% of delivered mass for the bulged hydrogen
-chamber, and at most 1% at the reference closure's 144.9.
+percent". That holds on the flown chain (`make impact-angle`). Each departure,
+at its ledger length and placed to keep the stream in view, sees impacts 0-17
+degrees off head-on. That is worth -0.01% to +0.5% of delivered mass for the
+bulged hydrogen chamber and up to 0.8% for methane.
 
 For the record, the bulged chamber's jet leaves at about 1,340 s. Per kilogram
-carried that is about 1,390 s gross and 1,060-1,085 s net of the head-on debit.
-The debit takes about 24% of the impulse.
+carried that is about 1,380-1,396 s gross and 1,050-1,078 s net of the head-on
+debit; the debit takes about 24% of the impulse.
 
 ## Reproduction
 

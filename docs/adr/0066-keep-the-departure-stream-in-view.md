@@ -82,12 +82,14 @@ Doubling time, flown chain, spray cup, film carried, hydrogen as slush:
   chamber at 2 Hz.
 - **The temperature ranking holds.** 4884 K still beats 5500 K (ADR 0065).
 
-**The impact angle.** Earth's bending moves the impacts 2-27 degrees off
-head-on during a burn. Charged at the actual angle and closing speed, it is
-worth 0-1% of delivered mass for the bulged hydrogen chamber, within 0.04% at
-the flown chain's 154-175 degrees. The ledger's exact head-on debit stands.
-For the record, the bulged chamber's jet leaves at about 1,340 s; per kilogram
-carried, gross is about 1,390 s and net of the head-on debit 1,060-1,085 s.
+**The impact angle** (`make impact-angle`). On the flown departures, each at
+its ledger length and visible placement, the impacts come in 0-17 degrees off
+head-on. Charged at the actual angle and closing speed, that is worth -0.01% to
++0.5% of delivered mass for the bulged hydrogen chamber and 0 to +0.8% for
+methane. The ledger's exact head-on debit stands. For the record, the bulged
+chamber's jet leaves at about 1,340 s. Per kilogram carried it gives about
+1,380-1,396 s gross and 1,050-1,078 s net of the head-on debit; methane gives
+971-988 s gross and 682-721 s net.
 
 ## Not yet done
 
@@ -108,9 +110,10 @@ carried, gross is about 1,390 s and net of the head-on debit 1,060-1,085 s.
 
 - `make departure-levers-visible` (about 40 min on three workers). The
   centred column is `make departure-levers`.
-- The impact-angle and Isp figures were a scratch run (gitignored): each
-  cycle's ledger burn re-integrated with `orbit_turn_analysis._propagate_burn`,
-  with the per-pulse exhaust from `chamber_isp._effective_exhaust` at the
-  actual relative velocity, against the scalar head-on closing speed.
+- The impact-angle and Isp figures: `make impact-angle` (`src/impact_angle.py`).
+  It flies each cycle's ledger burn at its visible placement and recomputes
+  every pulse at the actual relative velocity against the ledger's scalar
+  head-on closing speed. An earlier scratch sweep over separations gave
+  0.01-0.3% and 1,060-1,085 s.
 - Tests: `tests/test_departure_visibility.py` (one slow),
   `tests/test_departure_levers.py`.

@@ -65,3 +65,20 @@ def test_hydrogen_flies_as_slush_but_for_one_liquid_row():
         if label not in liquid:
             assert pairing.storage == SLUSH_HYDROGEN
             assert pairing.tank_fraction == pytest.approx(0.205 / 1.15)
+
+
+def test_thrust_matching_speeds_5500_k_to_4884_ks_thrust():
+    from src.departure_levers import thrust_matched
+
+    # 661 kN s at 2.27 Hz against 485 kN s: 3.09 Hz (ADR 0065).
+    assert thrust_matched(5500.0) == pytest.approx(661.0 * 2.27 / 485.0)
+    assert thrust_matched(4884.0) == pytest.approx(2.27)
+
+
+@pytest.mark.slow
+def test_adr_0065s_cycle_0_temperature_comparison_reproduces():
+    from src.departure_levers import temperature_cases, temperature_row
+
+    rows = [temperature_row(case) for case in temperature_cases(centred=True)]
+    assert [round(r["growth"], 3) for r in rows] == [1.786, 1.672, 1.811]
+    assert [r["chambers"] for r in rows] == [1, 2, 1]

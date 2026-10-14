@@ -104,6 +104,84 @@ def solved_hydrogen(temperature: float) -> Tuple[ChamberPairing, float]:
     return pairing, efficiency_for_impulse(impulse * u.kN * u.s, pairing)
 
 
+def thrust_matched(temperature: float, reference: float = 4884.0) -> float:
+    """The pulse rate at which a solved row matches another's thrust (Hz).
+
+    Thrust is impulse per pulse times pulse rate.
+
+    Args:
+        temperature: The row to speed up.
+        reference: The row whose thrust it matches.
+
+    Returns:
+        The rate.
+    """
+    _, impulse, _, _ = SOLVED_HYDROGEN[temperature]
+    _, ref_impulse, ref_rate, _ = SOLVED_HYDROGEN[reference]
+    return ref_impulse * ref_rate / impulse
+
+
+def temperature_row(case: Tuple[float, Optional[float], bool]) -> Dict[str, object]:
+    """Cycle 0 of one solved temperature, the comparison behind ADR 0065.
+
+    Args:
+        case: (temperature, pulse rate in Hz or None for the solved one,
+            centred), where ``centred`` flies the burn centred on periapsis
+            with the stream ignored, as ADR 0065 did.
+
+    Returns:
+        The row.
+    """
+    temperature, rate, centred = case
+    pairing, eta = solved_hydrogen(temperature)
+    if rate is not None:
+        pairing = replace(pairing, pulse_rate=rate / u.s)
+    flown, _ = chains(DEFAULT_PARKING_DAYS)
+    first = flown[:1]
+    storage = pairing.storage
+    assert storage is not None
+    grown = chain_growth(
+        first,
+        PLATE.efficiency,
+        pairing,
+        eta,
+        max_slug_ratio=PLATE.max_slug_ratio,
+        impactor_bond_energy=PLATE.impactor_bond_energy,
+        film_per_impulse=PLATE.film_per_impulse,
+        cryostat_fraction=storage.cryostat_fraction,
+        boil_off=hydrogen_boil_off(flown, storage.boil_off_per_day),
+        loss_model=(
+            _orbit_loss(fixed_direction_loss, parking_period(first[0]))
+            if centred
+            else None
+        ),
+    )[0]
+    departure = grown.departure
+    stack = float(grown.departing_stack.to_value(u.t))
+    push = stack / float(grown.puffsats.to_value(u.t))
+    _, impulse, _, _ = SOLVED_HYDROGEN[temperature]
+    hz = float(pairing.pulse_rate.to_value(1 / u.s))
+    return {
+        "temperature K": temperature,
+        "rate Hz": hz,
+        "thrust MN": impulse * hz / 1000.0,
+        "chambers": departure.chambers,
+        "delivered net": departure.delivered_net,
+        "rods kg/t stack": 1000.0 * departure.rod_mass_fraction,
+        "share pushing": 1.0 / (1.0 + departure.rod_mass_fraction * push),
+        "growth": grown.growth,
+    }
+
+
+def temperature_cases(centred: bool) -> List[Tuple[float, Optional[float], bool]]:
+    """ADR 0065's rows: 4884 K and 5500 K solved, and 5500 K at 4884 K's thrust."""
+    return [
+        (4884.0, None, centred),
+        (5500.0, None, centred),
+        (5500.0, thrust_matched(5500.0), centred),
+    ]
+
+
 def cases() -> List[Tuple[str, Design]]:
     """Every lever, labelled.  Hydrogen flies as slush but for one liquid row."""
     light = SURVIVABLE_PITCH_RANGE[0]
@@ -226,12 +304,23 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     Args:
         argv: ``--workers``; ``--centred`` flies the burn centred on periapsis
-            with the stream ignored, the ranking before ADR 0066.
+            with the stream ignored, the ranking before ADR 0066;
+            ``--temperatures`` prints ADR 0065's cycle-0 comparison instead.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--centred", action="store_true")
+    parser.add_argument(
+        "--temperatures",
+        action="store_true",
+        help="cycle 0 at 4884 K and 5500 K, and 5500 K at 4884 K's thrust (ADR 0065)",
+    )
     args = parser.parse_args(argv)
+    if args.temperatures:
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            rows = list(pool.map(temperature_row, temperature_cases(args.centred)))
+        print(tabulate(rows, headers="keys", floatfmt=".4g"))
+        return
     flown, _ = chains(DEFAULT_PARKING_DAYS)
     streams = [
         {

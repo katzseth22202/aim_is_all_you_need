@@ -211,12 +211,56 @@ def onward_streams(
     return streams
 
 
-def _fly(
-    stream: OnwardStream, period_days: float, burn_time: float, share_before: float
-) -> Tuple[float, float]:
-    """Loss (km/s) and share of the burn the stream is blocked for."""
+@dataclass(frozen=True)
+class BurnTrajectory:
+    """One fixed-direction departure burn, sampled.
+
+    Attributes:
+        loss: Finite-burn loss against the impulse (km/s).
+        ideal_burn: The burn's ideal velocity integral (km/s).
+        times: Sample times from ignition (s).
+        states: Position and velocity at each sample (km, km/s), shape (4, n).
+        acceleration: Thrust acceleration at each sample (km/s^2).
+        incoming: The stream's incoming asymptote direction, burn axes.
+        anchor: Impact parameter of the stream's route at periapsis.
+        mu: Earth's gravitational parameter (km^3/s^2).
+        earth_radius: Earth's radius (km).
+    """
+
+    loss: float
+    ideal_burn: float
+    times: np.ndarray
+    states: np.ndarray
+    acceleration: np.ndarray
+    incoming: np.ndarray
+    anchor: float
+    mu: float
+    earth_radius: float
+
+
+def burn_trajectory(
+    stream: OnwardStream,
+    burn_time: float,
+    share_before: float,
+    period_days: float = 20.0,
+    exhaust_speed: float = float(TABLE_EXHAUST.to_value(u.km / u.s)),
+    samples: int = VISIBILITY_SAMPLES,
+) -> BurnTrajectory:
+    """Integrate a fixed-direction burn that reaches the stream's departure.
+
+    Args:
+        stream: The stream the departure meets.
+        burn_time: Burn length (s).
+        share_before: Share of the burn flown before the reference periapsis.
+        period_days: Parking-orbit period.
+        exhaust_speed: Constant exhaust speed of the mass-flow profile (km/s).
+        samples: Samples along the burn.
+
+    Returns:
+        The trajectory.
+    """
     mu, earth_radius, radius, parking = _orbit(DEPARTURE_ALTITUDE, period_days * u.day)
-    exhaust = float(TABLE_EXHAUST.to_value(u.km / u.s))
+    exhaust = exhaust_speed
     final = float(np.hypot(stream.departure_vinf, np.sqrt(2.0 * mu / radius)))
     impulsive = final - parking
     target = 0.5 * final**2 - mu / radius
@@ -234,8 +278,8 @@ def _fly(
         mu, radius, parking, before, burn_time, ideal, exhaust, False, dense=True
     )
     assert dense is not None
-    states = dense(np.linspace(0.0, burn_time, VISIBILITY_SAMPLES))
-    incoming, _ = _physical_stream_geometry(
+    times = np.linspace(0.0, burn_time, samples)
+    incoming, anchor = _physical_stream_geometry(
         mu,
         earth_radius,
         radius,
@@ -243,11 +287,33 @@ def _fly(
         stream.return_vinf,
         float(np.radians(stream.aim_separation)),
     )
-    blocked = sum(
-        not _in_view(mu, earth_radius, position, stream.return_vinf, incoming)
-        for position in states[:2].T
+    spent = 1.0 - np.exp(-ideal / exhaust)
+    acceleration = exhaust * spent / burn_time / (1.0 - spent * times / burn_time)
+    return BurnTrajectory(
+        loss=ideal - impulsive,
+        ideal_burn=ideal,
+        times=times,
+        states=np.asarray(dense(times)),
+        acceleration=np.asarray(acceleration),
+        incoming=np.asarray(incoming),
+        anchor=float(anchor),
+        mu=mu,
+        earth_radius=earth_radius,
     )
-    return ideal - impulsive, blocked / VISIBILITY_SAMPLES
+
+
+def _fly(
+    stream: OnwardStream, period_days: float, burn_time: float, share_before: float
+) -> Tuple[float, float]:
+    """Loss (km/s) and share of the burn the stream is blocked for."""
+    flown = burn_trajectory(stream, burn_time, share_before, period_days)
+    blocked = sum(
+        not _in_view(
+            flown.mu, flown.earth_radius, position, stream.return_vinf, flown.incoming
+        )
+        for position in flown.states[:2].T
+    )
+    return flown.loss, blocked / VISIBILITY_SAMPLES
 
 
 def _in_view(
