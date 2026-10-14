@@ -4,7 +4,7 @@ Date: 2026-10-14
 
 Status: Accepted. The temperature is chosen. The headline hydrogen chamber stays
 at 4884 K until the impact simulation solves the 5500 K wrap. The impulse
-correction is applied now.
+correction is applied, and its figures are below.
 
 ## Context
 
@@ -77,12 +77,38 @@ The interpolated wraps are linear in the charge between the two solved fills
 
 ## The corrected impulse
 
-**Not yet re-run.** Every bulged-hydrogen figure in ADRs 0055, 0056, 0057, 0059
-and 0063 (growth, $/kg, break-even, slush and recovery rows) was computed on 657
-kN s and is now stale. They move together and in hydrogen's favour: on the
-sim's like-for-like rows the chamber doubles in 2.61 yr against ADR 0063's
-2.84. Re-run `make survivable-cost`, `make hardware-recovery`,
-`make slush-hydrogen` and `make departure-levers` before quoting any of them.
+Re-run on 683 kN s (eta 0.822), every other input as at commit `d39c690`.
+The "was" column is the same reports on 657 kN s at the commit before it. It
+matches ADRs 0055-0056, so each change is the impulse alone. Estimate book, lob
+climbing, 10% a year, 50% odds; break-even is cheap / dear seed.
+
+**Growth on the flown chain** (`make departure-levers`, the bulged hydrogen rows):
+
+| Lever | Doubling, was | Doubling | Annual | 10-yr |
+|---|---|---|---|---|
+| Bulged hydrogen, 2 Hz | 2.84 yr | **2.54 yr** | 31.4% | 13.3x |
+| 2.4 Hz | 2.60 | **2.38** | 33.8% | 16.0x |
+| two chambers | 3.01 | **2.71** | 29.1% | 10.8x |
+
+**Cost with recovered hardware** (`make hardware-recovery`):
+
+| Recovery | Growth (geo.), was / now | Steady $/kg, was / now | Steady break-even, was / now |
+|---|---|---|---|
+| none | 1.830 / 1.958 | $175 / **$157** | 469 / 925 → **385 / 726** |
+| rods only | 2.083 / 2.223 | $147 / **$136** | 339 / 615 → **288 / 499** |
+| rods + plate | 2.377 / 2.491 | $126 / **$120** | 241 / 393 → **219 / 346** |
+
+Methane AR100 at 24 kg is unchanged at $191 / $154 / $147 (priced by mass),
+so the bulged chamber's lead with recovered hardware widens from $7-21/kg to
+$18-34/kg.
+
+**Slush** (`make slush-hydrogen`): stored as 50% slush, the bulged chamber grows
+2.094 a cycle at $144/kg, or 2.380 at $126 with its tanks recovered (ADR 0055:
+2.236 at $135, recovered).
+
+**Cost book and seed** (`make survivable-cost`): $157/kg steady on the Estimate
+book ($150 on the paper's prices, $686 Pessimistic). The seed is 108 t, 1.18
+ships, 29.7% a year, 11.4x in ten years, against methane AR100's 22.9% and 6.5x.
 
 ## Asks of the impact simulation
 
@@ -93,7 +119,10 @@ sim's like-for-like rows the chamber doubles in 2.61 yr against ADR 0063's
 
 - The wraps at 5500 and 6000 K are interpolated, not solved.
 - The temperature comparison uses the wall-heat-debited impulses for every row
-  (661 for today), so it is like for like; the flown headline uses 683.
+  (661 for today), so it is like for like. The flown headline uses 683, which
+  doubles in 2.54 yr against that comparison's 2.61.
+- The slush and seed rows were not re-run on 657, so their "was" figures are
+  ADR 0055's; the recovery rows show those inputs still held.
 - The tanks per kilogram of hydrogen and the extension are held at the bulged
   chamber's.
 
@@ -103,5 +132,8 @@ sim's like-for-like rows the chamber doubles in 2.61 yr against ADR 0063's
   sim's wraps. The interpolated-wrap and 2.34 Hz rows were a scratch run
   (gitignored): `solved_hydrogen(T)` with `wall_mass` replaced by 33.1 t (5500
   K) or 31.7 t (6000 K), or `pulse_rate` by 2.34 / s, flown through `lever_row`.
+- The corrected-impulse figures: `make departure-levers` (its three bulged
+  hydrogen rows), `make hardware-recovery`, `make slush-hydrogen`,
+  `make survivable-cost`. The "was" column: the same at `d39c690~1`.
 - Tests: `tests/test_departure_levers.py`, `tests/test_chamber_isp.py`,
   `tests/test_survivable_chamber.py`.
