@@ -28,6 +28,7 @@ no storage at all, which flattered hydrogen against methane.
 import argparse
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
+from functools import partial
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -40,6 +41,12 @@ from src.chamber_isp import (
     ChamberPairing,
     efficiency_for_impulse,
     stored_as,
+)
+from src.departure_visibility import (
+    TABLE_TIMES,
+    loss_model_from_table,
+    onward_streams,
+    visible_loss_table,
 )
 from src.growth_ledger import (
     DEFAULT_PARKING_DAYS,
@@ -131,6 +138,15 @@ def cases() -> List[Tuple[str, Design]]:
             "hydrogen, two chambers",
             replace(HYDROGEN_BULGED_DESIGN, label="Hydrogen, bulged, n=2", chambers=2),
         ),
+        (
+            "hydrogen, two chambers, 2.4 Hz",
+            replace(
+                HYDROGEN_BULGED_DESIGN,
+                label="Hydrogen, bulged, n=2, 2.4 Hz",
+                pairing=replace(HYDROGEN_BULGED, pulse_rate=2.4 / u.s),
+                chambers=2,
+            ),
+        ),
     ]
     for temperature in SOLVED_HYDROGEN:
         pairing, eta = solved_hydrogen(temperature)
@@ -143,8 +159,20 @@ def cases() -> List[Tuple[str, Design]]:
     return rows
 
 
-def lever_row(index: int) -> Dict[str, object]:
-    """Fly one case over the flown chain (runs in a worker, passed by index)."""
+def lever_row(
+    index: int, tables: Optional[Sequence[Tuple[float, ...]]] = None
+) -> Dict[str, object]:
+    """Fly one case over the flown chain (runs in a worker, passed by index).
+
+    Args:
+        index: The case's index in :func:`cases`.
+        tables: One :func:`src.departure_visibility.visible_loss_table` per
+            flown cycle, to keep each departure's stream in view (ADR 0066);
+            None flies the centred loss table.
+
+    Returns:
+        The row.
+    """
     label, design = cases()[index]
     pairing = design.pairing
     assert pairing is not None and design.efficiency is not None
@@ -167,6 +195,11 @@ def lever_row(index: int) -> Dict[str, object]:
                 else hydrogen_boil_off(flown, storage.boil_off_per_day)
             ),
             chambers=design.chambers,
+            loss_models=(
+                None
+                if tables is None
+                else [loss_model_from_table(table) for table in tables]
+            ),
         )
     except (RuntimeError, ValueError) as error:
         return {"lever": label, "doubling yr": str(error)}
@@ -197,13 +230,46 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print every lever's chain growth.
 
     Args:
-        argv: ``--workers``.
+        argv: ``--workers``; ``--visible`` keeps each departure's stream in
+            view (ADR 0066), building every cycle's loss table first.
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--visible", action="store_true")
     args = parser.parse_args(argv)
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        rows = list(pool.map(lever_row, range(len(cases()))))
+        tables = None
+        if args.visible:
+            flown, _ = chains(DEFAULT_PARKING_DAYS)
+            streams = onward_streams(flown)
+            tables = list(pool.map(visible_loss_table, streams))
+            print(
+                tabulate(
+                    [
+                        {
+                            "cycle": s.index,
+                            "S": s.synodic_multiple,
+                            "aim sep deg": s.aim_separation,
+                            "v_inf out": s.departure_vinf,
+                            "v_inf in": s.return_vinf,
+                            "longest visible min": max(
+                                (
+                                    t
+                                    for t, v in zip(TABLE_TIMES, table)
+                                    if np.isfinite(v)
+                                ),
+                                default=0.0,
+                            )
+                            / 60.0,
+                        }
+                        for s, table in zip(streams, tables)
+                    ],
+                    headers="keys",
+                    floatfmt=".4g",
+                )
+                + "\n"
+            )
+        rows = list(pool.map(partial(lever_row, tables=tables), range(len(cases()))))
     print(tabulate(rows, headers="keys", floatfmt=".3g"))
 
 

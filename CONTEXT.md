@@ -1753,6 +1753,15 @@ cannot fly the delivery optimum's plate.
 _Avoid_: scoring the lob per PuffSat (a smaller unit spends proportionally fewer, so its
 lost mass does not show); a dollar objective (the prices are guesses).
 
+**Departure visibility**:
+A departure burn must keep every incoming PuffSat route in view of Earth for its whole
+length (`src/departure_visibility.py`, ADR 0066). The flown chain's streams arrive
+154-175.5 degrees from the departure (the *aim separation*), so a long burn centred on
+periapsis loses them on its approach leg; the burn starts later instead. Costs about
+0.2 yr of doubling (`make departure-levers-visible`). _Avoid_: quoting ADR 0045's
+20-minute, 144.9-degree check for the ledger's 25-60 minute burns; choosing the other
+departure mirror (it is marginal or blocked on every cycle).
+
 **Departure share**:
 The share of the departing stack the departure burn sends onward, the largest loss in
 the cycle: 0.22-0.36 for the methane chamber, so a push that parks about ten times its

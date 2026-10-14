@@ -541,6 +541,7 @@ def chain_growth(
     boil_off: float = 0.0,
     film_per_impulse: u.Quantity = NO_FILM,
     chambers: Optional[int] = None,
+    loss_models: Optional[Sequence[LossModel]] = None,
 ) -> List[CycleGrowth]:
     """Carry the launch unit through every flown cycle, each on its best schedule.
 
@@ -559,10 +560,18 @@ def chain_growth(
         boil_off: As in :func:`price_cycle_growth`.
         film_per_impulse: As in :func:`price_cycle_growth`.
         chambers: As in :func:`price_cycle_growth`.
+        loss_models: One finite-burn loss per cycle, overriding
+            ``loss_model``; :func:`src.departure_visibility.visible_loss_model`
+            keeps each departure's stream in view (ADR 0066).
 
     Returns:
         One ledger per cycle, in order.
     """
+    if loss_models is not None and len(loss_models) != len(cycles):
+        raise ValueError("loss_models needs one model per cycle")
+    models = (
+        list(loss_models) if loss_models is not None else [loss_model] * len(cycles)
+    )
     return [
         best_cycle_growth(
             cycle,
@@ -570,7 +579,7 @@ def chain_growth(
             pairing,
             departure_efficiency,
             pitch_ratio=pitch_ratio,
-            loss_model=loss_model,
+            loss_model=model,
             max_slug_ratio=max_slug_ratio,
             cryostat_fraction=cryostat_fraction,
             boil_off=boil_off,
@@ -579,7 +588,7 @@ def chain_growth(
             film_per_impulse=film_per_impulse,
             chambers=chambers,
         )
-        for cycle in cycles
+        for cycle, model in zip(cycles, models)
     ]
 
 
