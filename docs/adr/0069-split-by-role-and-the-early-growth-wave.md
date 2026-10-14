@@ -87,20 +87,11 @@ the 20-day orbit, with one apoapsis reversal.
 - **Each unit type's own water schedule.** Both unit types reuse the batch's
   best starting water price.
 
-## Reproduction (scratch, gitignored; inputs recorded here)
+## Reproduction
 
-- **Chain.** `adaptive_two_wave_cycles(split_days=20.0, split="independent")`.
-- **Trajectories.** Each window's growth trajectory is
-  `window_waves(d, split_days=20.0, split="independent")[3]`. On 3S windows
-  with a lead other than 20 days it is `_cheapest_return(d, return - lead)`
-  instead. The window after the chain is included.
-- **Per cycle `c`.**
-  - The cycle carries its growth trajectory's arrival speed and correction.
-  - The batch's best water price comes from `best_cycle_growth` with
-    `loss_model=_orbit_loss(fixed_direction_loss, parking_period(c))`.
-  - `price_cycle_growth` is flown at that price twice, with `onward_burn` set
-    to the next window's growth and nozzle departure burns (each trajectory's
-    `earth_departure_periapsis_speed` less `_cycle_periapsis_speed()`).
-  - The balance above is solved for `g` with `brentq`.
-- **Chain summary.** `summarize_chain` over the cycles' periods.
-- **Leads.** 20, 40, 60, 80 and 120 days on 3S windows; 2S windows at 20.
+`make split-by-role` (`src/split_by_role.py`, about 10 min on four workers)
+prints every row above. `role_growth` is the balance; `chain_by_role(name,
+lead)` flies it, pricing each unit type with `price_cycle_growth` at the
+batch's best water price and `onward_burn` set to the next window's growth or
+nozzle departure. Tests: `tests/test_split_by_role.py` (one slow, which
+reproduces methane's 3.91 yr).

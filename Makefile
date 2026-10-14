@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -82,6 +82,9 @@ light-plate-push:  ## Abandoned: smaller plate pulses flown against gravity abov
 
 departure-levers:  ## Rank departure levers on the flown chain, each stream kept in view: 3 Hz, two chambers, light pitch, hydrogen, hydrogen solved at 4884-7000 K (ADR 0063, 0064, 0066; ~25 min)
 	python -W ignore -m src.departure_levers
+
+split-by-role:  ## How the two-wave split is flown: uncharged batch, divided at Jupiter, or by role with early 3S growth waves (ADR 0068, 0069; ~10 min)
+	python -W ignore -m src.split_by_role
 
 departure-visibility:  ## Rebuild data/departure_visibility.csv: visible-burn loss tables for the flown and 3S-only chains, 10- and 20-day orbits (ADR 0066; ~15 min)
 	python -W ignore -m src.departure_visibility

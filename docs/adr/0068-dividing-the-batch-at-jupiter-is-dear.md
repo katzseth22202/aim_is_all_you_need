@@ -95,10 +95,10 @@ wave costs about 2.4 km/s of methalox, which is 47% of its mass, against about
 ## Reproduction
 
 - `two_wave_growth.adaptive_two_wave_cycles(split_days=20.0, split=...)`.
-- The ledger comparison and the weight sweep were scratch runs (gitignored):
-  `chain_growth` on each chain with `loss_model=_orbit_loss(fixed_direction_loss,
-  parking_period(...))`. The sweep set `_SPLIT_ROD_SHARE` to 0.2, 0.6 or 1.0 and
-  `_SPLIT_CHAMBER_EXHAUST` to 8, 4 or 3 km/s.
+- The ledger comparison: `make split-by-role` (its "batch" rows).
+- The weight sweep was a scratch run (gitignored). It set `_SPLIT_ROD_SHARE` to
+  0.2, 0.6 or 1.0 and `_SPLIT_CHAMBER_EXHAUST` to 8, 4 or 3 km/s, then flew
+  methane through `split_by_role.chain_by_batch("methane", "shared")`.
 - The early growth returns: `shared_split(departure, departure + 3S,
   departure + f S)` for the flown chain's cycles 0 and 9, where S is
   `_FIXED_TWO_SYNODIC_DAYS / 2`.
