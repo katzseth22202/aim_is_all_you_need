@@ -2,8 +2,9 @@
 
 Date: 2026-10-13
 
-Status: Accepted; its headline route is superseded by ADR 0059 (the two-year
-Earth loop replaces EEJ, and ADR 0059 carries the current table). Its prices and
+Status: Accepted; its headline route is superseded, first by ADR 0059 (the
+two-year Earth loop) and then by ADR 0060 (the seed flies direct, so this ADR's
+"Direct" column is the headline again). Its prices and
 valuation stand. Amends ADR 0036 (the seed's price ends), ADR 0037 and ADR 0040
 (the comparison rates), and ADR 0039 (EEJ becomes the headline, not a sensitivity).
 

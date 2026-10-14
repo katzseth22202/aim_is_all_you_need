@@ -1647,15 +1647,14 @@ refuelled by twelve tankers in low orbit and **expended**. The baseline ship is
 the bill, so the ship's payload moves $/kg far more than its hull price does.
 Its price ends are $2172/kg (40 t, $5M hull, SpaceX's $150/kg to low orbit) and
 $9293/kg (60 t, $20M hull, Morgan Stanley's $500/kg) (ADR 0057). Every report
-flies it on the **two-year Earth loop** (ADR 0059):
-- a launch at 5.2 km/s;
-- a 0.56 km/s deep-space burn at 370 s;
-- a 2.7 km/s powered Earth flyby onto the arc to Jupiter;
-- a return at the chain's 59.29 km/s.
-
-That is x0.67 / x0.60 per kilogram, 2.18 years later. At these prices the seed is
-about a third of the methane chamber's break-even. An argon tug that lifts the fuelled ship to a high ellipse does not
-beat EEJ (ADR 0058).
+flies it **direct** (ADR 0060): one burn from the parking orbit to 12.2 km/s, returning
+at the chain's 59.29 km/s. At these prices the seed is about a third of the methane
+chamber's break-even. A Lucy-style **two-year Earth loop** (ADR 0059: a 5.2 km/s
+launch, a 0.56 km/s deep-space burn at 370 s, a 2.7 km/s powered Earth flyby) sends
+x1.5-1.67 the seed 2.18 years later, worth 1.22-1.36x after the delay, but it cuts
+the break-even only 3-7% on the cheap seed (13-19% on the dear one) for a two-year
+cryogenic coast and a powered flyby, so it is a quoted sensitivity, not the plan.
+Argon tugs that lift the fuelled ship to a high ellipse do not pay (ADR 0058, 0061).
 _Avoid_: quoting the stock ship's $910-14 840/kg as the seed's price; reusing the
 six-engine 31 m/s loss for a three-engine burn (117 m/s); Musk's $2M a flight as
 the cheap end (it made the seed look nearly free; ADR 0057); scoring a seed route

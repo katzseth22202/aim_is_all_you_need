@@ -2,7 +2,9 @@
 
 Date: 2026-10-13
 
-Status: Accepted. Supersedes ADR 0057's headline route (EEJ) and amends ADR 0039.
+Status: Accepted; its headline decision is reversed by ADR 0060 (the seed flies
+direct, and this loop is the quoted sensitivity). The search and results stand.
+Supersedes ADR 0057's headline route (EEJ) and amends ADR 0039.
 
 ## Context
 

@@ -103,16 +103,16 @@ def test_with_growth_uncharged_the_seed_returns_tab_seed_return(
 @pytest.mark.parametrize(
     "design, steady_cost, break_even",
     [
-        (DESIGNS[0], 169, (522, 1110)),
-        (DESIGNS[2], 100, (151, 199)),
-        (DESIGNS[4], 100, (144, 178)),
+        (DESIGNS[0], 169, (567, 1396)),
+        (DESIGNS[2], 100, (155, 222)),
+        (DESIGNS[4], 100, (146, 194)),
     ],
     ids=["methalox", "methane solved", "hydrogen solved"],
 )
 def test_the_estimates_headline_figures(design, steady_cost, break_even) -> None:
     # The headline: steady-state $/kg at L1 and the steady-state break-even,
-    # cheap / dear seed, at ADR 0040's 10% and 50% odds with the seed on ADR
-    # 0059's two-year loop at ADR 0057's prices.  Pinned to the dollar.
+    # cheap / dear seed, at ADR 0040's 10% and 50% odds with the seed flown
+    # direct (ADR 0060) at ADR 0057's prices.  Pinned to the dollar.
     inputs = design_inputs(design)
     assert steady_state_cost(inputs, ESTIMATE)[0] == pytest.approx(steady_cost, abs=1.0)
     schedule = DiscountSchedule.risked(0.10, 0.5, inputs.proof_years)

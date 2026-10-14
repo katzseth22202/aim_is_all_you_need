@@ -4,7 +4,8 @@ Prints the outputs the parent asked for (``docs/growth_cost_for_parent.md``,
 asks G1-G4): the hardware each launch unit carries, the steady-state cost per
 kilogram at L1 by line, break-even sale prices and value per seed dollar
 as expected values (ADR 0040: 10% a year, 50% odds the cycle works) with
-the seed flown on the headline route (ADR 0059: the two-year Earth loop), the chamber and package
+the seed flown on the headline route (ADR 0060: direct; ADR 0059's two-year Earth
+loop is a sensitivity), the chamber and package
 prices at which a chamber matches methalox, plate learning, and one-line
 sensitivities.  Building the chains takes several minutes.
 """
@@ -72,14 +73,16 @@ LINES = (
     "film",
 )
 
-#: Seed routes (ADR 0039), each relative to the direct route on its own ship:
-#: the route's dollars per seed kilogram over direct's, and how much later it
-#: returns. From the chemical sweep scored at 10% for added years (ADR 0040).
+#: Seed routes, each relative to the direct route on its own ship: the route's
+#: dollars per seed kilogram over direct's, and how much later it returns.
+#: ADR 0059's Lucy-style loops (ship carried, return at the chain's 59.29
+#: km/s), the sensitivity behind ADR 0060's direct headline.  ADR 0039's EEJ
+#: and EVEEJ ratios are not listed: their floor and staging flatter them.
 SEED_ROUTES: Tuple[RouteSeed, ...] = (
-    RouteSeed("EEJ, methalox", dear=False, price_ratio=0.6991, delay_years=2.184),
-    RouteSeed("EVEEJ, methalox", dear=False, price_ratio=0.5544, delay_years=4.356),
-    RouteSeed("EEJ, methalox", dear=True, price_ratio=0.6112, delay_years=2.184),
-    RouteSeed("EVEEJ, methalox", dear=True, price_ratio=0.6375, delay_years=4.335),
+    RouteSeed("2-yr loop", dear=False, price_ratio=0.6687, delay_years=2.180),
+    RouteSeed("3-yr loop", dear=False, price_ratio=0.521, delay_years=4.37),
+    RouteSeed("2-yr loop", dear=True, price_ratio=0.5972, delay_years=2.180),
+    RouteSeed("3-yr loop", dear=True, price_ratio=0.510, delay_years=4.37),
 )
 
 

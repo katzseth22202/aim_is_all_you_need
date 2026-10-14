@@ -70,10 +70,11 @@ make sep-split      # can argon SEP buy the 20-day split's corrections? (ADR 002
 make sep-split-10d  # the same at the 10-day gap the paper flies (ADR 0026 addendum)
 make dsm-bound      # free the split's correction burn in time and place (ADR 0028)
 make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035/0036)
-make seed-sep-tug   # an argon tug lifting the fuelled seed ship: does not beat EEJ (ADR 0058)
-make seed-loop      # Lucy-style Earth loops for the seed, DSM at 370 s (ADR 0059; ~30 min)
+make seed-sep-tug   # an argon tug lifting the fuelled seed ship: does not pay (ADR 0058)
+make seed-loop      # Lucy-style Earth loops for the seed, DSM at 370 s; a sensitivity, not the headline (ADR 0059, 0060; ~30 min)
+make seed-battery-tug # argon MPD tug on a water battery: stored sunlight spent at perigee (ADR 0061; ~1 h per ship and route)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
-make growth-cost    # every growth launch unit charged; 10%/yr, 50% odds, seed on EEJ (ADR 0037, 0040, 0057)
+make growth-cost    # every growth launch unit charged; 10%/yr, 50% odds, seed direct, loops as sensitivity (ADR 0037, 0040, 0057, 0060)
 make plate-designs  # the impact-sim's spray cup / plug through the growth ledger (ADR 0041)
 make plate-designs-cost # the same through the cost model, lob climbing at 400 km (ADR 0041, 0042)
 make plate-grid     # full ledger matrix + sensitivities behind the spray cup and plug (ADR 0042)
@@ -291,10 +292,10 @@ seed_route.py                ← seed_cost + retrograde_return_legs + jovian_fly
                                 sep_split_correction + two_wave_growth + conic_kernel:
                                 the seed's route search (gravity assists, methalox
                                 or a charged SEP stage, pygmo islands capped by free
-                                memory). Verdict: fly the seed on one Earth loop
-                                (EEJ) with methalox, 1.16-1.33x direct under ADR
-                                0040's valuation; SEP is out of scope, its
-                                capacity test necessary but not sufficient (ADR 0039)
+                                memory). ADR 0039's EEJ verdict (1.16-1.33x) was
+                                flattered by its floor and staging (ADR 0059);
+                                the seed flies direct (ADR 0060). SEP's capacity
+                                test is necessary but not sufficient (ADR 0039)
 
 seed_sep_tug.py              ← seed_cost + seed_route + finite_burn_loss: an argon
                                 tug lifting the fuelled seed ship to a high ellipse
@@ -306,7 +307,15 @@ seed_loop.py                 ← seed_route + retrograde_return_legs: Lucy-style
                                 ΔV-EGA seed routes (launch, deep-space burn at 370 s,
                                 powered Earth flyby onto the Jupiter arc, return at
                                 the chain's 59.29 km/s), ship carried through every
-                                burn; pygmo islands per 1/2/3-yr band (ADR 0059)
+                                burn; pygmo islands per 1/2/3-yr band (ADR 0059).
+                                A sensitivity: the seed flies direct (ADR 0060)
+
+seed_battery_tug.py          ← seed_loop + seed_sep_tug + finite_burn_loss: an
+                                argon MPD tug on a water battery (electrolyse
+                                the payload water round the orbit, fuel cell at
+                                perigee), heat buffered in the water, array sold
+                                at L1; scipy DE per price pair, feeding the
+                                direct route or the 2-yr loop (ADR 0061)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

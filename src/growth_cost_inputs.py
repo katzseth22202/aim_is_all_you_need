@@ -88,8 +88,10 @@ EEJ = SeedFlight("EEJ, methalox (ADR 0039)", 0.6991, 0.6112, 2.184)
 #: every burn, return at the chain's 59.29 km/s.  The loop returns 2.166 and
 #: 2.180 yr after direct; the larger is charged to both.
 LOOP_2YR = SeedFlight("2-yr Earth loop, DSM at 370 s (ADR 0059)", 0.6687, 0.5972, 2.180)
-#: The route every report prices the seed on (ADR 0059).
-HEADLINE_SEED = LOOP_2YR
+#: The route every report prices the seed on: direct (ADR 0060).  The loop
+#: cuts the cheap-seed break-even only 3-7% for two years' delay, a cryogenic
+#: coast and a powered flyby, so it is quoted as a sensitivity.
+HEADLINE_SEED = DIRECT
 
 
 def _kg(mass: u.Quantity) -> float:
