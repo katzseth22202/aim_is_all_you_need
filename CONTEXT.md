@@ -1722,6 +1722,53 @@ Priced per package, not per kilogram: $100 to 100 000 built, then 80% per doubli
 a $10 floor (ASKS H6, unsourced). This makes rods about 20 times dearer per kilogram
 than growth PuffSats. _Avoid_: the paper's flat $20/kg for rods.
 
+**Growth-wave floor**:
+No growth PuffSat may pass Earth below **400 km** (parent `sec:jovian_meeting_altitudes`).
+At 57 km/s air heat goes as `rho v^3 / 2`: a 200 km pass puts 290 kJ/m2 on the bumper
+and takes the Kevlar spokes to ~650 K (aramid keeps its strength to ~520 K); 400 km
+gives 4.9 kJ/m2 and under 330 K, under 460 K in air ten times denser. A PuffSat that
+meets the stack at altitude `h` has its perigee at or below `h`, so **the stack must
+stay at or above 400 km for the whole push**, and tilting the thrust upward by aim
+needs the stack above it: a tilt `gamma` puts the perigee about `r gamma^2 / 2` lower
+(about 25 km at 5 deg, 100 km at 10 deg). _Avoid_: the 200 km reference altitude as an
+interception height for the Jupiter streams (it suits the 11 km/s scenarios only).
+
+**Delivery push objective**:
+How a data-centre delivery push is chosen without dollars (author, 2026-10-14). The
+argon loading sits at the k = 10 cap on every pulse: most delivered mass per PuffSat in
+the validated range, a ratio the lob and plate barely move. Everything else (first-pulse
+size and so the plate, the taper along the wave, each PuffSat's aim, the lob's climb
+speed) maximises **data-centre tonnes at the high orbit per booster flight**, with the
+booster fixed in size (1500 t at a 0.75 km/s climb, less for faster), the stack held at
+or above the **growth-wave floor** and under the **delivery acceleration cap**. It is
+reported as a curve over the lob's climb speed, whose peak is the optimum. A higher lob
+buys time above 400 km for smaller pulses and a lighter plate, but lofts less. ADR 0062
+flew it and abandoned the lighter plate: about 8% more per delivery, and a growth push
+cannot fly the delivery optimum's plate.
+_Avoid_: scoring the lob per PuffSat (a smaller unit spends proportionally fewer, so its
+lost mass does not show); a dollar objective (the prices are guesses).
+
+**Departure share**:
+The share of the departing stack the departure burn sends onward, the largest loss in
+the cycle: 0.22-0.36 for the methane chamber, so a push that parks about ten times its
+PuffSat mass grows the fleet only 1.3-2.7 times (ADR 0063). It is set by the chamber's
+effective exhaust (about 7 km/s for methane, 10 for the bulged hydrogen), the two-synodic
+burn (7.3 km/s from 600 km), its fixed-direction loss (0.4-1.3 km/s) and the expended
+chamber and tanks. A hotter, thinner charge raises the exhaust but lowers impulse per
+pulse, so it pays only with a faster pulse rate.
+_Avoid_: expecting half the stack onward at 7 km/s (that needs about 10.5 km/s of
+exhaust and no hardware); flying only three-synodic cycles to cut the burn (their clock
+cancels it).
+
+**Delivery acceleration cap**:
+The most a delivered data centre may feel on its push: **4 g** (author, 2026-10-14),
+about a rocket launch's steady load. It caps the gas springs' force over the stack's
+mass, which is the cycle mean `J nu / m` plus the springs' ripple (assumed ±10%, so a
+3.6 g mean). It does not cap the floor's millisecond kick, which the springs isolate.
+It binds at the end of the push, when the stack is lightest. Only delivery pushes
+carry it; a growth push carries PuffSats and propellant and flies the full pulse.
+_Avoid_: reading it as the floor's acceleration; holding growth pushes to it.
+
 **Delivery loading**:
 The plate schedule for a cargo push is the growth ledger's capped (k <= 10)
 Pontryagin schedule. Its starting price is chosen to maximise

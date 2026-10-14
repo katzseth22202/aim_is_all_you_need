@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -76,6 +76,12 @@ seed-loop:  ## Lucy-style Earth loops for the seed: DSM at 370 s, powered Earth 
 
 seed-battery-tug:  ## An argon MPD tug on a water battery (electrolyser + fuel cell), spending stored sunlight at perigee (ADR 0061; ~1 h per ship and route)
 	python -W ignore -m src.seed_battery_tug
+
+light-plate-push:  ## Abandoned: smaller plate pulses flown against gravity above 400 km, data-centre tonnes per booster flight vs lob climb (ADR 0062; ~20 min)
+	python -W ignore -m src.light_plate_push --fixed
+
+departure-levers:  ## Rank departure levers on the flown chain: 3 Hz, two chambers, light pitch, hydrogen, hot hydrogen unsolved (ADR 0063; ~40 min)
+	python -W ignore -m src.departure_levers
 
 seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1, liquidation, steady state, IRR, break-even price (ADR 0036)
 	python -m src.harvest

@@ -73,6 +73,8 @@ make seed-cost      # the expended seed ship and tab:seed_amortization (ADR 0035
 make seed-sep-tug   # an argon tug lifting the fuelled seed ship: does not pay (ADR 0058)
 make seed-loop      # Lucy-style Earth loops for the seed, DSM at 370 s; a sensitivity, not the headline (ADR 0059, 0060; ~30 min)
 make seed-battery-tug # argon MPD tug on a water battery: stored sunlight spent at perigee (ADR 0061; ~1 h per ship and route)
+make light-plate-push # abandoned: smaller plate pulses flown against gravity above 400 km (ADR 0062; ~20 min)
+make departure-levers # rank departure levers on the flown chain, hot hydrogen unsolved (ADR 0063; ~40 min)
 make seed-harvest   # the seed valued as cargo at L1: liquidation, steady state, IRR (ADR 0036)
 make growth-cost    # every growth launch unit charged; 10%/yr, 50% odds, seed direct, loops as sensitivity (ADR 0037, 0040, 0057, 0060)
 make plate-designs  # the impact-sim's spray cup / plug through the growth ledger (ADR 0041)
@@ -309,6 +311,18 @@ seed_loop.py                 ← seed_route + retrograde_return_legs: Lucy-style
                                 the chain's 59.29 km/s), ship carried through every
                                 burn; pygmo islands per 1/2/3-yr band (ADR 0059).
                                 A sensitivity: the seed flies direct (ADR 0060)
+
+light_plate_push.py          ← growth_ledger + lob_rise + water_plate: the plate
+                                push flown against gravity from the lob, each
+                                PuffSat aimed with its perigee >= 400 km, the
+                                plate scaled with its pulse, a 4 g delivery
+                                cap; data-centre tonnes per booster flight
+                                against lob climb. Abandoned (ADR 0062)
+
+departure_levers.py          ← survivable_chamber + growth_ledger: departure
+                                levers (3 Hz, two chambers, light pitch,
+                                hydrogen, hot hydrogen at 7000/10000 K
+                                unsolved) through chain_growth (ADR 0063)
 
 seed_battery_tug.py          ← seed_loop + seed_sep_tug + finite_burn_loss: an
                                 argon MPD tug on a water battery (electrolyse
