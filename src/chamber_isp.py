@@ -197,9 +197,11 @@ HYDROGEN_BULGED = ChamberPairing(
     extension_mass=(2.19 * u.t * 0.84 * 300.0 / 59.4468).to(u.t),
     storage=LIQUID_HYDROGEN,
 )
-#: Its net impulse per pulse at A/A* = 300, gate and nozzle freeze charged:
-#: 656-658 kN s over 0.75-1.0 m^2 of throat, against the sphere's 697.
-HYDROGEN_BULGED_IMPULSE = 657.0 * u.kN * u.s
+#: Its net impulse per pulse at A/A* = 300, gate charged, with finite-rate
+#: H + H + M recombination through the nozzle (impact sim @ ca07938, its
+#: ADR-0058; ADR 0064): 683 kN s, 661 at the high wall-heat edge.  It replaces
+#: ADR 0055's 657, whose sudden freeze understated it.  The sphere gave 697.
+HYDROGEN_BULGED_IMPULSE = 683.0 * u.kN * u.s
 
 
 def stored_as(pairing: ChamberPairing, storage: HydrogenStorage) -> ChamberPairing:

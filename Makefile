@@ -80,7 +80,7 @@ seed-battery-tug:  ## An argon MPD tug on a water battery (electrolyser + fuel c
 light-plate-push:  ## Abandoned: smaller plate pulses flown against gravity above 400 km, data-centre tonnes per booster flight vs lob climb (ADR 0062; ~20 min)
 	python -W ignore -m src.light_plate_push --fixed
 
-departure-levers:  ## Rank departure levers on the flown chain: 3 Hz, two chambers, light pitch, hydrogen, hot hydrogen unsolved (ADR 0063; ~40 min)
+departure-levers:  ## Rank departure levers on the flown chain: 3 Hz, two chambers, light pitch, hydrogen, hydrogen solved at 4884-7000 K (ADR 0063, 0064; ~20 min)
 	python -W ignore -m src.departure_levers
 
 seed-harvest:  ## The seed valued as delivered cargo: k-optimised delivery to L1, liquidation, steady state, IRR, break-even price (ADR 0036)

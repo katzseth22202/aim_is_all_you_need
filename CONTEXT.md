@@ -384,8 +384,9 @@ _Avoid_: grams.
 **Bulged hydrogen chamber**:
 The sphere's 60 kg hydrogen charge in the methane chamber's r 3.0 m bulge
 (`chamber_isp.HYDROGEN_BULGED`, ADR 0055): 106 m3, 2.5 kg rod, 0.84 m2 throat,
-37.0 t dry wrap (2.20% flung strain against 2.4%), 657 kN s at A/A* = 300 against
-the sphere's 697, flown at 2 Hz. The first hydrogen chamber with a solved wall;
+37.0 t dry wrap (2.20% flung strain against 2.4%), 683 kN s at A/A* = 300 with
+finite-rate recombination (ADR 0064; 657 before it) against the sphere's 697, flown
+at 2 Hz, at 4884 K. ADR 0064 chooses 5500 K for it, pending the sim's wrap at that fill. The first hydrogen chamber with a solved wall;
 the 20 m3 sphere's is unresolved at ~2.95 GPa. _Avoid_: giving it a doubled
 throat (its wrap fails at the taper).
 

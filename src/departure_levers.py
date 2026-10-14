@@ -12,17 +12,12 @@ behind today's push (the spray cup, film carried), on the flown chain:
   light pitch together.
 * **Bulged hydrogen chamber** (4884 K, 2 Hz): at 2.4 Hz (the top of its
   2.2-2.4 Hz cycle, ADR 0055) and with two chambers.
-* **Hot hydrogen, unsolved** (:func:`hot_hydrogen`): the bulged chamber held at
-  7000 K or 10000 K.  Each kilogram carries more energy (Cantera ``gri30``
-  equilibrium at the chamber's density, extrapolated past its fits: 111 MJ/kg
-  at 4884 K, 242 at 7000 K, 340-390 at 10000 K, so 360 is used), so the charge
-  per rod that holds the temperature falls.  About 60% of that energy sits in
-  broken bonds, and how much the nozzle gets back is unknown: rows at 94% (the
-  5500 K sphere's AR300 figure), 70% and 50%.  The chamber's efficiency is
-  scaled by the chemistry ceiling.  The wall, its mass, the pulse rate and the
-  tanks per kilogram of hydrogen are held at the bulged chamber's, and it is
-  flown at 2, 3 and 4 Hz: **none of it is solved**, which is what the
-  hot-hydrogen ask (2026-10-14) requests.
+* **Hotter hydrogen, solved** (:func:`solved_hydrogen`): the bulged chamber
+  at 4884 (today), 5500, 6000 and 7000 K, each with the impact sim's charge,
+  impulse, pulse rate and wrap (ADR 0064).  ADR 0063 first flew these as
+  estimates scaled by a chemistry ceiling; the sim found the bonds come back at
+  60-71%, not 94%, and the hot charge stops shrinking because the rod and plug
+  store little energy.  10 000 K fails the wrap and is not flown.
 """
 
 import argparse
@@ -34,7 +29,7 @@ import numpy as np
 from astropy import units as u
 from tabulate import tabulate
 
-from src.chamber_isp import HYDROGEN_BULGED, ChamberPairing
+from src.chamber_isp import HYDROGEN_BULGED, ChamberPairing, efficiency_for_impulse
 from src.growth_ledger import DEFAULT_PARKING_DAYS, chain_growth, summarize_chain
 from src.seed_cost import Design, chains
 from src.survivable_chamber import (
@@ -44,53 +39,45 @@ from src.survivable_chamber import (
     survivable_design,
 )
 
-#: Hydrogen's equilibrium internal energy per kilogram at the bulged chamber's
-#: charge density (0.57 kg/m^3), above H2 at 300 K (Cantera ``gri30``; past
-#: ~6000 K its fits are extrapolated, and 10000 K takes the middle of 340-390).
-HYDROGEN_ENERGY = {4884.0: 111.0e6, 7000.0: 242.0e6, 10000.0: 360.0e6}  # J/kg
-#: Share of that energy in broken bonds when the charge is hot enough to be
-#: mostly atomic.
-HOT_BOND_SHARE = 0.60
-#: Bonds the nozzle gives back: the 5500 K sphere's AR300 figure, then two
-#: pessimistic ends.
-RECOVERED = (0.94, 0.70, 0.50)
-HOT_TEMPERATURES = (7000.0, 10000.0)
-#: A smaller charge per rod gives less impulse per pulse, so at 2 Hz the hot
-#: chamber burns longer or flies more chambers.  A smaller charge also fills
-#: faster, so the faster rates are what the hot chamber would have to reach.
-HOT_PULSE_RATES = (2.0, 3.0, 4.0)
+#: The bulged chamber at each temperature, solved by the impact sim (@ ca07938,
+#: its ADR-0058 and ``walled_nozzle_hot_hydrogen.md``): the charge per rod at
+#: 75 km/s (``solve_charge``, rod and plug included), net impulse per pulse at
+#: A/A* = 300 with finite-rate recombination and the wall heat debited, and the
+#: pulse rate sealed at 0.3 bar on the 0.5 t/s fill (today's row reproduces
+#: the 2.2-2.4 Hz the bulge is flown at).  The dry wrap is solved in 2-D only
+#: at 4884 K (37.0 t) and 7000 K (29.8 t); 5500 K and 6000 K fills lie between
+#: two that pass, and are held at 37.0 t.
+#: ``temperature: (k, impulse kN s, rate Hz, wall t)``.
+SOLVED_HYDROGEN: Dict[float, Tuple[float, float, float, float]] = {
+    4884.0: (23.97, 661.0, 2.27, 37.0),
+    5500.0: (16.13, 485.0, 2.66, 37.0),
+    6000.0: (12.65, 402.0, 2.94, 37.0),
+    7000.0: (9.65, 327.0, 3.28, 29.8),
+}
+#: The temperature the bulged chamber is flown at (ADR 0064): the most impulse
+#: per kilogram carried that its own charge can still cool by regeneration.
+CHOSEN_TEMPERATURE = 5500.0
 
 
-def hot_hydrogen(temperature: float, recovered: float) -> Tuple[ChamberPairing, float]:
-    """The bulged hydrogen chamber held at a hotter temperature, unsolved.
-
-    The chamber's energy per kilogram ``u(T)`` holds ``(k + 1 + P) u = w^2 / 2``
-    at the reference closing speed, so the reference charge scales as
-    ``(k_ref + 1 + P) u_ref / u(T) - 1 - P``.  Efficiency is scaled by the new
-    chemistry ceiling, ``1 - 0.60 (1 - recovered)``.
+def solved_hydrogen(temperature: float) -> Tuple[ChamberPairing, float]:
+    """The bulged hydrogen chamber at one of the impact sim's solved temperatures.
 
     Args:
-        temperature: 7000 or 10000 K.
-        recovered: Share of the bond energy the nozzle returns.
+        temperature: A key of :data:`SOLVED_HYDROGEN`.
 
     Returns:
-        (pairing, efficiency).
+        (pairing, efficiency), the efficiency inverted from the solved impulse.
     """
-    base = HYDROGEN_BULGED
-    plug = base.plug_ratio
-    ratio = HYDROGEN_ENERGY[4884.0] / HYDROGEN_ENERGY[temperature]
-    slug = (base.reference_slug_ratio + 1.0 + plug) * ratio - 1.0 - plug
-    ceiling = 1.0 - HOT_BOND_SHARE * (1.0 - recovered)
-    eta0 = HYDROGEN_BULGED_DESIGN.efficiency
-    assert eta0 is not None
+    slug, impulse, rate, wall = SOLVED_HYDROGEN[temperature]
     pairing = replace(
-        base,
-        name=f"H2 bulged {temperature:.0f} K, {recovered:.0%} back (unsolved)",
+        HYDROGEN_BULGED,
+        name=f"H2 bulged {temperature:.0f} K, {rate:g} Hz",
         temperature=temperature * u.K,
-        reference_slug_ratio=float(slug),
-        chemistry_ceiling=ceiling,
+        reference_slug_ratio=slug,
+        wall_mass=wall * u.t,
+        pulse_rate=rate / u.s,
     )
-    return pairing, eta0 * ceiling / base.chemistry_ceiling
+    return pairing, efficiency_for_impulse(impulse * u.kN * u.s, pairing)
 
 
 def cases() -> List[Tuple[str, Design]]:
@@ -119,22 +106,14 @@ def cases() -> List[Tuple[str, Design]]:
             replace(HYDROGEN_BULGED_DESIGN, label="Hydrogen, bulged, n=2", chambers=2),
         ),
     ]
-    for temperature in HOT_TEMPERATURES:
-        for back in RECOVERED:
-            for rate in HOT_PULSE_RATES:
-                pairing, eta = hot_hydrogen(temperature, back)
-                pairing = replace(
-                    pairing,
-                    name=f"{pairing.name}, {rate:g} Hz",
-                    pulse_rate=rate / u.s,
-                )
-                rows.append(
-                    (
-                        f"hydrogen {temperature:.0f} K, {back:.0%} back, {rate:g} Hz "
-                        "(unsolved)",
-                        Design(pairing.name, pairing, eta),
-                    )
-                )
+    for temperature in SOLVED_HYDROGEN:
+        pairing, eta = solved_hydrogen(temperature)
+        rows.append(
+            (
+                f"hydrogen {temperature:.0f} K, solved",
+                Design(pairing.name, pairing, eta),
+            )
+        )
     return rows
 
 

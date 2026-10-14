@@ -95,7 +95,7 @@ def test_the_bulged_hydrogen_chamber_is_priced_beside_the_sphere() -> None:
     assert HYDROGEN_BULGED_DESIGN.label in names
     assert DESIGNS[4].label in names
     assert HYDROGEN_BULGED_DESIGN.pitch_ratio == 0.0
-    assert HYDROGEN_BULGED_DESIGN.efficiency == pytest.approx(0.773, abs=0.002)
+    assert HYDROGEN_BULGED_DESIGN.efficiency == pytest.approx(0.822, abs=0.002)
 
 
 def test_the_wall_life_case_flies_two_chambers() -> None:

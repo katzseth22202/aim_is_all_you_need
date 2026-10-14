@@ -294,7 +294,8 @@ def test_s17s_impulse_charged_neither_gate_nor_freeze() -> None:
 
 def test_the_bulged_hydrogen_chamber_is_the_spheres_charge_in_the_bulge() -> None:
     """ADR 0055: the 60 kg charge on the 2.5 kg rod, 37 t wrap, 2 Hz, and an
-    extension scaled to its 0.84 m^2 throat; its eta sits below the sphere's."""
+    extension scaled to its 0.84 m^2 throat; its finite-rate eta (ADR 0064) sits below the sphere's.
+    """
     pairing = HYDROGEN_BULGED
     assert pairing.hydrogen
     charge = pairing.reference_slug_ratio * pairing.rod_mass
@@ -304,7 +305,7 @@ def test_the_bulged_hydrogen_chamber_is_the_spheres_charge_in_the_bulge() -> Non
     bulged = efficiency_for_impulse(HYDROGEN_BULGED_IMPULSE, pairing)
     sphere = efficiency_for_impulse(697.0 * u.kN * u.s, HYDROGEN_5500K)
     assert bulged < sphere
-    assert bulged == pytest.approx(0.773, abs=0.002)
+    assert bulged == pytest.approx(0.822, abs=0.002)
 
 
 def test_a_split_survivable_chamber_shares_the_rod_wall_and_extension() -> None:
