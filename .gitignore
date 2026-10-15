@@ -242,3 +242,6 @@ todos/*
 
 # macOS
 .DS_Store
+
+# npx skills install lock (local tooling)
+skills-lock.json
