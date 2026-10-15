@@ -5,7 +5,8 @@ Date: 2026-10-14
 Status: Accepted as a finding (a scout, centred burn, not built into the
 ledger). The early growth wave is declined (author, 2026-10-14: "At 2 percent,
 it's not enough of a win though to really be worth the complexity"). The
-ledger's default still flies ADR 0013's uncharged split (ADR 0068).
+ledger's default still flies ADR 0013's uncharged split (ADR 0068). ADR 0071
+builds the role split into the ledger, on a 10-day orbit.
 
 ## Context
 

@@ -93,9 +93,11 @@ CRUISE_BOUNDS = (0.8, 5.0)
 #: Time value of money (ADR 0040).
 RATE = 0.10
 #: The slowest return the seed may make: the chain's first (three-synodic)
-#: cycle's growth wave, ``chains()[0][0].growth_wave_v_b`` (km/s).  ADR 0039's
-#: 51.134 (``seed_route.RETURN_FLOOR``) is slower than the cycle the cost
-#: model credits the seed with (ADR 0059).
+#: cycle's growth wave on the 20-day orbit ADR 0059 flew,
+#: ``chains(20.0)[0][0].growth_wave_v_b`` (km/s).  ADR 0039's 51.134
+#: (``seed_route.RETURN_FLOOR``) is slower than the cycle the cost model
+#: credits the seed with (ADR 0059).  On the 10-day orbit the ledger flies
+#: since ADR 0071 the wave arrives at 57.43, so this floor is the stricter.
 CHAIN_FLOOR = 59.29
 _YEAR_S = 365.25 * 86400.0
 _INFEASIBLE = 1.0e6

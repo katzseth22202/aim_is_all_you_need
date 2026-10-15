@@ -25,6 +25,7 @@ from src.chamber_departure import (
     LossModel,
     best_departure,
     growth_per_cycle,
+    role_growth,
 )
 from src.chamber_isp import (
     GATE_THRUST_COST,
@@ -125,13 +126,14 @@ PLATE_MASS = 150.0 * u.t
 #: The plate sprays argon onto ice PuffSats (user, 2026-09-30): argon has no
 #: bonds to strand, and it beats water by 8-11% in doubling (make plate-slug).
 DEFAULT_PLATE_SLUG = ARGON_SLUG
-#: The report's split gap, which is also the parking orbit (CONTEXT.md): 20
-#: days, the orbit the parent's 600 km figures are quoted on (user, 2026-09-30).
-#: Flown consistently it beats 10 days: the reversal falls from 372.5 to
-#: 233.9 m/s while the growth wave's early-arrival burn rises from 179 to
-#: 464 m/s, a wash for the chambers (0-2%) and 9% for methalox (ADR 0033).
-#: ``two_wave_growth.DEFAULT_SPLIT_DAYS`` stays 10 for that module's reports.
-DEFAULT_PARKING_DAYS = 20.0
+#: The report's split gap, which is also the parking orbit (CONTEXT.md): 10
+#: days (author, 2026-10-14; ADR 0071).  ADR 0033 chose 20, where the batch's
+#: split was never charged: the reversal falls from 372.5 to 233.9 m/s while
+#: the growth wave's early-arrival burn rises from 179 to 464 m/s, a wash for
+#: the chambers and 9% for methalox.  Split by role, each carrier pays its own
+#: departure, and 10 days beats 20 by about 4% for both chambers.  The
+#: parent's 600 km figures are quoted on the 20-day orbit.
+DEFAULT_PARKING_DAYS = 10.0
 #: Altitudes of the two collisions (``sec:jovian_meeting_altitudes``).
 PUSH_ALTITUDE = 400.0 * u.km
 DEPARTURE_ALTITUDE = 600.0 * u.km
@@ -151,21 +153,22 @@ def _orbit_loss(
     return lambda burn, burn_time: table(burn, burn_time, period)
 
 
-def visible_loss(cycle: TwoWaveCycle) -> LossModel:
+def visible_loss(cycle: TwoWaveCycle, role: str = "rods") -> LossModel:
     """The cycle's departure loss with its stream kept in view of Earth (ADR 0066).
 
     Read from the stored tables, which cover the flown and three-synodic-only
-    chains on the 10- and 20-day orbits.  A synthetic cycle has no stream, so it
-    must pass a loss model explicitly.
+    chains on the stored orbits, for both carrier roles.  A synthetic cycle has
+    no stream, so it must pass a loss model explicitly.
 
     Args:
         cycle: A cycle of a stored chain.
+        role: Whose departure, ``"rods"`` or ``"growth"`` (ADR 0071).
 
     Returns:
         Its loss model.
     """
     period = float(parking_period(cycle).to_value(u.day))
-    return stored_loss_models([cycle], period)[0]
+    return stored_loss_models([cycle], period, role)[0]
 
 
 def parking_period(cycle: TwoWaveCycle) -> u.Quantity:
@@ -236,6 +239,13 @@ class CycleGrowth:
         initial_water_price: Starting water price of the plate's schedule.
         cryostats: Cryostat mass dropped just before the departure burn.
         boiled_off: Gas lost over the parking-orbit hold.
+        growth_share: Share of launch units flown as growth carriers when the
+            fleet splits by role (ADR 0071); NaN for one batch.  Then
+            ``departing_stack``, ``departure``, ``cryostats`` and
+            ``boiled_off`` describe the fleet's mean unit, weighted by that
+            share, and the two carriers' own departures are kept below.
+        rod_departure: A rod carrier's departure, per its own stack.
+        growth_departure: A growth carrier's departure, per its own stack.
     """
 
     push: OptimalPlatePush
@@ -246,6 +256,9 @@ class CycleGrowth:
     initial_water_price: float
     cryostats: u.Quantity = 0.0 * u.t
     boiled_off: u.Quantity = 0.0 * u.t
+    growth_share: float = float("nan")
+    rod_departure: Optional[DepartureLedger] = None
+    growth_departure: Optional[DepartureLedger] = None
 
 
 def _launch_and_push(
@@ -342,26 +355,32 @@ def price_cycle_growth(
         parking_period(cycle),
         film_per_impulse,
     )
-    departure_burn = departure_at_altitude(
-        cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
-    )
-    model = loss_model or visible_loss(cycle)
+    by_role = bool(np.isfinite(cycle.onward_growth_burn))
 
-    def depart(stack: u.Quantity) -> DepartureLedger:
-        return best_departure(
-            stack,
-            departure_burn.start_speed,
-            departure_burn.burn,
-            wave_speed_at_altitude(
-                cycle.nozzle_wave_v_b * u.km / u.s, DEPARTURE_ALTITUDE
-            ),
-            pairing,
-            departure_efficiency,
-            gate_thrust_cost=gate_thrust_cost,
-            pitch_ratio=pitch_ratio,
-            loss_model=model,
-            chambers=chambers,
+    def depart_on(
+        onward: float, model: LossModel
+    ) -> Callable[[u.Quantity], DepartureLedger]:
+        burn = departure_at_altitude(
+            onward * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
         )
+
+        def depart(stack: u.Quantity) -> DepartureLedger:
+            return best_departure(
+                stack,
+                burn.start_speed,
+                burn.burn,
+                wave_speed_at_altitude(
+                    cycle.nozzle_wave_v_b * u.km / u.s, DEPARTURE_ALTITUDE
+                ),
+                pairing,
+                departure_efficiency,
+                gate_thrust_cost=gate_thrust_cost,
+                pitch_ratio=pitch_ratio,
+                loss_model=model,
+                chambers=chambers,
+            )
+
+        return depart
 
     # The gas launched is what the burn spends over (1 - boil-off), and its
     # cryostats and boil-off never depart, so the departing stack is solved
@@ -375,19 +394,26 @@ def price_cycle_growth(
         burned = spent - (plug + pitch_ratio) * departure.rod_mass_fraction
         return (burned * stack / (1.0 - boil_off)).to(u.t)
 
-    stack = available
-    departure = depart(stack)
-    for _ in range(_HOLD_ITERATIONS):
-        held = (cryostat_fraction + boil_off) * launched_gas(stack, departure)
-        updated = (available - held).to(u.t)
-        converged = abs(float((updated - stack).to_value(u.t))) < _HOLD_TOLERANCE_T
-        stack = updated
+    def held_departure(
+        depart: Callable[[u.Quantity], DepartureLedger],
+    ) -> Tuple[u.Quantity, DepartureLedger, u.Quantity]:
+        stack = available
         departure = depart(stack)
-        if converged:
-            break
-    else:
-        raise RuntimeError("cryostat and boil-off charge did not converge")
-    gas = launched_gas(stack, departure)
+        for _ in range(_HOLD_ITERATIONS):
+            held = (cryostat_fraction + boil_off) * launched_gas(stack, departure)
+            updated = (available - held).to(u.t)
+            converged = abs(float((updated - stack).to_value(u.t))) < _HOLD_TOLERANCE_T
+            stack = updated
+            departure = depart(stack)
+            if converged:
+                break
+        else:
+            raise RuntimeError("cryostat and boil-off charge did not converge")
+        return stack, departure, launched_gas(stack, departure)
+
+    stack, departure, gas = held_departure(
+        depart_on(cycle.onward_burn, loss_model or visible_loss(cycle))
+    )
     puffsats = (push.puffsat_fraction * LAUNCH_UNIT).to(u.t)
     # Each wave burned methalox on the way home, so the batch that left Jupiter
     # was larger than what arrives: the growth wave to arrive early, the nozzle
@@ -395,20 +421,98 @@ def price_cycle_growth(
     # onto the growth wave.)
     growth_arrives = float(np.exp(-cycle.growth_wave_burn / VE_METHALOX))
     rods_arrive = float(np.exp(-cycle.nozzle_wave_dsm / VE_METHALOX))
-    growth = growth_per_cycle(
-        float((stack / puffsats).to_value(u.one)) * growth_arrives,
-        departure.rod_mass_fraction / rods_arrive,
-        departure.delivered_net,
+    if not by_role:
+        growth = growth_per_cycle(
+            float((stack / puffsats).to_value(u.one)) * growth_arrives,
+            departure.rod_mass_fraction / rods_arrive,
+            departure.delivered_net,
+        )
+        return CycleGrowth(
+            push,
+            puffsats,
+            stack,
+            departure,
+            growth,
+            initial_water_price,
+            cryostats=(cryostat_fraction * gas).to(u.t),
+            boiled_off=(boil_off * gas).to(u.t),
+        )
+    # Split by role (ADR 0071): growth carriers depart on the next window's
+    # growth trajectory, rod carriers on its nozzle trajectory, each with its
+    # own burn, stream and hold, and the share of each solves both supplies.
+    g_stack, g_departure, g_gas = held_departure(
+        depart_on(cycle.onward_growth_burn, loss_model or visible_loss(cycle, "growth"))
     )
+    tonnes = float(puffsats.to_value(u.t))
+    rod_stack, grow_stack = (float(s.to_value(u.t)) for s in (stack, g_stack))
+    growth = role_growth(
+        tonnes,
+        g_departure.delivered_net * grow_stack,
+        departure.delivered_net * rod_stack,
+        g_departure.rod_mass_fraction * grow_stack,
+        departure.rod_mass_fraction * rod_stack,
+        growth_arrives,
+        rods_arrive,
+    )
+    share = growth * tonnes / (g_departure.delivered_net * grow_stack * growth_arrives)
+    mean_stack = share * grow_stack + (1.0 - share) * rod_stack
     return CycleGrowth(
         push,
         puffsats,
-        stack,
-        departure,
+        mean_stack * u.t,
+        mean_departure(departure, rod_stack, g_departure, grow_stack, share),
         growth,
         initial_water_price,
-        cryostats=(cryostat_fraction * gas).to(u.t),
-        boiled_off=(boil_off * gas).to(u.t),
+        cryostats=(cryostat_fraction * (share * g_gas + (1.0 - share) * gas)).to(u.t),
+        boiled_off=(boil_off * (share * g_gas + (1.0 - share) * gas)).to(u.t),
+        growth_share=share,
+        rod_departure=departure,
+        growth_departure=g_departure,
+    )
+
+
+def mean_departure(
+    rods: DepartureLedger,
+    rod_stack: float,
+    growth: DepartureLedger,
+    growth_stack: float,
+    growth_share: float,
+) -> DepartureLedger:
+    """The fleet's mean departing unit when launch units split by role.
+
+    Per-kilogram quantities are weighted by each carrier's stack and share, so
+    that times the mean stack they give the fleet's mean per unit; per-unit
+    quantities by share alone.
+
+    Args:
+        rods: A rod carrier's departure.
+        rod_stack: Its departing stack (t).
+        growth: A growth carrier's departure.
+        growth_stack: Its departing stack (t).
+        growth_share: Share of units flown as growth carriers.
+
+    Returns:
+        The mean unit's departure.
+    """
+    x = growth_share
+    weight_g, weight_n = x * growth_stack, (1.0 - x) * rod_stack
+    total = weight_g + weight_n
+
+    def per_kg(g: float, n: float) -> float:
+        return (weight_g * g + weight_n * n) / total
+
+    return DepartureLedger(
+        delivered_fraction=per_kg(growth.delivered_fraction, rods.delivered_fraction),
+        rod_mass_fraction=per_kg(growth.rod_mass_fraction, rods.rod_mass_fraction),
+        tank_share=per_kg(growth.tank_share, rods.tank_share),
+        chamber_share=per_kg(growth.chamber_share, rods.chamber_share),
+        chamber_unit_mass=rods.chamber_unit_mass,
+        delivered_net=per_kg(growth.delivered_net, rods.delivered_net),
+        pulses=x * growth.pulses + (1.0 - x) * rods.pulses,
+        burn_time=x * growth.burn_time + (1.0 - x) * rods.burn_time,
+        finite_burn_loss=x * growth.finite_burn_loss
+        + (1.0 - x) * rods.finite_burn_loss,
+        chambers=max(growth.chambers, rods.chambers),
     )
 
 
@@ -1338,7 +1442,7 @@ def design_grid_rows(
     ``tab:growth_ledger_doubling`` and ``tab:growth_ledger_ten_year``.
 
     Args:
-        cycles: The flown chain on the 20-day orbit.
+        cycles: The flown chain on the default orbit.
         three_only: The three-synodic-only chain methalox flies.
         plate: The design.
 
@@ -1414,17 +1518,17 @@ WATER_JET_EFFICIENCIES = (0.50, 0.53, 0.56)
 
 
 def design_sensitivities(
-    cycles: Sequence[TwoWaveCycle], plate: PlateDesign, split_days: float = 10.0
+    cycles: Sequence[TwoWaveCycle], plate: PlateDesign, split_days: float = 20.0
 ) -> str:
     """The ledger's smaller settings behind one plate design (ADR 0042).
 
     Hydrogen's hold, methane's pitch range, water at its all-in jet
-    efficiency, and a shorter parking orbit flown consistently.
+    efficiency, and the other parking orbit flown consistently.
 
     Args:
-        cycles: The flown chain on the 20-day orbit.
+        cycles: The flown chain on the default orbit.
         plate: The design.
-        split_days: The shorter orbit to compare.
+        split_days: The other orbit to compare (the parent's 20 days).
 
     Returns:
         The tables.
@@ -1519,7 +1623,7 @@ def film_rows(
     the push delivers.
 
     Args:
-        cycles: The flown chain on the 20-day orbit.
+        cycles: The flown chain on the default orbit.
         three_only: The three-synodic-only chain methalox flies.
         plate: The design; its own film is replaced by each band's.
 

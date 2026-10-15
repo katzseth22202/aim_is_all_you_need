@@ -197,8 +197,9 @@ water_plate.py               ← plume_thermal only: the overtake plate's push, 
                                 the plate's film optionally burned per unit impulse (ADR 0043)
 
 growth_ledger.py             ← chamber_departure + water_plate: the 1500 t launch unit
-                                (pass split_days=DEFAULT_PARKING_DAYS (20) explicitly:
-                                two_wave_growth's own default is 10; ADR 0042)
+                                (pass split_days=DEFAULT_PARKING_DAYS explicitly; it
+                                is 10 days since ADR 0071, the role split, and was
+                                20 before; ADR 0042)
                                 pushed at 400 km, reversed at apoapsis, departed from
                                 600 km, over the flown chain; chamber efficiency as a
                                 share of its chemistry ceiling; the methalox incumbent

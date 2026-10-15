@@ -1,6 +1,7 @@
 # Slush hydrogen, the 4884 K chamber and a departure kept in view, for the parent paper
 
-Raised 2026-10-14 in `aim_is_all_you_need`, ADRs 0065-0067. Target repo:
+Raised 2026-10-14 in `aim_is_all_you_need`, ADRs 0065-0067; the split's
+charge, ADRs 0068-0071. Target repo:
 `katzseth22202/Balloon-Pulse-Propulsion`. Passages are located by quoted
 wording in `templateArxiv.tex`, as of its commit `5e7edbf`.
 
@@ -131,18 +132,40 @@ The paper's own figures predate several earlier repo changes (its methane
 chamber at $197, its hydrogen at $122 and 2.03 yr). Take the "after" column as
 the current state rather than applying the differences to the paper's numbers.
 
-## An open item that will move these figures again
+## The two-wave split, now charged (ADRs 0068-0071)
 
-The two-wave split's departure is not charged (ADR 0067, "Open"). The growth
-wave's solved trajectory leaves Earth 0.52-0.95 km/s away from the nozzle
-wave's, though both leave on one burn. Every growth figure since ADR 0013
-omits this. ADRs 0068-0069 priced it: dividing the batch at Jupiter costs about
-a third of the doubling time, and dedicating launch units by role (growth
-carriers and rod carriers, each on its own trajectory) about 15%. Treat
-section 4's growth and cost figures as optimistic by about 15% of doubling
-until the role split is built into the ledger. The author's earlier, faster 3S
-growth wave (68 km/s at 2.8 synodic periods) gains only about 2% and is
-declined.
+The growth figures in section 4 left the two-wave split's departure
+uncharged: the growth wave's trajectory leaves Earth 0.52-0.95 km/s away from
+the nozzle wave's, though both left on one burn (ADR 0068). The ledger now
+dedicates launch units by role, growth carriers and rod carriers, each
+departing on its own trajectory and burn (ADR 0071). With it the best split
+gap, which is also the parking orbit, falls from 20 to 10 days.
+
+- **Passages.** "The departing batch divides at Jupiter": the batch no longer
+  divides; about 85% of departing units carry growth and the rest carry rods,
+  each to its own window. The parking orbit and split gap are 10 days, not 20;
+  the 600 km finite-burn figures quoted on the 20-day orbit stand as that
+  orbit's.
+- **The early, faster 3S growth wave** (68 km/s at 2.8 synodic periods) gains
+  about 2% and is declined (ADR 0069).
+- **A slower outbound with a powered Jupiter flyby** does not pay at first
+  order (ADR 0070).
+
+Figures, the split by role on the 10-day orbit against section 4's "after":
+
+| Figure | Section 4 | Now |
+|---|---|---|
+| Bulged hydrogen, 2 Hz: doubling | 2.61 yr | **2.77 yr** |
+| At 2.4 Hz | 2.44 yr | **2.58 yr** |
+| Its steady $/kg at L1 | $154 | **$165** |
+| Its steady break-even, cheap / dear seed | 369 / 690 | **404 / 765** |
+| Methane AR100, 24 kg: doubling, $/kg | 3.59 yr, $177 | **3.98 yr, $194** |
+| Methane AR100 at 3 Hz | 3.10 yr, $152 | **3.38 yr, $163** |
+| Sphere, `tab:seed_amortization` | 82.54 t, 57.3%, 90.3x | **84.94 t, 55.0%, 74.8x** |
+
+Take the "Now" column as current. The rankings in sections 2 and 3 are
+unchanged: 4884 K still beats 5500 K (2.86 against 2.94 yr, solved), and pulse
+rate still beats a second chamber.
 
 ## 5. The impact angle
 

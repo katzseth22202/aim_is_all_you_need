@@ -436,3 +436,35 @@ def test_the_film_is_launched_mass_the_push_spends() -> None:
     assert 4.0 < shielded.push.film_fraction * unit < 8.0
     assert 25.0 < unshielded.push.film_fraction * unit < 45.0
     assert unshielded.growth < shielded.growth < bare.growth
+
+
+def test_a_role_split_with_equal_burns_is_the_batch() -> None:
+    """ADR 0071: the role balance reduces to one batch when both carriers fly
+    the same burn on the same loss."""
+    batch = _cycle(3, 5.33, 55.4, 57.4)
+    roles = dataclasses.replace(batch, onward_growth_burn=batch.onward_burn)
+    args = (0.7, METHANE_7000K, 0.7, 0.05)
+    one = price_cycle_growth(batch, *args, loss_model=square_law_loss)
+    two = price_cycle_growth(roles, *args, loss_model=square_law_loss)
+    assert np.isnan(one.growth_share)
+    assert two.growth == pytest.approx(one.growth, rel=1e-9)
+    assert two.departing_stack.to_value(u.t) == pytest.approx(
+        one.departing_stack.to_value(u.t), rel=1e-9
+    )
+
+
+def test_a_harder_growth_departure_costs_growth_and_raises_the_mean_burn() -> None:
+    batch = _cycle(3, 5.33, 55.4, 57.4)
+    roles = dataclasses.replace(batch, onward_growth_burn=batch.onward_burn + 0.3)
+    args = (0.7, METHANE_7000K, 0.7, 0.05)
+    one = price_cycle_growth(batch, *args, loss_model=square_law_loss)
+    two = price_cycle_growth(roles, *args, loss_model=square_law_loss)
+    assert two.growth < one.growth
+    assert 0.5 < two.growth_share < 1.0
+    assert two.growth_departure is not None and two.rod_departure is not None
+    assert two.growth_departure.delivered_net < two.rod_departure.delivered_net
+    assert (
+        two.rod_departure.delivered_net
+        > two.departure.delivered_net
+        > two.growth_departure.delivered_net
+    )

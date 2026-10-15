@@ -29,13 +29,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from astropy import units as u
-from scipy.optimize import brentq
 from tabulate import tabulate
 
-from src.chamber_departure import LossModel
+from src.chamber_departure import LossModel, role_growth
 from src.finite_burn_loss import fixed_direction_loss
 from src.growth_ledger import (
-    DEFAULT_PARKING_DAYS,
     _orbit_loss,
     best_cycle_growth,
     chain_growth,
@@ -44,6 +42,7 @@ from src.growth_ledger import (
     price_cycle_growth,
     summarize_chain,
 )
+from src.nozzle_analysis import apoapsis_reversal_dv
 from src.real_orbit_resonance import _ManeuverSolution
 from src.seed_cost import Design
 from src.survivable_chamber import HYDROGEN_BULGED_DESIGN, PLATE, survivable_design
@@ -56,6 +55,10 @@ from src.two_wave_growth import (
     window_waves,
 )
 
+#: The parking orbit and split gap ADRs 0068-0069 scouted on (days).  The
+#: ledger's default moved to 10 days after (ADR 0071); :func:`split_gap_row`
+#: sweeps the gap.
+SCOUT_PARKING_DAYS = 20.0
 #: Leads the growth carriers try on three-synodic windows (days); two-synodic
 #: windows keep the 20-day parking orbit's lead.
 EARLY_LEADS = (20.0, 40.0, 60.0, 80.0, 120.0)
@@ -70,52 +73,8 @@ DESIGNS: Dict[str, Design] = {
 _Window = Tuple[int, _ManeuverSolution, _ManeuverSolution]
 
 
-def role_growth(
-    puffsats: float,
-    onward_growth: float,
-    onward_rods: float,
-    rods_growth: float,
-    rods_rods: float,
-    growth_arrives: float,
-    rods_arrive: float,
-) -> float:
-    """A cycle's growth when launch units are dedicated by role.
-
-    A share ``x`` of departing units are growth carriers.  Every unit needs
-    ``puffsats`` for its push and rods for its own departure, by its type;
-    each type sends its onward mass home, and each wave keeps its arrival
-    fraction.  Growth ``g`` and ``x`` solve::
-
-        x O_g a_g = g P
-        (1 - x) O_n a_n = g (x R_g + (1 - x) R_n)
-
-    With equal burns this is :func:`src.chamber_departure.growth_per_cycle`.
-
-    Args:
-        puffsats: Growth PuffSats one unit's push consumes, ``P``.
-        onward_growth: A growth carrier's onward mass, ``O_g``.
-        onward_rods: A rod carrier's onward mass, ``O_n``.
-        rods_growth: Rods a growth carrier's departure needs, ``R_g``.
-        rods_rods: Rods a rod carrier's departure needs, ``R_n``.
-        growth_arrives: The growth wave's arrival fraction, ``a_g``.
-        rods_arrive: The nozzle wave's arrival fraction, ``a_n``.
-
-    Returns:
-        The growth factor ``g``.
-    """
-    supply = onward_growth * growth_arrives / puffsats
-
-    def gap(g: float) -> float:
-        share = g / supply
-        return (1.0 - share) * (onward_rods * rods_arrive - g * rods_rods) - (
-            g * share * rods_growth
-        )
-
-    return float(brentq(gap, 1.0e-9, supply * (1.0 - 1.0e-12)))
-
-
 def growth_windows(
-    cycles: Sequence[TwoWaveCycle], three_synodic_lead: float = DEFAULT_PARKING_DAYS
+    cycles: Sequence[TwoWaveCycle], three_synodic_lead: float = SCOUT_PARKING_DAYS
 ) -> List[_Window]:
     """Each window's (synodic multiple, nozzle wave, growth wave), and the one after.
 
@@ -130,9 +89,9 @@ def growth_windows(
     departures = [c.departure_jd for c in cycles] + [cycles[-1].return_jd]
     for departure in departures:
         multiple, return_jd, nozzle, growth = window_waves(
-            departure, split_days=DEFAULT_PARKING_DAYS, split="independent"
+            departure, split_days=SCOUT_PARKING_DAYS, split="independent"
         )
-        if multiple == 3 and three_synodic_lead != DEFAULT_PARKING_DAYS:
+        if multiple == 3 and three_synodic_lead != SCOUT_PARKING_DAYS:
             growth = _cheapest_return(departure, return_jd - three_synodic_lead)
         out.append((multiple, nozzle, growth))
     return out
@@ -143,7 +102,7 @@ def _departure_burn(solution: _ManeuverSolution) -> float:
 
 
 def chain_by_role(
-    name: str, three_synodic_lead: float = DEFAULT_PARKING_DAYS
+    name: str, three_synodic_lead: float = SCOUT_PARKING_DAYS
 ) -> List[float]:
     """Each flown cycle's growth with launch units split by role.
 
@@ -158,7 +117,7 @@ def chain_by_role(
     pairing = design.pairing
     assert pairing is not None and design.efficiency is not None
     cycles = adaptive_two_wave_cycles(
-        split_days=DEFAULT_PARKING_DAYS, split="independent"
+        split_days=SCOUT_PARKING_DAYS, split="independent"
     )
     windows = growth_windows(cycles, three_synodic_lead)
     loss = _orbit_loss(fixed_direction_loss, parking_period(cycles[0]))
@@ -166,12 +125,15 @@ def chain_by_role(
     for i, cycle in enumerate(cycles):
         multiple, _, growth_wave = windows[i]
         _, next_nozzle, next_growth = windows[i + 1]
+        # Each carrier is priced as a batch of one kind; the balance below
+        # does the splitting.
         flown = replace(
             cycle,
             growth_wave_v_b=growth_wave.earth_return_collision_speed,
             growth_wave_burn=growth_wave.total_dv,
+            onward_growth_burn=float("nan"),
         )
-        hold = three_synodic_lead if multiple == 3 else DEFAULT_PARKING_DAYS
+        hold = three_synodic_lead if multiple == 3 else SCOUT_PARKING_DAYS
         storage = pairing.storage
         cryostat = (
             0.0
@@ -242,7 +204,10 @@ def chain_by_batch(name: str, split: str) -> List[float]:
     design = DESIGNS[name]
     pairing = design.pairing
     assert pairing is not None and design.efficiency is not None
-    cycles = adaptive_two_wave_cycles(split_days=DEFAULT_PARKING_DAYS, split=split)
+    cycles = [
+        replace(c, onward_growth_burn=float("nan"))
+        for c in adaptive_two_wave_cycles(split_days=SCOUT_PARKING_DAYS, split=split)
+    ]
     storage = pairing.storage
     loss: LossModel = _orbit_loss(fixed_direction_loss, parking_period(cycles[0]))
     grown = chain_growth(
@@ -277,7 +242,7 @@ def _row(case: Tuple[str, str, float]) -> Dict[str, object]:
             "shared": "batch, divided at Jupiter",
         }[how]
     cycles = adaptive_two_wave_cycles(
-        split_days=DEFAULT_PARKING_DAYS, split="independent"
+        split_days=SCOUT_PARKING_DAYS, split="independent"
     )
     summary = summarize_chain([c.period_years for c in cycles], growths)
     return {
@@ -288,13 +253,70 @@ def _row(case: Tuple[str, str, float]) -> Dict[str, object]:
     }
 
 
+#: Split gaps the sweep tries (days); each is also the parking orbit.
+SPLIT_GAPS = (4.0, 5.0, 7.0, 10.0, 15.0, 20.0)
+
+
+def split_gap_row(case: Tuple[str, float]) -> Dict[str, object]:
+    """The ledger's role split at one split gap, the stream kept in view.
+
+    The gap is the parking orbit, so a shorter one buys a cheaper split (the
+    growth carriers' departure stays closer to the rod carriers') at the price
+    of a dearer apoapsis reversal.
+
+    Args:
+        case: (a key of :data:`DESIGNS`, split gap in days).
+
+    Returns:
+        The row.
+    """
+    name, gap = case
+    design = DESIGNS[name]
+    pairing = design.pairing
+    assert pairing is not None and design.efficiency is not None
+    cycles = adaptive_two_wave_cycles(split_days=gap)
+    storage = pairing.storage
+    grown = chain_growth(
+        cycles,
+        PLATE.efficiency,
+        pairing,
+        design.efficiency,
+        design.pitch_ratio,
+        max_slug_ratio=PLATE.max_slug_ratio,
+        impactor_bond_energy=PLATE.impactor_bond_energy,
+        film_per_impulse=PLATE.film_per_impulse,
+        cryostat_fraction=0.0 if storage is None else storage.cryostat_fraction,
+        boil_off=(
+            0.0
+            if storage is None
+            else hydrogen_boil_off(cycles, storage.boil_off_per_day)
+        ),
+    )
+    summary = summarize_chain(
+        [c.period_years for c in cycles], [g.growth for g in grown]
+    )
+    return {
+        "chamber": name,
+        "split d": gap,
+        "reversal m/s": float(apoapsis_reversal_dv(gap * u.day).to_value(u.m / u.s)),
+        "growth carrier extra burn km/s": float(
+            np.mean([c.onward_growth_burn - c.onward_burn for c in cycles])
+        ),
+        "growth wave correction km/s": float(
+            np.mean([c.growth_wave_burn for c in cycles])
+        ),
+        "growth share": float(np.mean([g.growth_share for g in grown])),
+        "doubling yr": summary.doubling_years,
+    }
+
+
 def cases() -> List[Tuple[str, str, float]]:
     """Every (design, split, three-synodic lead) the report flies."""
     rows: List[Tuple[str, str, float]] = []
     for name in DESIGNS:
         rows += [
-            (name, "independent", DEFAULT_PARKING_DAYS),
-            (name, "shared", DEFAULT_PARKING_DAYS),
+            (name, "independent", SCOUT_PARKING_DAYS),
+            (name, "shared", SCOUT_PARKING_DAYS),
         ]
         rows += [(name, "role", lead) for lead in EARLY_LEADS]
     return rows
@@ -308,7 +330,18 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--split-sweep",
+        action="store_true",
+        help="the ledger's role split across split gaps, stream in view (ADR 0071)",
+    )
     args = parser.parse_args(argv)
+    if args.split_sweep:
+        gaps = [(name, gap) for name in DESIGNS for gap in SPLIT_GAPS]
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            sweep = list(pool.map(split_gap_row, gaps))
+        print(tabulate(sweep, headers="keys", floatfmt=".3f"))
+        return
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         rows = list(pool.map(_row, cases()))
     print(

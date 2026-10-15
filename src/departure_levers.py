@@ -59,6 +59,7 @@ from src.survivable_chamber import (
     SURVIVABLE_PITCH_RANGE,
     survivable_design,
 )
+from src.two_wave_growth import TwoWaveCycle
 
 #: The bulged chamber at each temperature, solved by the impact sim (@ ca07938,
 #: its ADR-0058 and ``walled_nozzle_hot_hydrogen.md``): the charge per rod at
@@ -121,13 +122,36 @@ def thrust_matched(temperature: float, reference: float = 4884.0) -> float:
     return ref_impulse * ref_rate / impulse
 
 
+#: The parking orbit the rankings before ADR 0071 flew (days).
+EARLIER_PARKING_DAYS = 20.0
+
+
+def _flown(earlier: bool) -> Tuple[TwoWaveCycle, ...]:
+    """The flown chain, or the one the rankings before ADRs 0066 and 0071 flew.
+
+    Args:
+        earlier: The 20-day orbit with one batch per window (no role split);
+            the caller also centres the burn.
+
+    Returns:
+        The chain.
+    """
+    if not earlier:
+        return chains(DEFAULT_PARKING_DAYS)[0]
+    return tuple(
+        replace(c, onward_growth_burn=float("nan"))
+        for c in chains(EARLIER_PARKING_DAYS)[0]
+    )
+
+
 def temperature_row(case: Tuple[float, Optional[float], bool]) -> Dict[str, object]:
     """Cycle 0 of one solved temperature, the comparison behind ADR 0065.
 
     Args:
         case: (temperature, pulse rate in Hz or None for the solved one,
-            centred), where ``centred`` flies the burn centred on periapsis
-            with the stream ignored, as ADR 0065 did.
+            centred), where ``centred`` reproduces ADR 0065's ledger: the burn
+            centred on periapsis with the stream ignored, one batch rather
+            than launch units split by role, on the 20-day orbit (ADR 0071).
 
     Returns:
         The row.
@@ -136,7 +160,7 @@ def temperature_row(case: Tuple[float, Optional[float], bool]) -> Dict[str, obje
     pairing, eta = solved_hydrogen(temperature)
     if rate is not None:
         pairing = replace(pairing, pulse_rate=rate / u.s)
-    flown, _ = chains(DEFAULT_PARKING_DAYS)
+    flown = _flown(centred)
     first = flown[:1]
     storage = pairing.storage
     assert storage is not None
@@ -240,8 +264,9 @@ def lever_row(index: int, centred: bool = False) -> Dict[str, object]:
 
     Args:
         index: The case's index in :func:`cases`.
-        centred: Fly the burn centred on periapsis, stream ignored (the
-            ranking before ADR 0066), instead of keeping it in view.
+        centred: Fly the ranking before ADR 0066: the burn centred on
+            periapsis with the stream ignored, one batch per window on the
+            20-day orbit (ADR 0071).
 
     Returns:
         The row.
@@ -249,7 +274,7 @@ def lever_row(index: int, centred: bool = False) -> Dict[str, object]:
     label, design = cases()[index]
     pairing = design.pairing
     assert pairing is not None and design.efficiency is not None
-    flown, _ = chains(DEFAULT_PARKING_DAYS)
+    flown = _flown(centred)
     storage = pairing.storage
     try:
         grown = chain_growth(

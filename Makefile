@@ -89,7 +89,7 @@ powered-resonance:  ## A slower outbound leg and a powered Jupiter flyby on the 
 impact-angle:  ## What Earth's bending of the impact angle is worth on each flown departure, and the chambers' Isp (ADR 0066; ~5 min)
 	python -W ignore -m src.impact_angle
 
-split-by-role:  ## How the two-wave split is flown: uncharged batch, divided at Jupiter, or by role with early 3S growth waves (ADR 0068, 0069; ~10 min)
+split-by-role:  ## How the two-wave split is flown: uncharged batch, divided at Jupiter, or by role with early 3S growth waves (ADR 0068, 0069; ~10 min); --split-sweep for the split gap (ADR 0071)
 	python -W ignore -m src.split_by_role
 
 departure-visibility:  ## Rebuild data/departure_visibility.csv: visible-burn loss tables for the flown and 3S-only chains, 10- and 20-day orbits (ADR 0066; ~15 min)

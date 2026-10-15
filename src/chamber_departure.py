@@ -32,6 +32,7 @@ from typing import Callable, List, Optional, Sequence
 
 import numpy as np
 from astropy import units as u
+from scipy.optimize import brentq
 from tabulate import tabulate
 
 from src.chamber_isp import (
@@ -320,6 +321,53 @@ def growth_per_cycle(
     """
     share = 1.0 / (1.0 + rod_mass_fraction * push_ratio)
     return push_ratio * share * delivered_net
+
+
+def role_growth(
+    puffsats: float,
+    onward_growth: float,
+    onward_rods: float,
+    rods_growth: float,
+    rods_rods: float,
+    growth_arrives: float,
+    rods_arrive: float,
+) -> float:
+    """A cycle's growth when launch units are dedicated by role.
+
+    A share ``x`` of departing units are growth carriers.  Every unit needs
+    ``puffsats`` for its push and rods for its own departure, by its type;
+    each type sends its onward mass home, and each wave keeps its arrival
+    fraction.  Growth ``g`` and ``x`` solve::
+
+        x O_g a_g = g P
+        (1 - x) O_n a_n = g (x R_g + (1 - x) R_n)
+
+    With equal burns this is :func:`src.chamber_departure.growth_per_cycle`.
+
+    Args:
+        puffsats: Growth PuffSats one unit's push consumes, ``P``.
+        onward_growth: A growth carrier's onward mass, ``O_g``.
+        onward_rods: A rod carrier's onward mass, ``O_n``.
+        rods_growth: Rods a growth carrier's departure needs, ``R_g``.
+        rods_rods: Rods a rod carrier's departure needs, ``R_n``.
+        growth_arrives: The growth wave's arrival fraction, ``a_g``.
+        rods_arrive: The nozzle wave's arrival fraction, ``a_n``.
+
+    Returns:
+        The growth factor ``g``, or 0 if either unit type delivers nothing
+        onward (a stack that cannot depart, which a price scan discards).
+    """
+    supply = onward_growth * growth_arrives / puffsats
+    if supply <= 0.0 or onward_rods * rods_arrive <= 0.0:
+        return 0.0
+
+    def gap(g: float) -> float:
+        share = g / supply
+        return (1.0 - share) * (onward_rods * rods_arrive - g * rods_rods) - (
+            g * share * rods_growth
+        )
+
+    return float(brentq(gap, 1.0e-9, supply * (1.0 - 1.0e-12)))
 
 
 def doubling_time(growth: float, cycle: u.Quantity) -> u.Quantity:

@@ -72,8 +72,11 @@ VISIBILITY_SAMPLES = 241
 TABLE_TIMES = np.arange(0.0, 7200.01, 400.0)
 #: Bisection steps on the share of the burn flown before periapsis.
 _BISECTION_STEPS = 12
-#: Parking orbits whose chains are stored (days).
+#: Parking orbits whose flown and three-synodic-only chains are stored (days).
 STORED_PERIODS = (20.0, 10.0)
+#: Further orbits whose flown chain alone is stored, for the split-gap sweep
+#: (ADR 0071).
+SWEEP_PERIODS = (4.0, 5.0, 7.0, 15.0)
 #: The chains' tables, stored so the reports need not rebuild them
 #: (about 6 min a process).  Regenerate with ``make departure-visibility``.
 VISIBILITY_CSV = (
@@ -161,10 +164,16 @@ def _excess_vectors(
     return best[1], best[2]
 
 
+#: Launch-unit roles (ADR 0071): rod carriers fly the nozzle trajectory, growth
+#: carriers the growth trajectory; both meet the same incoming stream.
+ROLES = ("rods", "growth")
+
+
 def onward_streams(
     cycles: Sequence[TwoWaveCycle],
     threshold_m_s: float = _DEFAULT_THRESHOLD_M_S,
     split: str = DEFAULT_SPLIT_MODE,
+    role: str = "rods",
 ) -> List[OnwardStream]:
     """The stream each flown cycle's onward departure meets.
 
@@ -178,10 +187,15 @@ def onward_streams(
         cycles: Consecutive flown cycles.
         threshold_m_s: The chain's 2S/3S policy threshold.
         split: How the chain's batches divide.
+        role: Whose departure: ``"rods"`` leaves on the next window's nozzle
+            trajectory, ``"growth"`` on its growth trajectory.
 
     Returns:
         One stream per cycle.
     """
+    if role not in ROLES:
+        raise ValueError(f"role must be one of {ROLES}")
+    leg = 2 if role == "rods" else 3
     gap = cycles[0].split_days
     selected = [window_waves(c.departure_jd, threshold_m_s, gap, split) for c in cycles]
     after = window_waves(cycles[-1].return_jd, threshold_m_s, gap, split)
@@ -192,9 +206,13 @@ def onward_streams(
         )
         if i + 1 < len(cycles):
             nxt = cycles[i + 1]
-            window = (nxt.departure_jd, nxt.return_jd, selected[i + 1][2])
+            onward_return = (
+                nxt.return_jd if role == "rods" else nxt.return_jd - nxt.split_days
+            )
+            window = (nxt.departure_jd, onward_return, selected[i + 1][leg])
         else:
-            window = (cycle.return_jd, after[1], after[2])
+            onward_return = after[1] if role == "rods" else after[1] - gap
+            window = (cycle.return_jd, onward_return, after[leg])
         departure, _ = _excess_vectors(*window)
         cosine = float(
             departure @ arrival / np.linalg.norm(departure) / np.linalg.norm(arrival)
@@ -448,11 +466,15 @@ def visible_loss_model(stream: OnwardStream, period_days: float = 20.0) -> LossM
     return loss_model_from_table(visible_loss_table(stream, period_days))
 
 
-_Key = Tuple[float, float, float, float]
+_Key = Tuple[float, float, float, float, str]
 
 
 def _key(
-    departure_jd: float, return_jd: float, onward_burn: float, period_days: float
+    departure_jd: float,
+    return_jd: float,
+    onward_burn: float,
+    period_days: float,
+    role: str = "rods",
 ) -> _Key:
     """A cycle's identity: its dates, the onward window it feeds and its orbit.
 
@@ -464,6 +486,7 @@ def _key(
         round(return_jd, 6),
         round(onward_burn, 6),
         round(period_days, 6),
+        role,
     )
 
 
@@ -492,6 +515,7 @@ def _read(
                 float(row["return_jd"]),
                 float(row["onward_burn"]),
                 float(row["period_days"]),
+                row.get("role", "rods"),
             )
             out[key] = (
                 stream,
@@ -501,13 +525,14 @@ def _read(
 
 
 def stored_tables(
-    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0
+    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0, role: str = "rods"
 ) -> List[Tuple[OnwardStream, Tuple[float, ...]]]:
     """Each cycle's stream and visible-loss table, read from :data:`VISIBILITY_CSV`.
 
     Args:
         cycles: Flown cycles.
         period_days: Parking-orbit period.
+        role: Whose departure, one of :data:`ROLES`.
 
     Returns:
         One (stream, table) per cycle.
@@ -519,11 +544,13 @@ def stored_tables(
     stored = _stored()
     out = []
     for cycle in cycles:
-        key = _key(cycle.departure_jd, cycle.return_jd, cycle.onward_burn, period_days)
+        key = _key(
+            cycle.departure_jd, cycle.return_jd, cycle.onward_burn, period_days, role
+        )
         if key not in stored:
             raise KeyError(
-                f"no stored departure visibility for the cycle leaving JD "
-                f"{cycle.departure_jd} on a {period_days:g}-day orbit; run "
+                f"no stored departure visibility for the {role} carrier leaving "
+                f"after JD {cycle.departure_jd} on a {period_days:g}-day orbit; run "
                 "`make departure-visibility` for its chain"
             )
         out.append(stored[key])
@@ -531,19 +558,21 @@ def stored_tables(
 
 
 def stored_loss_models(
-    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0
+    cycles: Sequence[TwoWaveCycle], period_days: float = 20.0, role: str = "rods"
 ) -> List[LossModel]:
     """Each cycle's visible loss, from :func:`stored_tables`.
 
     Args:
         cycles: Flown cycles.
         period_days: Parking-orbit period.
+        role: Whose departure, one of :data:`ROLES`.
 
     Returns:
         One loss model per cycle.
     """
     return [
-        loss_model_from_table(table) for _, table in stored_tables(cycles, period_days)
+        loss_model_from_table(table)
+        for _, table in stored_tables(cycles, period_days, role)
     ]
 
 
@@ -551,6 +580,7 @@ def write_tables(
     chains: Sequence[Tuple[Sequence[TwoWaveCycle], float, float]],
     path: Path,
     workers: int,
+    append: bool = False,
 ) -> None:
     """Build every cycle's table and write them to ``path``.
 
@@ -560,23 +590,33 @@ def write_tables(
             once.
         path: The CSV to write.
         workers: Worker processes.
+        append: Add to ``path``, skipping cycles it already holds.
     """
-    rows: Dict[_Key, Tuple[TwoWaveCycle, float, OnwardStream]] = {}
+    rows: Dict[_Key, Tuple[TwoWaveCycle, float, OnwardStream, str]] = {}
     for cycles, period_days, threshold in chains:
-        for cycle, stream in zip(cycles, onward_streams(cycles, threshold)):
-            rows.setdefault(
-                _key(
-                    cycle.departure_jd, cycle.return_jd, cycle.onward_burn, period_days
-                ),
-                (cycle, period_days, stream),
-            )
+        for role in ROLES:
+            streams = onward_streams(cycles, threshold, role=role)
+            for cycle, stream in zip(cycles, streams):
+                rows.setdefault(
+                    _key(
+                        cycle.departure_jd,
+                        cycle.return_jd,
+                        cycle.onward_burn,
+                        period_days,
+                        role,
+                    ),
+                    (cycle, period_days, stream, role),
+                )
+    if append and path.exists():
+        held = _read(path)
+        rows = {key: row for key, row in rows.items() if key not in held}
     entries = list(rows.values())
     with ProcessPoolExecutor(max_workers=workers) as pool:
         tables = list(
             pool.map(
                 visible_loss_table,
-                [stream for _, _, stream in entries],
-                [period for _, period, _ in entries],
+                [stream for _, _, stream, _ in entries],
+                [period for _, period, _, _ in entries],
             )
         )
     columns = [
@@ -586,14 +626,17 @@ def write_tables(
         "return_jd",
         "onward_burn",
         "period_days",
+        "role",
         "aim_separation",
         "departure_vinf",
         "return_vinf",
     ] + [f"loss_{t:.0f}s" for t in TABLE_TIMES]
-    with path.open("w", newline="") as handle:
+    fresh = not (append and path.exists())
+    with path.open("w" if fresh else "a", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(columns)
-        for (cycle, period_days, stream), table in zip(entries, tables):
+        if fresh:
+            writer.writerow(columns)
+        for (cycle, period_days, stream, role), table in zip(entries, tables):
             writer.writerow(
                 [
                     stream.index,
@@ -602,6 +645,7 @@ def write_tables(
                     f"{cycle.return_jd:.6f}",
                     f"{cycle.onward_burn:.9f}",
                     f"{period_days:g}",
+                    role,
                     f"{stream.aim_separation:.6f}",
                     f"{stream.departure_vinf:.9f}",
                     f"{stream.return_vinf:.9f}",
@@ -612,25 +656,36 @@ def write_tables(
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Regenerate :data:`VISIBILITY_CSV`: the flown and three-synodic-only
-    chains on the 20-day orbit and on the 10-day one the growth ledger compares.
+    chains on the 20-day orbit and on the 10-day one the growth ledger compares;
+    with ``--sweep``, append the flown chain on the split-gap sweep's orbits.
 
     Args:
-        argv: ``--workers``.
+        argv: ``--workers``, ``--sweep``.
     """
     # Imported here: seed_cost sits above this module in the import graph.
     from src.seed_cost import chains
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument(
+        "--sweep",
+        action="store_true",
+        help="append the flown chain on SWEEP_PERIODS to the stored file",
+    )
     args = parser.parse_args(argv)
     pairs: List[Tuple[Sequence[TwoWaveCycle], float, float]] = []
-    for period_days in STORED_PERIODS:
-        flown, three = chains(period_days)
-        pairs += [
-            (flown, period_days, _DEFAULT_THRESHOLD_M_S),
-            (three, period_days, 0.0),
-        ]
-    write_tables(pairs, VISIBILITY_CSV, args.workers)
+    if args.sweep:
+        for period_days in SWEEP_PERIODS:
+            flown, _ = chains(period_days)
+            pairs.append((flown, period_days, _DEFAULT_THRESHOLD_M_S))
+    else:
+        for period_days in STORED_PERIODS:
+            flown, three = chains(period_days)
+            pairs += [
+                (flown, period_days, _DEFAULT_THRESHOLD_M_S),
+                (three, period_days, 0.0),
+            ]
+    write_tables(pairs, VISIBILITY_CSV, args.workers, append=args.sweep)
     print(f"wrote {len(_read(VISIBILITY_CSV))} cycles to {VISIBILITY_CSV}")
 
 

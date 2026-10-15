@@ -88,5 +88,8 @@ def test_carrying_the_ship_costs_more_than_staging_it() -> None:
 
 @pytest.mark.slow
 def test_the_floor_is_the_chains_first_growth_wave() -> None:
-    flown, _ = chains()
+    # On the 20-day orbit ADR 0059 flew; the ledger's 10-day orbit (ADR 0071)
+    # returns slower, at 57.43, so the floor is the stricter.
+    flown, _ = chains(20.0)
     assert flown[0].growth_wave_v_b == pytest.approx(CHAIN_FLOOR, abs=0.005)
+    assert chains()[0][0].growth_wave_v_b < CHAIN_FLOOR

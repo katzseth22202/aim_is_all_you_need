@@ -493,7 +493,10 @@ per cycle at 20 d). Dividing at Jupiter for real (`split="shared"`) costs
 0.48-0.82 km/s on the nozzle wave plus 0.14-0.56 km/s of departure burn: methane
 3.36 -> 4.46 yr, hydrogen 2.42 -> 2.96 yr. A **split by role** (launch units
 dedicated to growth or to rods, each departing on its own trajectory) halves that:
-3.91 and 2.77 yr (ADR 0069, a scout, not yet the ledger's). An earlier, faster 3S
+3.91 and 2.77 yr (ADR 0069), and the ledger flies it (ADR 0071): each carrier
+departs on its own burn (`onward_burn`, `onward_growth_burn`) with its own
+stream in view, and `growth_share` (~0.85) of departing units are growth
+carriers. An earlier, faster 3S
 growth wave gains only ~2% and is declined. _Avoid_: pricing a growth loop without saying which of the two it is
 (it is the largest single number in the accounting); reading ADR 0009's "the
 split must be bought" as general — see **split gap**.
@@ -504,11 +507,13 @@ the payload is pushed at periapsis, coasts one full orbit, and departs at the
 next periapsis. So the same number also sizes the **apoapsis reversal** (372.5
 m/s at 10 d, 233.9 at 20 d, 112.1 at 60 d) — a longer gap buys a cheaper
 reversal and pays for it in the burn needed to pull the growth wave further
-ahead. 10 d and 20 d land within 0.7% of each other. The growth ledger takes
-its parking orbit from each cycle's own split and flies **20 d** (ADR 0034): the
-reversal saving beats the dearer early-arrival burn by 0-2% for the walled
-chambers and 9% for methalox, and 20 d is the orbit the parent's 600 km figures
-are quoted on. _Avoid_: choosing the gap
+ahead. The growth ledger takes its parking orbit from each cycle's own split
+and flies **10 d** (ADR 0071). Under the uncharged batch split, 20 d won (ADR
+0034: the reversal saving beat the dearer early-arrival burn by 0-2% for the
+chambers and 9% for methalox). Split by role, each growth carrier pays its own
+harder departure, and the sweep's optimum is 10-15 d: methane 3.98 yr at 10 d
+against 4.16 at 20 d and 4.84 at 4 d; hydrogen 2.77 against 2.87 and 3.12. The
+parent's 600 km figures are still quoted on the 20-day orbit. _Avoid_: choosing the gap
 and the parking period independently (ADR 0009 priced a 10 d split against a
 20-day reversal, and ADR 0033's first figures did the same); assuming the split must be bought at all — in **real orbits**
 the Lambert pair's free encounter time makes it nearly free (8 of 11 flown

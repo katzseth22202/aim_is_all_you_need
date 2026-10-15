@@ -159,6 +159,12 @@ class TwoWaveCycle:
             Pricing that departure with this cycle's own ``departure_burn``
             was an off-by-one: a 3S return feeding a 2S departure was
             undercharged by up to 1.8 km/s (ADR 0038).
+        growth_departure_burn: The departure burn of this window's growth
+            trajectory (km/s), which a growth carrier flies when launch units
+            are split by role (ADR 0071); NaN when not solved.
+        onward_growth_burn: The *next* window's ``growth_departure_burn``, the
+            burn a growth carrier pushed by these waves flies; NaN prices the
+            whole stack as one batch on ``onward_burn``.
     """
 
     index: int
@@ -174,6 +180,8 @@ class TwoWaveCycle:
     growth_wave_v_b: float
     growth_wave_burn: float
     onward_burn: float
+    growth_departure_burn: float = float("nan")
+    onward_growth_burn: float = float("nan")
 
     @property
     def period_synodics(self) -> float:
@@ -268,15 +276,20 @@ def adaptive_two_wave_cycles(
                 growth_wave_v_b=growth.earth_return_collision_speed,
                 growth_wave_burn=growth.total_dv,
                 onward_burn=float("nan"),
+                growth_departure_burn=(
+                    growth.earth_departure_periapsis_speed - _cycle_periapsis_speed()
+                ),
             )
         )
         departure_jd = return_jd
     if not cycles:
         raise RuntimeError("study horizon contains no complete cycle")
-    after_last = departure_burn_after(
-        cycles[-1].return_jd, threshold_m_s, split_days, split
+    after = window_waves(cycles[-1].return_jd, threshold_m_s, split_days, split)
+    return link_onward_burns(
+        cycles,
+        float(after[2].earth_departure_periapsis_speed - _cycle_periapsis_speed()),
+        float(after[3].earth_departure_periapsis_speed - _cycle_periapsis_speed()),
     )
-    return link_onward_burns(cycles, after_last)
 
 
 def _fly_window(
@@ -323,20 +336,27 @@ def departure_burn_after(
 
 
 def link_onward_burns(
-    cycles: Sequence[TwoWaveCycle], after_last: float
+    cycles: Sequence[TwoWaveCycle],
+    after_last: float,
+    after_last_growth: float = float("nan"),
 ) -> List[TwoWaveCycle]:
-    """Give each cycle the departure burn its waves' payload will fly.
+    """Give each cycle the departure burns its waves' payload will fly.
 
     Args:
         cycles: Consecutive flown cycles.
         after_last: The departure burn of the window after the last cycle.
+        after_last_growth: That window's growth-trajectory departure burn.
 
     Returns:
-        The cycles, each with ``onward_burn`` set to the next one's
-        ``departure_burn``.
+        The cycles, each with ``onward_burn`` and ``onward_growth_burn`` set
+        to the next one's ``departure_burn`` and ``growth_departure_burn``.
     """
     onward = [c.departure_burn for c in cycles[1:]] + [after_last]
-    return [replace(c, onward_burn=burn) for c, burn in zip(cycles, onward)]
+    growth = [c.growth_departure_burn for c in cycles[1:]] + [after_last_growth]
+    return [
+        replace(c, onward_burn=burn, onward_growth_burn=grow)
+        for c, burn, grow in zip(cycles, onward, growth)
+    ]
 
 
 def price_cycle(

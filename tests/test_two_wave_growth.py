@@ -365,3 +365,14 @@ def test_a_shared_split_flies_one_outbound_leg_and_pays_to_divide():
     _, _, free, _ = window_waves(departure, split_days=20.0, split="independent")
     assert nozzle.earth_departure_vinf > free.earth_departure_vinf
     assert shared_split(departure, ret, ret - 20.0)[0] == nozzle
+
+
+def test_each_cycle_carries_the_next_windows_growth_departure() -> None:
+    """ADR 0071: a growth carrier flies the next window's growth trajectory."""
+    from src.two_wave_growth import link_onward_burns
+
+    three = replace(CYCLE, growth_departure_burn=5.6)
+    two = replace(CYCLE, departure_burn=7.0, growth_departure_burn=7.4)
+    linked = link_onward_burns([three, two], after_last=6.9, after_last_growth=7.2)
+    assert [c.onward_growth_burn for c in linked] == [7.4, 7.2]
+    assert [c.onward_burn for c in linked] == [7.0, 6.9]

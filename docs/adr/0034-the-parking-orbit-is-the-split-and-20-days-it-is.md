@@ -1,6 +1,7 @@
 # The parking orbit is the split, and twenty days it is
 
-Status: accepted
+Status: accepted; its 20-day choice superseded by ADR 0071 (10 days, once the
+split is charged by role)
 
 Amends: ADR 0033. Its decisions stand; its figures mixed a 10-day split with
 20-day burns and are replaced by the ones below.

@@ -135,9 +135,12 @@ def test_the_chain_seed_leaves_at_the_parents_excess_speed() -> None:
         # stored as liquid gave 83.25 / 0.548 / 75.07 / 32.85 (before ADR 0065).
         # With the burn centred (before ADR 0066) the chambers' rows were
         # 83.08 / 0.488 / 49.66 / 25.28 and 83.65 / 0.582 / 95.52 / 38.36.
-        (0, 72.71, 0.185, 5.071, 10.70),
-        (2, 82.03, 0.477, 46.55, 23.89),
-        (4, 82.54, 0.573, 90.28, 36.44),
+        # One batch on the 20-day orbit, before ADR 0071's role split on the
+        # 10-day orbit: 72.71 / 0.185 / 5.071 / 10.70, 82.03 / 0.477 / 46.55 /
+        # 23.89 and 82.54 / 0.573 / 90.28 / 36.44.
+        (0, 72.72, 0.167, 4.337, 9.99),
+        (2, 84.06, 0.457, 38.77, 22.48),
+        (4, 84.94, 0.550, 74.78, 34.07),
     ],
 )
 def test_tab_seed_amortization_reproduces(
