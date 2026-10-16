@@ -1813,6 +1813,57 @@ Pontryagin schedule. Its starting price is chosen to maximise
 It opens at the cap and tapers to k of about 1-4, and beats a constant k = 10 on
 both cargo per lob and `P` (ADR 0036). _Avoid_: a constant k = 10 delivery.
 
+### Solar-dive charge-pusher cycle
+
+The impact simulation's alternative growth loop (its Results 10-12), charged through
+this repo's ledger and cost book (`src/solar_dive_growth.py`, `make solar-dive`, ADR
+`0072-the-solar-dive-charge-pusher-replaces-the-chamber`). Returning **Earth-wave**
+sheets push a lofted launch unit at 400 km and later depart it from the 10-day orbit
+onto the three-synodic **Jovian solar-dive cycle**; **Sun-wave** disks boost it at
+perihelion; its remainder returns as the next Earth wave. No chamber, rods or plug are
+expended.
+
+**Earth wave**:
+The returning stream of furled Kapton sheets, ~100 km/s Earth-relative, that pushes
+and departs the next launch units. Fleet mass: it flies the cycle and comes back.
+_Avoid_: calling it PuffSats (the child's argon-plate stream), or counting the Sun wave
+in it.
+
+**Sun wave**:
+The graphite disks that boost the Sun ship at perihelion. Built on Earth every cycle and
+spent at the Sun, so they cost launch mass and dollars but never returned mass: growth
+is counted in **launch units**, not "per total impactor" (the simulation's measure, which
+divides by the disks too and is reported beside it). _Avoid_: likening them to the
+child's rods, which return as the nozzle wave.
+
+**Push wave** / **departure wave**:
+The two Earth-wave roles (ADR 0069's role split in this cycle). The push wave's ships
+return one parking period (10 days) early, so their sheets push the next launch units
+into the parking orbit; the departure wave's sheets depart them. The push-wave route is
+solved on three knobs (excess, aim and its own climb-out excess) against the shortened
+clock, the Earth intercept and **Jupiter's phase**, which the plain closure lets float.
+It comes home early on a faster climb: a larger Sun boost.
+_Avoid_: one undivided wave for both jobs (a wave arrives as a single pulse).
+
+**Canted plate**:
+The flat plate the departure wave sweeps past at ~95-101 degrees to the thrust axis,
+striking polyethylene charges held off it. One plate takes the 400 km overtake push and
+the departure, sized for the larger pulse, then diverts (~20 m/s) into Jupiter.
+
+**True mirror excess**:
+The Jupiter-relative excess the disks' carrier must burn to: the ship's post-flyby state
+with its tangential speed reflected, `|(-v_t - V_J, v_r)|`. The mirror orbit meets the
+ship on the symmetry line, just past perihelion. It exceeds the **dive-placement floor**
+because the ship leaves Jupiter falling inward (15.07 against 14.78 km/s at 9.86 solar
+radii). _Avoid_: pricing the split at the floor.
+
+**Gated rNPV**:
+The valuation this cycle and its comparison rows are quoted on: time at 10% a year,
+and each flow weighted by the odds of every milestone (**gate**) before it, as drug
+programmes are valued. Early operational losses are an **attrition** curve on the
+returning sheets (20% falling to 3%), not odds. _Avoid_: a flat venture rate as the
+valuation; it charges risk that the first flight has already retired.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.

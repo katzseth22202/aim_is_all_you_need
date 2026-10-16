@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -61,6 +61,9 @@ chamber-departure:  ## Price the walled chamber's departure over the flown chain
 
 growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
 	python -m src.growth_ledger
+
+solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072; ~2 min, ARGS="--sweep --child" adds the depth sweep and the child's rows)
+	python -m src.solar_dive_growth $(ARGS)
 
 carbon-equilibrium:  ## B' of graphite in hot hydrogen: the carbon a pitch coat loses to the gas (companion reply 2026-10-04)
 	python -m src.carbon_hydrogen_equilibrium

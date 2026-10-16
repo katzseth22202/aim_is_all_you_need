@@ -89,6 +89,7 @@ make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/k
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
+make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072)
 
 # Conda environment
 conda env create -f environment.yml
@@ -331,6 +332,13 @@ seed_battery_tug.py          ← seed_loop + seed_sep_tug + finite_burn_loss: an
                                 perigee), heat buffered in the water, array sold
                                 at L1; scipy DE per price pair, feeding the
                                 direct route or the 2-yr loop (ADR 0061)
+
+solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.role_growth +
+                                growth_cost + finite_burn_loss: the impact simulation's
+                                solar-dive charge pusher (Earth-wave sheets, canted plate,
+                                Sun-wave disks on the mirror dive) through the ledger and
+                                a gated-rNPV cost book; push-wave route solved for
+                                Jupiter's phase; vendored stage laws (ADR 0072)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

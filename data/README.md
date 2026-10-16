@@ -15,6 +15,7 @@ with its provenance rather than fetched.
 | --- | --- | --- |
 | `plume_state.csv` | `puffsat_impact_simulation` @ `0216a09`, `data/results/plume_state.csv` | `make analysis-plume` there |
 | `departure_visibility.csv` | this repository (ADR 0066) | `make departure-visibility` |
+| `solar_dive_stage_laws.csv` | `puffsat_impact_simulation` @ `a6742a2` (ADR 0072) | see below |
 
 ## `plume_state.csv`
 
@@ -46,3 +47,18 @@ view of Earth, at burn lengths 0-7,200 s on 400 s nodes
 (`src/departure_visibility.py`). `stored_tables` refuses any cycle not in it.
 `tests/test_departure_visibility.py` regenerates the streams and one node.
 Rebuild it whenever the chain, the parking orbit or the loss integrator changes.
+
+## `solar_dive_stage_laws.csv`
+
+The impact simulation's exhaust speeds `v_e(k)` for the solar-dive charge-pusher cycle
+(ADR 0072), carbon left atomic unless `bonds` says otherwise:
+
+- `earth_departure`: the canted plate, square charge, at the two closures' mean impact
+  angle and closing speed (9.86 R_sun: 101.15 deg, 103.2 km/s; 4 R_sun: 94.7 deg,
+  158.35 km/s), k = 5-60. Copied from its `data/results/xray_collision/growth_earth_stage.csv`.
+- `sun_boost`: the delta/D 0.5 paraboloid at 1.5 F, the real disk-into-charge collision,
+  k = 20-100 on 17 log-spaced points, at closing speeds 250-700 km/s. Generated with its
+  own code, `puffsat.xray_collision.growth.sun_ve(k, w)`, because its committed CSV holds
+  only the optimum.
+- `overtake_push`: the flat plate with a 4 m skirt, point fireball, grid x1, carbon frozen,
+  at 100 km/s, k = 5-40. Copied from its `overtake_ledger.csv`.
