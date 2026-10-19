@@ -258,3 +258,35 @@ quoting 2.01x / 2.59x needs these figures.
 - **S44 (sim):** Kapton at 115-122 km/s, which picks the 4 R_sun headline.
 - Sheet heating at the high k the 150 km/s optimum now picks.
 - The parking orbit's lunar encounters (S43 item 5 above).
+
+## Addendum: checked against the sim's Results 16-17 (2026-10-19)
+
+The impact simulation answered S44, S42 and S46 at `1bed1c6`
+(`docs/kapton_band_answers_for_parent.md`, `docs/gas_spring_answers_for_parent.md`). We
+checked them against the figures above. Nothing here changes, and these are notes for the
+parent to consolidate.
+
+- **Kapton in the 100-130 km/s band is confirmed**, so the default above (Kapton in the
+  band) stands. Two conditions:
+  - Quote a maraging-300 face. HY-100's window closes at 4 R_sun if the sim's peak
+    coefficient rises on refinement.
+  - The margin at 121.8 km/s is 26 K (647 K against 673 K).
+
+  Above 130 km/s the sheets stay carbon fabric.
+- **The 4 R_sun, 75 km/s return on Kapton is $89 dear on the current code** (4.98x,
+  1.41 yr), not the $83 the sim's note carries from ADR 0074. It is the cheapest return at
+  4 R_sun, $2 under the 90 km/s headline.
+- **The sim's re-priced push law at 54-69 km/s** (k 6.5: 18.2-24.9 km/s) matches our
+  vendored grid to 0.5%. The plate-loop figures above already include it.
+- **The bags should be nitrogen** (S46): ~1.5 t fibre, 2.9 t gas and 0.1-1.3 t bladder,
+  against the 1.9 t of helium charged above. Helium warms 140-152 K over a push. At the
+  held headline designs 5.7 t of bags costs $0-2 dear (4 R_sun, 90: $91; 9.86 R_sun, 60:
+  $146).
+- **The charge at 2.5 F at 117 deg** (4 R_sun only) cuts the bowl's v_e by 8-10%. At the
+  held designs that is 5.31x -> 4.99x and $91 -> $93 dear at 4 R_sun, 90, and $89 -> $93 at
+  4 R_sun, 75. 9.86 R_sun departs at 130 deg and is unaffected.
+- **The spring law holds solved nonlinearly** (1.22x peak, stroke within 1%). Its gas
+  column is 18.6 m tall, though. The stiffer spring (theta = pi) shortens it to 8.3 m and is
+  already a sensitivity row above: +$5 at 9.86 R_sun, +$1 at 4 R_sun.
+- The sheet as wide as the sprung floor and the skirt on the craft's frame are geometry
+  and do not touch the ledger.
