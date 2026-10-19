@@ -16,11 +16,14 @@ from src.solar_dive_growth import (
     carrier_burn,
     carrier_perijove,
     cycle_growth,
+    delivery_unit,
     departure_burn,
     departure_route,
     doubling_years,
     lob_climb_factor,
     miss_fraction,
+    periapsis_speed,
+    plate_disposal_dv,
     push_climb,
     push_route,
     ship_perijove_rj,
@@ -88,6 +91,29 @@ def test_miss_fraction_learns_to_its_floor() -> None:
     assert miss_fraction(1e9, 1.0) == pytest.approx(MISS_FLOOR)
 
 
+def test_the_left_push_plate_drops_its_perigee_for_about_4_m_s() -> None:
+    """S39 item 5: ~4 m/s at the 10-day orbit's 385 000 km apoapsis."""
+    assert plate_disposal_dv(10.0) == pytest.approx(0.0042, abs=2e-4)
+    assert plate_disposal_dv(3.0) > plate_disposal_dv(10.0)
+
+
+def test_the_delivery_plate_is_the_absorber_bound_at_the_cargo_cap() -> None:
+    """S39 item 2: 7.35 MN s at 25 g on a 2 m stroke is ~50 t, not 156 t."""
+    laws = StageLaws.load()
+    slow = delivery_unit(75.5, Design(k_delivery=5.6), laws)
+    assert slow.pulse == pytest.approx(7.355e6, rel=1e-3)
+    assert 45e3 < slow.plate < 55e3
+    assert slow.start_g < slow.peak_g == 25.0
+    assert slow.pulse_ms == pytest.approx(2 * 2.0 * slow.plate / slow.pulse * 1e3)
+    child = delivery_unit(75.5, Design(k_delivery=5.6, slow_delivery=False), laws)
+    assert child.climb == 1.0 and 120e3 < child.plate < 156e3
+    # The bound falls as the pulse squared.
+    ratio = (slow.pulse / child.pulse) ** 2
+    assert slow.plate * (child.cargo + child.plate) == pytest.approx(
+        ratio * child.plate * (slow.cargo + slow.plate), rel=0.02
+    )
+
+
 def test_doubling_years() -> None:
     assert doubling_years(2.0, 3.0) == pytest.approx(3.0)
     assert math.isinf(doubling_years(0.9, 3.0))
@@ -124,6 +150,28 @@ def test_the_push_wave_returns_ten_days_early_on_a_faster_climb() -> None:
         10 / 365.25, abs=1e-6
     )
     assert push.return_excess > departure.return_excess
+    assert push.early_days == 10.0 and departure.early_days == 0.0
+    with pytest.raises(ValueError):
+        push_route(9.86, 90.0, 0.0)
+
+
+@pytest.mark.slow
+def test_a_shorter_gap_slows_the_growth_stream_and_widens_the_turn() -> None:
+    """S39 item 8: the gap reaches every use (the paper's 3/5/10-day rows)."""
+    from src.solar_dive_growth import PUSH_ALTITUDE, fly_unit, wave_speed
+
+    departure = departure_route(9.86, 60.0)
+    assert departure is not None
+    streams, turns = [], []
+    for days in (3.0, 5.0, 10.0):
+        push = push_route(9.86, 60.0, days)
+        assert push is not None
+        streams.append(wave_speed(push.earth_excess, PUSH_ALTITUDE))
+        turns.append(
+            fly_unit(departure, push, departure, Design()).lines["methalox_dv"]
+        )
+    assert streams == pytest.approx([82.6, 87.1, 99.2], abs=0.1)
+    assert turns == pytest.approx([0.76, 0.54, 0.33], abs=0.01)
 
 
 @pytest.mark.slow
@@ -171,7 +219,8 @@ def test_the_visible_sign_is_the_parents_s38_geometry() -> None:
 
 @pytest.mark.slow
 def test_the_1_g_push_climbs_faster_and_the_childs_push_does_not() -> None:
-    assert 2.25 < push_climb(1.0) < 2.5
-    assert push_climb(3.26) == pytest.approx(1.1)
-    assert 1.4 < lob_climb_factor(push_climb(1.0)) < 1.6
+    end = periapsis_speed(10.0, 400.0)
+    assert 2.25 < push_climb(1.0, end) < 2.5
+    assert push_climb(3.26, end) == pytest.approx(1.1)
+    assert 1.4 < lob_climb_factor(push_climb(1.0, end)) < 1.6
     assert lob_climb_factor(1.1) == 1.0
