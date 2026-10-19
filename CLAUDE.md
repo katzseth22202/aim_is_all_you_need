@@ -89,7 +89,8 @@ make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/k
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
-make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072, 0073)
+make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0074; ARGS="--gaps" sweeps the gap)
+make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
 
 # Conda environment
 conda env create -f environment.yml
@@ -340,7 +341,14 @@ solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.rol
                                 through a departure bowl on the visible sign at 1 Hz /
                                 0.25 g, Sun-wave disks on the mirror dive) through the
                                 ledger and a gated-rNPV cost book; push-wave route solved
-                                for Jupiter's phase; vendored stage laws (ADR 0072, 0073)
+                                for Jupiter's phase; vendored stage laws; 2 Hz delivery on a
+                                25 g plate; the gap carried by the push route (ADR 0072-0074)
+
+plate_jupiter_loop.py        ← solar_dive_growth.fly_earth + departure_visibility +
+                                two_wave_growth: the child's flown chain on the solar
+                                dive's push plate and bowl, no Sun dive; per-window
+                                ledgers, gated rNPV without the Sun gate, the return
+                                family at fixed epochs (ADR 0075)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem

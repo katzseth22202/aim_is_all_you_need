@@ -1818,7 +1818,8 @@ both cargo per lob and `P` (ADR 0036). _Avoid_: a constant k = 10 delivery.
 The impact simulation's alternative growth loop (its Results 10-12), charged through
 this repo's ledger and cost book (`src/solar_dive_growth.py`, `make solar-dive`, ADR
 `0072-the-solar-dive-charge-pusher-replaces-the-chamber`, ADR
-`0073-two-plates-the-visible-sign-and-the-1-g-push`). Returning **Earth-wave**
+`0073-two-plates-the-visible-sign-and-the-1-g-push`, ADR
+`0074-one-cadence-a-cargo-sized-delivery-plate-and-the-gap`). Returning **Earth-wave**
 sheets push a lofted launch unit at 400 km and later depart it from the 10-day orbit
 onto the three-synodic **Jovian solar-dive cycle**; **Sun-wave** disks boost it at
 perihelion; its remainder returns as the next Earth wave. No chamber, rods or plug are
@@ -1857,7 +1858,25 @@ _Avoid_: quoting the canted law for the flown departure.
 The 9.5 m flat plate with a 2 m skirt (~11-12 t) that takes the 400 km overtake push at
 2 Hz and 1 g on ~100 um sheets. Sized by its absorber (`I^2/(2 s M a)` at 100 g over 2 m),
 not the point-blast floor, since a planar sheet loads it evenly (the simulation's
-ADR-0064). It flies up in the launch unit and is left in the parking orbit at apoapsis.
+ADR-0064). It flies up in the launch unit and is left in the parking orbit at apoapsis,
+nudged ~4 m/s onto a 100 km perigee (ADR 0074).
+
+**Delivery plate**:
+The plate that pushes a cargo lob to L1. Like every Earth push it flies 2 Hz and 1 g from
+its own climbing lob (ADR 0074). It is sized by the same absorber bound as the push plate,
+but at the data-center cargo's **25 g** cap: ~45-51 t, 24-28 ms a pulse. The child's
+156 t plate was sized for its 4 Hz, 12 MN s pulse.
+_Avoid_: carrying the child's 156 t to the 2 Hz delivery; reading the delivery's cadence
+or lob from the growth push's knobs.
+
+**Gap** (growth-to-departure):
+How much earlier the push wave arrives than the departure wave. It is also the parking
+orbit's period (the child's **split gap**). The push route carries it
+(`DiveRoute.early_days`), and every leg reads it from there. Shorter gaps slow the growth
+stream (the near-Sun hyperbola must straighten to cross 1 AU earlier) and widen the
+apoapsis turn: 5 days costs 2-3% of growth and is ~$2 cheaper dear (ADR 0074).
+_Avoid_: overriding a module default to change it; it is frozen into function defaults and
+caches.
 
 **Departure bowl**:
 The delta/D 0.5 paraboloid (~13-22 t with its 1 t collar) that departs the ship: compact
@@ -1895,6 +1914,22 @@ and each flow weighted by the odds of every milestone (**gate**) before it, as d
 programmes are valued. Early operational losses are an **attrition** curve on the
 returning sheets (20% falling to 3%), not odds. _Avoid_: a flat venture rate as the
 valuation; it charges risk that the first flight has already retired.
+
+### Jupiter-only plate loop
+
+The child's flown chain flown on the solar dive's Earth plates, with no Sun dive and no
+nozzle (`src/plate_jupiter_loop.py`, `make plate-jupiter-loop`, ADR
+`0075-the-jupiter-only-chain-on-plates-does-not-pay`). The Earth half is the solar dive's
+`fly_earth`. The departure meets the nozzle wave nearly head-on (160-180 deg, 66-76 km/s)
+on the bowl, with the chain's stream-in-view loss. The ship returns as sheets less 1%
+avionics and its wave's return burn. At best (flown chain, 1 g departure) it gives 2.59x per
+3S and $238 dear, against the Sun dive's 3.80x and $118. At the paper's 0.25 g it gives 2.01x
+and $573.
+
+**Departure rate** (plate loop):
+The bowl's mean acceleration. It sets the burn's length and so its stream-in-view loss,
+0.8-2.0 km/s at 0.25 g on 6.3-9.4 km/s burns. It is the plate loop's strongest lever.
+_Avoid_: the fixed-direction loss for a head-on stream; it ignores the routes Earth hides.
 
 ## Relationships
 
