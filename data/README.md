@@ -17,6 +17,7 @@ with its provenance rather than fetched.
 | `departure_visibility.csv` | this repository (ADR 0066) | `make departure-visibility` |
 | `solar_dive_stage_laws.csv` | `puffsat_impact_simulation` @ `a6742a2` (ADR 0072) | see below |
 | `departure_hole_law.csv` | `puffsat_impact_simulation` @ `bfea495` (ADR 0073) | see below |
+| `fast_wave_push_law.csv` | `puffsat_impact_simulation` @ `f7cce80` (ADR 0076) | see below |
 
 ## `plume_state.csv`
 
@@ -93,3 +94,21 @@ constant (1 / 0.571655). So the table has two kinds of row:
 `StageLaws.hole_ve` interpolates the capture linearly in `cos theta` (extrapolating past the run
 angles, as the simulation does) and both factors log-linearly in k. It reproduces the simulation's
 `hole_ve` columns to within 0.5% (the k-interpolation between its runs).
+
+## `fast_wave_push_law.csv`
+
+The overtake push's exhaust speed re-priced at the closing speed (the
+simulation's Result 15, `python/puffsat/xray_collision/fast_wave.py`): Result
+11's flat plate with a 4 m skirt, point fireball, carbon atomic, the rebound
+taken at the fireball's arrival speed, the bond toll at its real heat and the
+impactor's own atomization charged (`impactor` Kapton or graphite, which the
+toll alone separates, by under 0.1%). Its committed `fast_wave_law.csv` has
+only the five closures, so this grid was made here (ADR 0076) by calling its
+`push_ve(k, w, IMPACTOR_TOLL[impactor])` at k = 5, 6, 7, 8, 10, 12, 15, 20,
+30, 40 and w = 50-330 km/s in 20 km/s steps, after regenerating its gitignored
+`data/results/xray_collision/overtake_2d.jsonl` with
+`cargo run --release -p sweep -- --overtake-2d` and `data/tables/ch2.json`
+with `python -m puffsat.tables --ch2` (both @ `f7cce80`). The sim's
+`law_rows()` on that rerun reproduce its committed `fast_wave_law.csv` to every
+printed digit, and this grid, interpolated linearly in log k and in w
+(`StageLaws.push_ve`), reproduces those rows to 0.13%.

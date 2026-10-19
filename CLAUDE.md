@@ -89,8 +89,9 @@ make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/k
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
-make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0074; ARGS="--gaps" sweeps the gap)
+make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0076; ARGS="--gaps" sweeps the gap)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
+make plate-disposal  # the left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076; ~10 min)
 
 # Conda environment
 conda env create -f environment.yml
@@ -336,13 +337,21 @@ seed_battery_tug.py          ← seed_loop + seed_sep_tug + finite_burn_loss: an
 
 solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.role_growth +
                                 growth_cost + finite_burn_loss: the impact simulation's
-                                solar-dive charge pusher (Earth-wave sheets on a 12 t push
-                                plate at 2 Hz / 1 g from a 2.43 km/s lob, compact impactors
+                                solar-dive charge pusher (Earth-wave sheets on a push plate
+                                at 2 Hz / 1 g from a 2.43 km/s lob, compact impactors
                                 through a departure bowl on the visible sign at 1 Hz /
                                 0.25 g, Sun-wave disks on the mirror dive) through the
                                 ledger and a gated-rNPV cost book; push-wave route solved
-                                for Jupiter's phase; vendored stage laws; 2 Hz delivery on a
-                                25 g plate; the gap carried by the push route (ADR 0072-0074)
+                                for Jupiter's phase; vendored stage laws and the sim's
+                                overtake law at speed; every plate on a lossless gas
+                                spring (63 t on 8 m), push plate and bowl one shared
+                                assembly; Kapton sheets below 130 km/s, carbon fabric
+                                above; the gap carried by the push route (ADR 0072-0076)
+
+plate_disposal.py            ← leaf (numpy + scipy): the left push plate's apoapsis
+                                nudge flown with the Moon and the Sun's tide, swept
+                                over lunar phase; the two-spring comparison's only
+                                (ADR 0076)
 
 plate_jupiter_loop.py        ← solar_dive_growth.fly_earth + departure_visibility +
                                 two_wave_growth: the child's flown chain on the solar

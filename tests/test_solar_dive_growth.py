@@ -2,6 +2,7 @@
 
 import math
 
+import numpy as np
 import pytest
 
 from src.solar_dive_growth import (
@@ -13,6 +14,7 @@ from src.solar_dive_growth import (
     StageLaws,
     apoapsis_methalox,
     arc_loss,
+    bag_mass,
     carrier_burn,
     carrier_perijove,
     cycle_growth,
@@ -20,13 +22,17 @@ from src.solar_dive_growth import (
     departure_burn,
     departure_route,
     doubling_years,
+    gas_spring,
     lob_climb_factor,
     miss_fraction,
+    peak_to_mean,
     periapsis_speed,
     plate_disposal_dv,
     push_climb,
     push_route,
+    sheet_material,
     ship_perijove_rj,
+    spring_plate_stroke,
     value_design,
     visible_departure,
 )
@@ -38,7 +44,26 @@ def test_stage_laws_reproduce_the_simulations_optimum_inputs() -> None:
     assert laws.earth_ve(24.0, 103.2, 101.15) == pytest.approx(5.74, rel=0.01)
     assert laws.sun_ve(29.907, 391.692) == pytest.approx(30.07, rel=1e-3)
     # The overtake handoff: mass ratio ~1.49 for 11 km/s at k = 10.
-    assert math.exp(11.0 / laws.push_ve(10.0, 100.0)) == pytest.approx(1.493, rel=1e-3)
+    assert math.exp(11.0 / laws.push_ve(10.0, 100.0, law="linear")) == pytest.approx(
+        1.493, rel=1e-3
+    )
+
+
+def test_the_fast_wave_law_reproduces_the_simulations_closures() -> None:
+    """S43 item 1: fast_wave_law.csv's re-priced v_e, from the vendored grid."""
+    laws = StageLaws.load()
+    for k, w, impactor, ve in (
+        (7.07, 99.2, "Kapton", 35.540),
+        (6.67, 137.1, "graphite", 51.340),
+        (7.93, 132.1, "graphite", 44.089),
+        (8.21, 207.8, "graphite", 62.286),
+    ):
+        assert laws.push_ve(k, w, impactor) == pytest.approx(ve, rel=0.002)
+    # 1-4% below the linear law at 99-137 km/s, ~9% at 208.
+    assert laws.push_ve(8.21, 207.8, "graphite") / laws.push_ve(
+        8.21, 207.8, law="linear"
+    ) == pytest.approx(0.911, abs=0.006)
+    assert sheet_material(132.0) == "graphite" and sheet_material(120.0) == "Kapton"
 
 
 def test_the_bowl_law_reproduces_the_simulations_hole_ve() -> None:
@@ -91,27 +116,96 @@ def test_miss_fraction_learns_to_its_floor() -> None:
     assert miss_fraction(1e9, 1.0) == pytest.approx(MISS_FLOOR)
 
 
-def test_the_left_push_plate_drops_its_perigee_for_about_4_m_s() -> None:
-    """S39 item 5: ~4 m/s at the 10-day orbit's 385 000 km apoapsis."""
-    assert plate_disposal_dv(10.0) == pytest.approx(0.0042, abs=2e-4)
-    assert plate_disposal_dv(3.0) > plate_disposal_dv(10.0)
+def test_the_left_push_plates_nudge_is_charged_for_the_moon() -> None:
+    """S43 item 5: 4.2 m/s two-body, 0-15 m/s with the Moon; 9.2 m/s at 3 days."""
+    from src.plate_disposal import two_body_nudge
+
+    assert two_body_nudge(10.0) == pytest.approx(0.0042, abs=2e-4)
+    assert plate_disposal_dv(10.0) == 0.015
+    assert plate_disposal_dv(1.0) == pytest.approx(two_body_nudge(1.0))
 
 
-def test_the_delivery_plate_is_the_absorber_bound_at_the_cargo_cap() -> None:
-    """S39 item 2: 7.35 MN s at 25 g on a 2 m stroke is ~50 t, not 156 t."""
+def test_the_spring_law_matches_a_direct_integration() -> None:
+    """S45: peak / mean and the stroke, integrated, on a craft only 6x the plate."""
+    from scipy.integrate import solve_ivp
+
+    m, craft, rate, theta, force = 63.0e3, 380.0e3, 2.0, 2.0 * math.pi / 3.0, 14.7e6
+    reduced = m * craft / (m + craft)
+    k = reduced * (theta * rate) ** 2
+    omega = theta * rate
+    pulse = force / rate
+    # The paper's start: spring latched at its steady compression, then a
+    # half-size first pulse.  State: compression, its rate, craft velocity.
+    state = [pulse / (2.0 * m * omega) / math.tan(theta / 2.0), 0.0, 0.0]
+    forces, compressions = [], []
+    for n in range(12):
+        state[1] += (pulse / 2.0 if n == 0 else pulse) / m
+        run = solve_ivp(
+            lambda t, y: [y[1], -k * y[0] / reduced, k * y[0] / craft],
+            (0.0, 1.0 / rate),
+            state,
+            rtol=1e-10,
+            atol=1e-12,
+            dense_output=True,
+        )
+        state = list(run.y[:, -1])
+        if n >= 2:
+            x = run.sol(np.linspace(0.0, 1.0 / rate, 2001))[0]
+            forces.append(k * x)
+            compressions.append(x)
+    f = np.concatenate(forces)
+    x = np.concatenate(compressions)
+    assert f.min() > 0.0  # never leaves the spring below theta = pi
+    assert f.mean() == pytest.approx(force * craft / (m + craft), rel=1e-3)
+    assert f.max() / f.mean() == pytest.approx(peak_to_mean(theta), rel=1e-3)
+    assert peak_to_mean(theta) == pytest.approx(1.209, abs=1e-3)
+    assert x.max() - x.min() == pytest.approx(
+        spring_plate_stroke(force, rate, theta) / m, rel=1e-3
+    )
+
+
+def test_the_parents_s45_ballpark() -> None:
+    """507 t m at 2 Hz, 1 g; 272 t m for the bowl's 1.97 MN at 1 Hz."""
+    theta = 2.0 * math.pi / 3.0
+    assert spring_plate_stroke(14.71e6, 2.0, theta) == pytest.approx(507e3, rel=0.01)
+    assert spring_plate_stroke(1.97e6, 1.0, theta) == pytest.approx(272e3, rel=0.01)
+    spring = gas_spring(14.71e6, 2.0, 1200.0e3, Design())
+    assert spring.plate == pytest.approx(63.4e3, rel=0.01) and spring.stroke == 8.0
+    # As one 63 t assembly the departure needs 4.3 m of the same stroke.
+    shared = gas_spring(1.97e6, 1.0, 600.0e3, Design(), plate=spring.plate)
+    assert shared.stroke == pytest.approx(4.3, abs=0.05)
+    # A survival floor holds the plate; it then swings less.
+    held = gas_spring(1.97e6, 1.0, 600.0e3, Design(), floor=50.0e3)
+    assert held.plate == 50.0e3 and held.stroke < 8.0
+
+
+def test_the_bags_are_the_fibre_wall_and_the_helium() -> None:
+    """3 PV rho / sigma at half of 2.5 GPa, 1600 kg/m^3, plus helium at 293 K."""
+    pv = 1.7e8
+    wall = 3.0 * peak_to_mean(2.0 * math.pi / 3.0) * pv * 1600.0 / 1.25e9
+    helium = pv / (2077.1 * 293.0)
+    assert bag_mass(pv, 2.0 * math.pi / 3.0) == pytest.approx(wall + helium)
+    assert 1.0e3 < bag_mass(pv, 2.0 * math.pi / 3.0) < 1.2e3
+    assert bag_mass(pv, 2.0 * math.pi / 3.0, 5.0e3 / 1.7e8) == pytest.approx(
+        wall + helium + 5.0e3
+    )
+
+
+def test_the_delivery_plate_rides_the_spring() -> None:
+    """S45 item 4: the cargo feels ~1.2x the mean thrust, whatever the stroke."""
     laws = StageLaws.load()
     slow = delivery_unit(75.5, Design(k_delivery=5.6), laws)
     assert slow.pulse == pytest.approx(7.355e6, rel=1e-3)
-    assert 45e3 < slow.plate < 55e3
-    assert slow.start_g < slow.peak_g == 25.0
-    assert slow.pulse_ms == pytest.approx(2 * 2.0 * slow.plate / slow.pulse * 1e3)
+    assert slow.plate == pytest.approx(63.4e3, rel=0.01) and slow.stroke == 8.0
+    assert 1.0e3 < slow.bag < 5.0e3
+    assert 1.2 < slow.start_g < slow.peak_g < 2.0
+    longer = delivery_unit(75.5, Design(k_delivery=5.6, spring_stroke=16.0), laws)
+    assert longer.plate == pytest.approx(slow.plate / 2.0)
+    assert longer.peak_g == pytest.approx(slow.peak_g, rel=0.02)
     child = delivery_unit(75.5, Design(k_delivery=5.6, slow_delivery=False), laws)
-    assert child.climb == 1.0 and 120e3 < child.plate < 156e3
-    # The bound falls as the pulse squared.
-    ratio = (slow.pulse / child.pulse) ** 2
-    assert slow.plate * (child.cargo + child.plate) == pytest.approx(
-        ratio * child.plate * (slow.cargo + slow.plate), rel=0.02
-    )
+    assert child.climb == 1.0
+    # 4 Hz at 3.26 g: m x stroke scales as F / nu^2, so 3.26 / 4 of the 2 Hz plate.
+    assert child.plate == pytest.approx(slow.plate * 3.26 / 4.0, rel=1e-3)
 
 
 def test_doubling_years() -> None:
@@ -224,3 +318,39 @@ def test_the_1_g_push_climbs_faster_and_the_childs_push_does_not() -> None:
     assert push_climb(3.26, end) == pytest.approx(1.1)
     assert 1.4 < lob_climb_factor(push_climb(1.0, end)) < 1.6
     assert lob_climb_factor(1.1) == 1.0
+
+
+def test_sheets_are_kapton_below_130_km_s_and_carbon_fabric_above() -> None:
+    """S43 item 2: $100/kg fabric above 130 km/s; the 100-130 band a switch."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import ESTIMATE
+
+    assert ESTIMATE.sheet_price(99.2) == ESTIMATE.sheet_body == 3.0
+    assert ESTIMATE.sheet_price(121.8) == 3.0
+    assert ESTIMATE.sheet_price(137.1) == ESTIMATE.carbon_fabric == 100.0
+    band = replace(ESTIMATE, band_carbon=True)
+    assert band.sheet_price(121.8) == 100.0 and band.sheet_price(99.2) == 3.0
+
+
+@pytest.mark.slow
+def test_one_shared_spring_leaves_nothing_in_the_parking_orbit() -> None:
+    """S45 item 2: the shared assembly is the heavier leg's plate, flown on."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import fly_unit
+
+    departure = departure_route(9.86, 60.0)
+    push = push_route(9.86, 60.0)
+    assert departure is not None and push is not None
+    shared = fly_unit(departure, push, departure, Design()).lines
+    two = fly_unit(
+        departure, push, departure, replace(Design(), shared_spring=False)
+    ).lines
+    assert shared["push_plate"] == shared["plate_disposal"] == 0.0
+    assert shared["bowl"] == pytest.approx(
+        63.4e3 + shared["bowl_bag"] + 1.0e3, rel=0.01
+    )
+    assert 3.0 < shared["bowl_stroke"] < 8.0  # the departure needs less stroke
+    assert two["push_plate"] > 63.4e3 and two["bowl_stroke"] == pytest.approx(8.0)
+    assert two["bowl_floor"] < two["bowl"] < shared["bowl"]

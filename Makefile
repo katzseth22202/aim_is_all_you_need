@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive plate-jupiter-loop all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive plate-disposal plate-jupiter-loop all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -62,8 +62,11 @@ chamber-departure:  ## Price the walled chamber's departure over the flown chain
 growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
 	python -m src.growth_ledger
 
-solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0074; ~1 min, ARGS="--sweep --child --gaps --parking-days N" adds the depth sweep, the child's rows and the 3/5/10-day gap sweep)
+solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0076; ~1 min, ARGS="--sweep --child --gaps --parking-days N" adds the depth sweep, the child's rows and the 3/5/10-day gap sweep)
 	python -m src.solar_dive_growth $(ARGS)
+
+plate-disposal:  ## The left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076)
+	python -m src.plate_disposal $(ARGS)
 
 plate-jupiter-loop:  ## The Jupiter-only chain on the solar dive's plates, no Sun dive (ADR 0075; ~10 min, ARGS="--family" adds the return family)
 	python -m src.plate_jupiter_loop $(ARGS)

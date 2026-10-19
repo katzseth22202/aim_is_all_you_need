@@ -1819,15 +1819,25 @@ The impact simulation's alternative growth loop (its Results 10-12), charged thr
 this repo's ledger and cost book (`src/solar_dive_growth.py`, `make solar-dive`, ADR
 `0072-the-solar-dive-charge-pusher-replaces-the-chamber`, ADR
 `0073-two-plates-the-visible-sign-and-the-1-g-push`, ADR
-`0074-one-cadence-a-cargo-sized-delivery-plate-and-the-gap`). Returning **Earth-wave**
+`0074-one-cadence-a-cargo-sized-delivery-plate-and-the-gap`, ADR
+`0076-plates-on-springs-the-overtake-law-at-speed-and-carbon-fabric`). Returning **Earth-wave**
 sheets push a lofted launch unit at 400 km and later depart it from the 10-day orbit
 onto the three-synodic **Jovian solar-dive cycle**; **Sun-wave** disks boost it at
 perihelion; its remainder returns as the next Earth wave. No chamber, rods or plug are
 expended.
 
+**Return excess** (X):
+The closure's input: the hyperbolic excess speed *relative to the Sun* that the Sun
+boost leaves the ship with as it climbs out of the Sun's well, 60-175 km/s. "X 60" in
+reports and closure keys (`HEADLINES`, `RETURN_EXCESSES`) means a 60 km/s return excess.
+It is not the wave's speed at Earth: a 60 km/s return at 9.86 R_sun crosses Earth's orbit
+at a 75.5 km/s Earth-relative excess, ~99 km/s at 400 km for the push wave.
+_Avoid_: reading X as an Earth-relative or outbound speed; the parent's prose says
+"a 60 km/s return", never "X 60".
+
 **Earth wave**:
-The returning stream of furled ~100 um Kapton sheets (push wave) and compact
-impactors (departure wave), ~100 km/s Earth-relative, that pushes
+The returning stream of furled ~100 um sheets (push wave) and compact
+impactors (departure wave), ~75-210 km/s Earth-relative, that pushes
 and departs the next launch units. Fleet mass: it flies the cycle and comes back.
 _Avoid_: calling it PuffSats (the child's argon-plate stream), or counting the Sun wave
 in it.
@@ -1855,34 +1865,64 @@ superseded by the **departure bowl** on the **visible sign** (ADR 0073).
 _Avoid_: quoting the canted law for the flown departure.
 
 **Push plate**:
-The 9.5 m flat plate with a 2 m skirt (~11-12 t) that takes the 400 km overtake push at
-2 Hz and 1 g on ~100 um sheets. Sized by its absorber (`I^2/(2 s M a)` at 100 g over 2 m),
-not the point-blast floor, since a planar sheet loads it evenly (the simulation's
-ADR-0064). It flies up in the launch unit and is left in the parking orbit at apoapsis,
-nudged ~4 m/s onto a 100 km perigee (ADR 0074).
+The 9.5 m flat plate with a 2 m skirt that takes the 400 km overtake push at 2 Hz and 1 g
+on ~100 um sheets. Not the point-blast floor, since a planar sheet loads it evenly (the
+simulation's ADR-0064). Sized by the **spring law**: 63 t on an 8 m stroke. It and the
+bowl are one **shared assembly** (ADR 0076).
+_Avoid_: the absorber bound `I^2/(2 s M a)` (ADR 0073's 12 t); it stops the plate every
+pulse and would dissipate 363 MJ per kg of it over a push.
+
+**Spring law**:
+Every plate rides a nearly lossless gas spring tuned across pulses (the parent's
+sec:pusher_plate_damping): each pulse reverses the plate's swing, the craft feels only the
+spring. Swinging `theta` between pulses (2 pi / 3), the peak is `(theta/2)/sin(theta/2)`
+= 1.21x the mean, and `m x stroke = F tan(theta/4) / (2 theta nu^2)`, 507 t m at 2 Hz and
+1 g, whatever the craft's mass. The bags (fibre wall at peak pressure plus helium) are
+~2 t. A plate held at its survival floor swings less. (ADR 0076)
+_Avoid_: a g cap as the plate's sizing; the cargo sees ~1.2-1.7 g however long the stroke.
+
+**Shared assembly**:
+The push plate and the departure bowl flown as one moving mass on one spring, through the
+push and the departure, then diverted into Jupiter (the author's S45 item 2). The bowl
+needs only ~4.4 m of the push plate's 8 m. Within $1 of two springs, and it leaves nothing
+in the parking orbit, whose apoapsis the Moon perturbs (ADR 0076).
+
+**Overtake law at speed**:
+The push's exhaust speed re-priced at the closing speed (the simulation's Result 15,
+`data/fast_wave_push_law.csv`): the rebound at the fireball's arrival speed, the bond toll
+at its real heat. 1-4% below ADR 0074's linear-in-w law at 99-137 km/s and 9% at 208 at
+k ~7-8, but above it at high k and high w, and 10-20% below it at the plate loop's
+55-65 km/s. _Avoid_: the 100 km/s law carried by `w / 100`.
+
+**Sheet material**:
+Growth sheets are 100 um Kapton up to 130 km/s and dry woven carbon fabric above it,
+$100/kg (the parent's hypothesis, between bulk tow ~$34 and retail ~$145-167). The
+100-130 km/s band is unrun: Kapton by default, carbon a switch. Each wave is priced by its
+own stream at 400 km: the push wave by the growth stream, the departure wave by its
+delivery stream (ADR 0076).
 
 **Delivery plate**:
 The plate that pushes a cargo lob to L1. Like every Earth push it flies 2 Hz and 1 g from
-its own climbing lob (ADR 0074). It is sized by the same absorber bound as the push plate,
-but at the data-center cargo's **25 g** cap: ~45-51 t, 24-28 ms a pulse. The child's
-156 t plate was sized for its 4 Hz, 12 MN s pulse.
-_Avoid_: carrying the child's 156 t to the 2 Hz delivery; reading the delivery's cadence
-or lob from the growth push's knobs.
+its own climbing lob (ADR 0074), on the **spring law**: 63 t plus ~2 t of bags on 8 m, the
+cargo peaking at 1.2-1.7 g (ADR 0076).
+_Avoid_: ADR 0074's 25 g absorber bound (~51 t); reading the delivery's cadence or lob
+from the growth push's knobs.
 
 **Gap** (growth-to-departure):
 How much earlier the push wave arrives than the departure wave. It is also the parking
 orbit's period (the child's **split gap**). The push route carries it
 (`DiveRoute.early_days`), and every leg reads it from there. Shorter gaps slow the growth
 stream (the near-Sun hyperbola must straighten to cross 1 AU earlier) and widen the
-apoapsis turn: 5 days costs 2-3% of growth and is ~$2 cheaper dear (ADR 0074).
+apoapsis turn: 5 days costs 5% of growth at 9.86 R_sun at the same dear break-even, and at
+4 R_sun keeps the sheets on Kapton (119 km/s) and is $9 cheaper (ADR 0076).
 _Avoid_: overriding a module default to change it; it is frozen into function defaults and
 caches.
 
 **Departure bowl**:
-The delta/D 0.5 paraboloid (~13-22 t with its 1 t collar) that departs the ship: compact
-impactors thread a hole and stop in a charge at its focus, as at the Sun, at 1 Hz and a
-0.25 g mean (the simulation's ADR-0065). Sized by the paraboloid's survival floor at the
-pulse's energy. Flies up with the push plate, rides through the departure, then diverts
+The delta/D 0.5 paraboloid that departs the ship: compact impactors thread a hole and stop
+in a charge at its focus, as at the Sun, at 1 Hz and a 0.25 g mean (the simulation's
+ADR-0065). Its survival floor at the pulse's energy (12-19 t) is a minimum under the
+spring law. Part of the **shared assembly**: rides through the departure, then diverts
 into Jupiter.
 
 **Visible sign**:
@@ -1922,9 +1962,10 @@ nozzle (`src/plate_jupiter_loop.py`, `make plate-jupiter-loop`, ADR
 `0075-the-jupiter-only-chain-on-plates-does-not-pay`). The Earth half is the solar dive's
 `fly_earth`. The departure meets the nozzle wave nearly head-on (160-180 deg, 66-76 km/s)
 on the bowl, with the chain's stream-in-view loss. The ship returns as sheets less 1%
-avionics and its wave's return burn. At best (flown chain, 1 g departure) it gives 2.59x per
-3S and $238 dear, against the Sun dive's 3.80x and $118. At the paper's 0.25 g it gives 2.01x
-and $573.
+avionics and its wave's return burn. ADR 0075 had it at 2.59x per 3S and $238 dear at
+best (1 g departure), 2.01x and $573 at 0.25 g. On spring plates and the overtake law at
+its slow 55-65 km/s streams (ADR 0076) it falls to 1.68x / $1654 at best (0.5 g) and
+1.27x / $9436 at 0.25 g, against the Sun dive's 3.38x and $144.
 
 **Departure rate** (plate loop):
 The bowl's mean acceleration. It sets the burn's length and so its stream-in-view loss,

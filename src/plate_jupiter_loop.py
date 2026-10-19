@@ -419,8 +419,11 @@ def value_chain(
     share = balance(p0, r0, 1.0 - MISS_FLOOR).push_share
     seed_mass = share * p0.lines["departing"] + (1 - share) * r0.lines["departing"]
     seed_contents = 0.0
+    # The loop's streams are 57-69 km/s, so its sheets price as Kapton; the
+    # stream is read anyway so a faster window would be charged its fabric.
+    body = prices.sheet_price(wave_speed(windows[0].stream_excess, PUSH_ALTITUDE))
     for unit, part in ((p0, share), (r0, 1 - share)):
-        lines = _unit_dollars(unit, prices, plates, packages, guidance, lob=0.0)
+        lines = _unit_dollars(unit, prices, plates, packages, guidance, 0.0, body)
         seed_contents += part * sum(lines.values())
     seed_outlay = seed_price_per_kg * seed_mass + seed_contents
     first_return = share * p0.returned + (1 - share) * r0.returned
@@ -458,23 +461,21 @@ def value_chain(
         new = count * (min(growth.growth, 1.0) if harvesting else growth.growth)
         surplus = max(caught - new * growth.sheets_per_unit, 0.0) if harvesting else 0.0
         cost: Dict[str, float] = {}
+        body = prices.sheet_price(wave_speed(windows[now].stream_excess, PUSH_ALTITUDE))
         for unit, part in (
             (p_unit, growth.push_share),
             (r_unit, 1 - growth.push_share),
         ):
             for key, value in _unit_dollars(
-                unit, prices, plates, packages, guidance, lob
+                unit, prices, plates, packages, guidance, lob, body
             ).items():
                 cost[key] = cost.get(key, 0.0) + part * value * new
         delivery = delivery_unit(windows[now].stream_excess, design, laws)
         deliveries = surplus / delivery.sheets
         cost["delivery_lob"] = lob * delivery.climb * 1500.0e3 * deliveries
-        cost["delivery_plate"] = (
-            prices.plate_curve(prices.earth_plate_share).batch_cost(
-                plates["push"], deliveries
-            )
-            * delivery.plate
-        )
+        cost["delivery_plate"] = prices.plate_curve(
+            prices.earth_plate_share
+        ).batch_cost(plates["push"], deliveries) * (delivery.plate + delivery.bag)
         cost["delivery_charge"] = prices.polyethylene * delivery.charge * deliveries
         plates["push"] += deliveries
         cargo = deliveries * delivery.cargo

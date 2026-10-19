@@ -7,9 +7,10 @@ growth loop from the child paper's chamber cycle:
 1. **Push.** The returning **Earth wave** (~100 um Kapton sheets at ~100 km/s)
    overtakes a lofted launch unit at 400 km and pushes it onto the 10-day
    parking orbit at 2 Hz and 1 g, each sheet striking a polyethylene charge
-   held off a 12 t flat **push plate** (the simulation's ADR-0064).  The lob
+   held off a flat **push plate** (the simulation's ADR-0064).  The lob
    climbs at ~2.4 km/s so that the unit stays above 400 km until it is
-   orbital.  The push plate is left in the parking orbit.
+   orbital.  Every plate rides a nearly lossless gas spring tuned across
+   pulses, which sets its mass with its stroke (ADR 0076): 63 t on 8 m.
 2. **Departure.** Ten days later a second Earth wave of compact impactors
    meets the ship at the 600 km periapsis on the **visible sign**, ~117-140
    degrees to its thrust axis (the other sign's stream passes through Earth,
@@ -17,20 +18,24 @@ growth loop from the child paper's chamber cycle:
    charge at its focus (the simulation's ADR-0065), at 1 Hz and 0.25 g, and
    sends the ship onto the three-synodic Earth -> Jupiter -> Sun -> Earth
    closure of :mod:`src.jovian_solar_dive_cycle`.  The bowl then diverts into
-   Jupiter.  Both Earth plates fly up in the launch unit (ADR 0073).
+   Jupiter.  The push plate and the bowl are one moving assembly on one
+   spring, so nothing is left in the parking orbit (ADR 0076; two springs,
+   the push plate left and nudged down, are kept as a comparison).
 3. **Jupiter.** The ship rides an unpowered flyby into a prograde dive.  Its
    **Sun-wave** graphite disks ride a carrier bus to a lower perijove and burn
    onto the mirror-image retrograde dive, so they meet the ship head-on.
 4. **Sun.** The disks strike polyethylene charges in a paraboloid over an arc
    of hours around periapsis, at 2 Hz.
 5. **Return.** The ship's remainder is released as furled sheets: the next
-   Earth wave.
+   Earth wave.  Its sheets are Kapton below 130 km/s and dry woven carbon
+   fabric above (the simulation's Result 15).
 
 Everything is float arithmetic (km, km/s, kg, years, dollars), like
 :mod:`src.growth_cost`; the closures come from the Quantity-free conic code.
 The stage laws (exhaust speed against slug ratio ``k``) are the impact
 simulation's, vendored in ``data/solar_dive_stage_laws.csv`` and, for the
-departure bowl, ``data/departure_hole_law.csv``.
+departure bowl, ``data/departure_hole_law.csv``; the overtake push's is the
+simulation's law re-priced at speed, ``data/fast_wave_push_law.csv``.
 
 **Growth is counted in launch units.**  Both Earth waves are fleet mass that
 flies the cycle and returns, like the child's growth PuffSats and rods.  The
@@ -82,6 +87,9 @@ STAGE_LAWS = (
     Path(__file__).resolve().parent.parent / "data" / "solar_dive_stage_laws.csv"
 )
 HOLE_LAW = Path(__file__).resolve().parent.parent / "data" / "departure_hole_law.csv"
+FAST_WAVE_LAW = (
+    Path(__file__).resolve().parent.parent / "data" / "fast_wave_push_law.csv"
+)
 
 _MU_EARTH = 398600.4418
 _R_EARTH = 6378.137
@@ -122,8 +130,29 @@ SUN_PLATE_PULSE = 1.0  # kg at 400 km/s
 SUN_PLATE_SPEED = 400.0  # km/s
 BORE_COLLAR = 1.0e3  # kg, the simulation's ~0.5-1 t; the bowl's hole collar too
 CHARGE_MOUNT_FRACTION = 0.01  # mounts per kg of charge they hold
-ABSORBER_STROKE = 2.0e-3  # km: a short-stroke absorber
-G_CAP = 100.0  # peak g the ship's robust cargo takes (author, 2026-10-16)
+#: Every plate rides a nearly lossless gas spring tuned across pulses (the
+#: parent's sec:pusher_plate_damping and S45): it never stops, each pulse
+#: reverses its swing, and the craft feels only the spring.  Between pulses it
+#: swings through ``theta`` of its natural motion; 2 pi / 3 holds the peak at
+#: 1.21x the mean, and theta = pi is the edge of contact.  The stroke is the
+#: author's (2026-10-19).  The absorber bound ``I^2 / (2 s M a)`` it replaces
+#: brought the plate to rest every pulse, which would dissipate its kinetic
+#: energy each time: 363 MJ per kg of the 12.2 t push plate over a push.
+SPRING_STROKE = 8.0  # m
+SPRING_THETA = 2.0 * math.pi / 3.0
+#: The bag: a fibre wall carrying its gas in tension needs at least
+#: ``3 P V rho / sigma`` (the parent's S45 item 3), worked at half a 2.5 GPa,
+#: 1600 kg/m^3 fibre (Vectran-class) and charged at the peak pressure; the
+#: fill is helium at room temperature.  The paper's liner, felt, rings and
+#: guides (5 t on its 1.7e8 J bag) are a sensitivity (``Design.bag_fittings``).
+BAG_WALL_FACTOR = 3.0
+BAG_FIBRE_STRENGTH = 2.5e9  # Pa
+BAG_FIBRE_DENSITY = 1600.0  # kg/m^3
+BAG_SAFETY = 2.0
+HELIUM_GAMMA = 5.0 / 3.0
+HELIUM_GAS_CONSTANT = 2077.1  # J/(kg K)
+BAG_TEMPERATURE = 293.0  # K
+PAPER_BAG_FITTINGS = 5.0e3 / 1.7e8  # kg per J of PV: the paper's 5 t on 1.7e8 J
 #: Film per unit impulse: the spray cup's vapor-shielded 4-6 kg per 12 MN s
 #: pulse (growth_ledger.SPRAY_CUP_FILM_PER_PULSE), on both Earth plates.  The Sun plate's is scaled
 #: by its gas's energy per unit impulse (~v_e) over the Earth push's, to the
@@ -143,20 +172,33 @@ PLATE_DIVERT = 0.020  # km/s: the departure bowl's nudge into Jupiter
 OCCULTATION_HALF_ANGLE = math.degrees(math.asin(6378.137 / (6378.137 + 600.0)))
 
 # --- The L1 delivery (harvest.py).  It flies at 2 Hz and 1 g from its own
-# climbing lob, as the growth push does (the parent's S39), on a plate sized
-# by the absorber bound for the data-center cargo's g cap.  The child's 4 Hz,
-# 3.26 g delivery from the 1.1 km/s lob, on its 156 t plate and absorber, is
-# kept as a comparison (``Design.slow_delivery``); at 25 g its plate comes to
-# ~135 t, a little under the child's 150 t.
+# climbing lob, as the growth push does (the parent's S39), on the spring law
+# like every plate, so the cargo feels ~1.2x the mean thrust.  The child's
+# 4 Hz, 3.26 g delivery from the 1.1 km/s lob is kept as a comparison
+# (``Design.slow_delivery``).
 L1_DISTANCE = 1.5e6  # km
 HALO_INSERTION = 0.030  # km/s
 CHILD_DELIVERY_G = 3.26
 CHILD_DELIVERY_RATE = 4.0  # Hz
-#: A rack server's non-operating shock rating, 25 g over 10 ms (the parent's
-#: citation, S39 item 2).  The absorbed pulse is longer than 10 ms, so the cap
-#: is read as a peak acceleration, which is an assumption: a longer pulse at the
-#: same peak drives a server's low modes harder than the rated half-sine does.
-CARGO_G_CAP = 25.0
+
+# --- The sheets' material, by the stream they fly in at 400 km (the
+# simulation's Result 15, the parent's S43 item 2): 100 um Kapton holds at
+# 99 km/s and fails at 132; dry woven carbon fabric flies above 130 km/s;
+# 100-130 km/s is unrun (``SolarDivePrices.band_carbon``).  The growth sheets
+# fly the growth stream; the departure wave's returns are priced by their
+# delivery stream at 400 km, the faster of their two uses.
+KAPTON_HOLDS = 100.0  # km/s
+KAPTON_FAILS = 130.0  # km/s
+
+
+def sheet_material(stream: float) -> str:
+    """The impactor the overtake law charges: carbon above 130 km/s, else Kapton.
+
+    In the 100-130 km/s band either may fly (``SolarDivePrices.band_carbon``);
+    the law charges Kapton there, which moves ``v_e`` under 0.1% (Result 15).
+    """
+    return "graphite" if stream > KAPTON_FAILS else "Kapton"
+
 
 # --- Search bounds (recorded so the optimum is reproducible; CLAUDE.md).
 K_PUSH = (5.0, 40.0)
@@ -180,10 +222,13 @@ class StageLaws:
         earth: Canted departure (ADR 0072's, the hidden sign): ``(theta_deg,
             w km/s, k, v_e km/s)`` rows.
         sun: Sun boost: ``(w km/s, k, v_e km/s)`` rows.
-        push: Overtake push at 100 km/s: ``(k, v_e km/s)`` rows.
+        push: Overtake push at 100 km/s: ``(k, v_e km/s)`` rows (ADR 0074's
+            law, carried linearly in ``w``; kept for comparison).
         capture: The departure bowl's impulse per ``m w``: ``(theta_deg, k,
             capture)`` rows.
         hole: The bowl's ``v_e / (w capture)``: ``(k, w km/s, factor)`` rows.
+        fast: The overtake push re-priced at each closing speed (the
+            simulation's Result 15): ``(impactor, k, w km/s, v_e km/s)`` rows.
     """
 
     earth: Tuple[Tuple[float, float, float, float], ...]
@@ -191,6 +236,7 @@ class StageLaws:
     push: Tuple[Tuple[float, float], ...]
     capture: Tuple[Tuple[float, float, float], ...] = ()
     hole: Tuple[Tuple[float, float, float], ...] = ()
+    fast: Tuple[Tuple[str, float, float, float], ...] = ()
 
     @staticmethod
     @functools.lru_cache(maxsize=None)
@@ -198,6 +244,7 @@ class StageLaws:
         path: Path = STAGE_LAWS,
         bonds: str = "carbon atomic",
         hole_path: Path = HOLE_LAW,
+        fast_path: Path = FAST_WAVE_LAW,
     ) -> "StageLaws":
         """Read the vendored tables.
 
@@ -206,6 +253,7 @@ class StageLaws:
             bonds: ``carbon atomic`` (headline) or ``bonds returned`` (the
                 bowl's ``condensed`` rows).
             hole_path: The departure bowl's CSV.
+            fast_path: The overtake law at speed.
 
         Returns:
             The laws.
@@ -230,8 +278,18 @@ class StageLaws:
                     capture.append((float(row["theta_deg"]), k, value))
                 elif row["bonds"] == hole_bonds:
                     hole.append((k, float(row["w_m_s"]) / 1e3, value))
+        with fast_path.open() as handle:
+            fast = tuple(
+                (
+                    row["impactor"],
+                    float(row["k"]),
+                    float(row["w_km_s"]),
+                    float(row["v_e_km_s"]),
+                )
+                for row in csv.DictReader(handle)
+            )
         return StageLaws(
-            tuple(earth), tuple(sun), tuple(push), tuple(capture), tuple(hole)
+            tuple(earth), tuple(sun), tuple(push), tuple(capture), tuple(hole), fast
         )
 
     def earth_ve(self, k: float, w: float, theta_deg: float) -> float:
@@ -264,10 +322,33 @@ class StageLaws:
         _check(w, speeds[0], speeds[-1], "Sun closing speed")
         return float(np.interp(w, speeds, values))
 
-    def push_ve(self, k: float, w: float) -> float:
-        """Overtake push exhaust speed (km/s), carried from 100 km/s by ``w / 100``."""
-        rows = sorted(self.push)
-        return _log_interp(k, [r[0] for r in rows], [r[1] for r in rows]) * w / 100.0
+    def push_ve(
+        self, k: float, w: float, impactor: str = "Kapton", law: str = "fast wave"
+    ) -> float:
+        """Overtake push exhaust speed (km/s) at slug ratio ``k`` and closing ``w``.
+
+        ``fast wave`` (headline): the simulation's Result 15 law, Result 11's
+        flat-plate point fireball re-priced at ``w`` (rebound at the
+        fireball's arrival speed, bond toll at its real heat, the impactor's
+        own atomization charged), vendored on a (k, w) grid and interpolated
+        linearly in log k and in w.  ``linear``: ADR 0074's, the 100 km/s rows
+        carried by ``w / 100``, 1-4% high at 99-137 km/s and 9% at 208.
+        """
+        if law == "linear":
+            rows = sorted(self.push)
+            return (
+                _log_interp(k, [r[0] for r in rows], [r[1] for r in rows]) * w / 100.0
+            )
+        speeds = sorted({r[2] for r in self.fast if r[0] == impactor})
+        _check(w, speeds[0], speeds[-1], "overtake closing speed")
+        values = []
+        for speed in speeds:
+            grid = sorted(
+                (r for r in self.fast if r[0] == impactor and r[2] == speed),
+                key=lambda r: r[1],
+            )
+            values.append(_log_interp(k, [r[1] for r in grid], [r[3] for r in grid]))
+        return float(np.interp(w, speeds, values))
 
     def hole_ve(self, k: float, w: float, theta_deg: float) -> float:
         """Departure-bowl exhaust speed (km/s), per kg of charge.
@@ -613,6 +694,11 @@ def apoapsis_methalox(rotation_deg: float, days: float = PARKING_DAYS) -> float:
 #: The push plate's disposal perigee: low enough that drag takes it within a
 #: few passes (assumption).
 DISPOSAL_PERIGEE = 100.0
+#: The Moon moves the 10-day orbit's next perigee by hundreds of km from its
+#: apoapsis; the nudge that reaches 100 km is 0-15 m/s with the Moon more than
+#: 20 deg from the apoapsis (src.plate_disposal, ADR 0076), so the ledger
+#: charges the largest, or the two-body nudge where that is larger.
+LUNAR_DISPOSAL_NUDGE = 0.015  # km/s
 
 
 def plate_disposal_dv(
@@ -621,15 +707,17 @@ def plate_disposal_dv(
     """The apoapsis nudge that drops the left push plate's perigee to ``target`` (km/s).
 
     The plate is left in the parking orbit with its perigee at the push's
-    400 km or a little above, so it would cross low orbit every period.  Two
-    body; the Moon's pull on a 385 000 km apoapsis (10 days) is not modelled.
+    400 km or a little above, so it would cross low orbit every period.  The
+    two-body nudge, or :data:`LUNAR_DISPOSAL_NUDGE` where that is larger: the
+    Moon's pull on a 385 000 km apoapsis (10 days) moves the perigee far more
+    than two-body (:mod:`src.plate_disposal`).
     """
     a = _orbit_a(days)
     low = _R_EARTH + perigee
     apo = 2.0 * a - low
     before = math.sqrt(_MU_EARTH * (2.0 / apo - 1.0 / a))
     after = math.sqrt(_MU_EARTH * (2.0 / apo - 2.0 / (apo + _R_EARTH + target)))
-    return before - after
+    return max(before - after, LUNAR_DISPOSAL_NUDGE)
 
 
 def wave_speed(excess: float, altitude: float) -> float:
@@ -933,10 +1021,18 @@ class Design:
             not survive the child's 4 Hz plume, the simulation's S37); False
             flies the child's 4 Hz, 3.26 g delivery from its 1.1 km/s lob.
             Either way the delivery's cadence is its own, not ``push_g``.
-        delivery_g_cap: Peak g the data-center cargo takes, which sizes the
-            delivery plate.
         film_exponent: The Sun film's scaling with energy per unit impulse.
-        g_cap: Peak g the ship takes.
+        spring_stroke: Every plate's stroke on its gas spring (m); a plate
+            whose survival floor binds swings less.
+        spring_theta: The spring's swing between pulses (rad), <= pi.
+        shared_spring: Fly the push plate and the bowl as one moving assembly
+            on one spring through the push and the departure (the author's
+            S45 item 2: a little cheaper at every closure, and nothing is left
+            in the parking orbit); False flies two, the push plate left there.
+        push_law: The overtake law (:meth:`StageLaws.push_ve`): ``fast wave``
+            (the simulation's, headline) or ``linear`` (ADR 0074's).
+        bag_fittings: Liner, felt, rings and guides per joule of the bag's PV
+            (kg/J; 0 headline, :data:`PAPER_BAG_FITTINGS` the paper's).
         carrier_perijove: The disks' highest perijove (Jupiter radii); lower
             if their turn needs it.
         bonds: ``carbon atomic`` (headline) or ``bonds returned``.
@@ -956,9 +1052,12 @@ class Design:
     departure_rate: float = DEPARTURE_RATE
     charge_lob_climb: bool = True
     slow_delivery: bool = True
-    delivery_g_cap: float = CARGO_G_CAP
     film_exponent: float = 1.0
-    g_cap: float = G_CAP
+    spring_stroke: float = SPRING_STROKE
+    spring_theta: float = SPRING_THETA
+    shared_spring: bool = True
+    push_law: str = "fast wave"
+    bag_fittings: float = 0.0
     carrier_perijove: float = CARRIER_PERIJOVE
     bonds: str = "carbon atomic"
     shield_exponent: float = 0.0
@@ -990,10 +1089,115 @@ def _plate_for(pulse: float, rated: float, area: float, speed_ratio: float) -> f
     )
 
 
-def _inertia_plate(pulse_impulse: float, ship: float, g_cap: float) -> float:
-    """Plate mass that holds the ship under ``g_cap`` over the absorber's stroke."""
-    stroke_m = ABSORBER_STROKE * 1e3
-    return pulse_impulse**2 / (2.0 * stroke_m * ship * g_cap * 9.80665)
+def peak_to_mean(theta: float) -> float:
+    """The spring force's peak over its mean, ``(theta/2) / sin(theta/2)``."""
+    return (theta / 2.0) / math.sin(theta / 2.0)
+
+
+def spring_plate_stroke(force: float, rate: float, theta: float) -> float:
+    """Plate mass times stroke on the spring law (kg m).
+
+    In the steady state each pulse ``J = F / nu`` flips the plate's velocity
+    relative to the craft from ``-J / 2m`` to ``+J / 2m``, and between pulses
+    the relative motion is an arc ``theta`` of a cosine.  Its swing is
+    ``J tan(theta/4) / (2 m omega)`` with ``omega = theta nu``, so
+    ``m x stroke = F tan(theta/4) / (2 theta nu^2)``: 0.138 F / nu^2 at
+    2 pi / 3.  The relative velocity step is ``J / m`` whatever the craft's
+    mass, so this holds for a light craft too; the craft's mass enters only
+    the stiffness that sets ``theta`` (the reduced mass, :func:`gas_spring`).
+
+    Args:
+        force: The mean thrust (N).
+        rate: Pulses a second.
+        theta: The swing between pulses (rad).
+
+    Returns:
+        ``m x stroke`` (kg m).
+    """
+    _check(theta, 1e-6, math.pi, "spring theta")
+    return force * math.tan(theta / 4.0) / (2.0 * theta * rate**2)
+
+
+@dataclass(frozen=True)
+class GasSpring:
+    """One plate on its gas spring.
+
+    Attributes:
+        plate: The moving plate (kg).
+        stroke: Its swing per pulse (m).
+        bag: The bags' wall, helium and fittings (kg).
+        pv: The gas's mean pressure times volume (J).
+        peak_ratio: The force's peak over its mean.
+        swing_speed: The plate's speed relative to the craft at each pulse (m/s).
+        peak_g: The craft's peak acceleration on the spring (g).
+    """
+
+    plate: float
+    stroke: float
+    bag: float
+    pv: float
+    peak_ratio: float
+    swing_speed: float
+    peak_g: float
+
+
+def bag_mass(pv: float, theta: float, fittings: float = 0.0) -> float:
+    """The bags' wall at the peak pressure, the helium fill and the fittings (kg)."""
+    wall = (
+        BAG_WALL_FACTOR
+        * peak_to_mean(theta)
+        * pv
+        * BAG_FIBRE_DENSITY
+        * BAG_SAFETY
+        / BAG_FIBRE_STRENGTH
+    )
+    helium = pv / (HELIUM_GAS_CONSTANT * BAG_TEMPERATURE)
+    return wall + helium + fittings * pv
+
+
+def gas_spring(
+    force: float,
+    rate: float,
+    stack: float,
+    design: Design,
+    floor: float = 0.0,
+    plate: Optional[float] = None,
+) -> GasSpring:
+    """A plate sized by the spring law at the design's stroke, or held at ``floor``.
+
+    The stiffness is ``mu (theta nu)^2`` with ``mu`` the plate's and craft's
+    reduced mass.  The spring carries the craft's share of the thrust,
+    ``F M / (m + M)``, and a gas spring's mean ``P V`` is ``gamma`` times its
+    square over ``k`` whatever the pressure (the parent's
+    sec:pusher_plate_damping).
+
+    Args:
+        force: The mean thrust (N).
+        rate: Pulses a second.
+        stack: Everything the pulses push at the leg's end, plate included (kg).
+        design: ``spring_stroke``, ``spring_theta`` and ``bag_fittings``.
+        floor: The plate's survival floor (kg).
+        plate: A plate already fixed (a shared assembly); overrides the law.
+
+    Returns:
+        The spring.
+    """
+    theta = design.spring_theta
+    product = spring_plate_stroke(force, rate, theta)
+    m = plate if plate is not None else max(floor, product / design.spring_stroke)
+    craft = stack - m
+    reduced = m * craft / (m + craft)
+    stiffness = reduced * (theta * rate) ** 2
+    pv = HELIUM_GAMMA * (force * craft / stack) ** 2 / stiffness
+    return GasSpring(
+        plate=m,
+        stroke=product / m,
+        bag=bag_mass(pv, theta, design.bag_fittings),
+        pv=pv,
+        peak_ratio=peak_to_mean(theta),
+        swing_speed=force / (2.0 * m * rate),
+        peak_g=peak_to_mean(theta) * force / (stack * 9.80665),
+    )
 
 
 @dataclass(frozen=True)
@@ -1031,9 +1235,10 @@ def fly_earth(
 
     Shared by the solar dive (:func:`fly_unit`) and the Jupiter-only plate
     loop (:mod:`src.plate_jupiter_loop`): both Earth plates fly up in the
-    unit (ADR 0073); the push plate is nudged down and left in the parking
-    orbit at apoapsis, before the methalox burn; the departure bowl rides
-    through the departure, then diverts into Jupiter.
+    unit (ADR 0073).  As one shared assembly (``Design.shared_spring``,
+    ADR 0076) they ride through the departure and divert into Jupiter; as
+    two, the push plate is nudged down and left in the parking orbit at
+    apoapsis, before the methalox burn.
 
     Args:
         push_stream: The growth wave's speed at 400 km (km/s).
@@ -1053,15 +1258,24 @@ def fly_earth(
     # skirted 9.5 m plate.  Its thrust is set on the unit at the start; the
     # lob climbs fast enough to keep the unit above 400 km until it is
     # orbital (push_climb), charged as the booster's lost lofted mass.
-    ve_push = law.push_ve(design.k_push, push_stream) * PUSH_SKIRT_SHARE
+    ve_push = (
+        law.push_ve(
+            design.k_push, push_stream, sheet_material(push_stream), design.push_law
+        )
+        * PUSH_SKIRT_SHARE
+    )
     push_dv = periapsis_speed(days, PUSH_ALTITUDE)
     mr_push = math.exp(push_dv / ve_push)
     pushed = LAUNCH_UNIT / mr_push
     push_charge = LAUNCH_UNIT - pushed
     push_sheets = push_charge / design.k_push
     push_impulse = push_charge * ve_push * 1e3
-    push_pulse = design.push_g * 9.80665 * LAUNCH_UNIT / design.push_rate
-    push_plate = _inertia_plate(push_pulse, pushed, design.g_cap)
+    push_force = design.push_g * 9.80665 * LAUNCH_UNIT
+    push_pulse = push_force / design.push_rate
+    push_spring = gas_spring(push_force, design.push_rate, pushed, design)
+    # Two springs: the push plate and its bags are left behind.  One shared
+    # assembly: they ride on through the departure as the bowl (below).
+    push_plate = 0.0 if design.shared_spring else push_spring.plate + push_spring.bag
     rise = push_climb(design.push_g, push_dv) if design.charge_lob_climb else 1.1
     # 2. Apoapsis: nudge the push plate's perigee down and leave it (the
     # parent's S39 item 5), raise periapsis and turn the orbit onto the
@@ -1092,26 +1306,46 @@ def fly_earth(
     departure_pulse = departure_impulse / (burn_seconds * design.departure_rate)
     lines["departure_loss"] = dv - impulsive
     lines["departure_minutes"] = burn_seconds / 60.0
-    # The bowl: the paraboloid's point-blast survival floor at the pulse's
-    # energy, checked for the g cap, plus the hole's collar.
+    # The bowl: the spring law, held at the paraboloid's point-blast survival
+    # floor at the pulse's energy, plus the hole's collar.  Shared, the one
+    # assembly is the heavier of the two legs' plates, and its bags the
+    # larger of their two fills (one bag set, retuned by its pressure).
     pulse_impactor = departure_pulse / (design.k_earth * ve_earth * 1e3)
-    bowl = (
-        max(
-            _plate_for(
-                pulse_impactor,
-                SUN_PLATE_PULSE,
-                SUN_PLATE_AREA,
-                geometry.closing / SUN_PLATE_SPEED,
-            ),
-            _inertia_plate(departure_pulse, after, design.g_cap),
-        )
-        + BORE_COLLAR
+    floor = _plate_for(
+        pulse_impactor,
+        SUN_PLATE_PULSE,
+        SUN_PLATE_AREA,
+        geometry.closing / SUN_PLATE_SPEED,
     )
+    departure_force = departure_pulse * design.departure_rate
+    bowl_spring = gas_spring(
+        departure_force, design.departure_rate, after, design, floor
+    )
+    bags = bowl_spring.bag
+    if design.shared_spring:
+        assembly = max(push_spring.plate, bowl_spring.plate)
+        push_spring = gas_spring(
+            push_force, design.push_rate, pushed, design, plate=assembly
+        )
+        bowl_spring = gas_spring(
+            departure_force, design.departure_rate, after, design, plate=assembly
+        )
+        bags = max(push_spring.bag, bowl_spring.bag)
+    bowl = bowl_spring.plate + bags + BORE_COLLAR
     film_earth = FILM_PER_IMPULSE * (push_impulse + departure_impulse)
     divert = bowl * (math.exp(PLATE_DIVERT / (STORABLE_ISP * _G0)) - 1.0)
     mounts_earth = CHARGE_MOUNT_FRACTION * (push_charge + departure_charge)
     lines.update(
         push_plate=push_plate,
+        push_bag=push_spring.bag,
+        push_stroke=push_spring.stroke,
+        push_swing=push_spring.swing_speed,
+        bowl_floor=floor,
+        bowl_bag=bags,
+        bowl_stroke=bowl_spring.stroke,
+        spring_peak=push_spring.peak_ratio,
+        push_peak_g=push_spring.peak_g,
+        departure_peak_g=bowl_spring.peak_g,
         plate_disposal=disposal,
         plate_disposal_dv=disposal_dv,
         bowl=bowl,
@@ -1202,14 +1436,17 @@ def fly_unit(
     final = ship / mr_sun
     pulses = SUN_PULSE_RATE * design.arc_hours * 3600.0
     pulse_disk = disks / pulses
-    sun_plate = max(
+    sun_spring = gas_spring(
+        pulse_disk * design.k_sun * ve_sun * 1e3 * SUN_PULSE_RATE,
+        SUN_PULSE_RATE,
+        final,
+        design,
         _plate_for(
             pulse_disk, SUN_PLATE_PULSE, SUN_PLATE_AREA, w_sun / SUN_PLATE_SPEED
         ),
-        _inertia_plate(pulse_disk * design.k_sun * ve_sun * 1e3, final, design.g_cap),
     )
     dead = {
-        "sun_plate": sun_plate,
+        "sun_plate": sun_spring.plate + sun_spring.bag,
         "bore_collar": BORE_COLLAR,
         "shield": SHIELD_FRACTION
         * ship
@@ -1231,6 +1468,8 @@ def fly_unit(
         mr_sun=mr_sun,
         ve_sun=ve_sun,
         carrier_burn=burn.burn,
+        sun_bag=sun_spring.bag,
+        sun_stroke=sun_spring.stroke,
     )
     return UnitLedger(
         earth.push_sheets, earth.departure_sheets, max(returned, 0.0), disks, lines
@@ -1344,8 +1583,14 @@ class SolarDivePrices:
         storable: Per kilogram of the carrier's propellant (assumption).
         shield: Per kilogram of shade (assumption).
         avionics: Per kilogram (assumption).
-        sheet_body: Per kilogram of sheet body (the child's PuffSat body;
-            :data:`GRAPHITE_SHEET_BODY` for graphite sheets, a sensitivity).
+        sheet_body: Per kilogram of Kapton sheet body (the child's PuffSat
+            body).
+        carbon_fabric: Per kilogram of dry woven carbon-fabric sheet body,
+            flown where Kapton fails (the parent's hypothesis, S43 item 2:
+            between bulk tow at ~$34/kg and retail dry triaxial fabric at
+            ~$145-167/kg, Rock West's 532 g/m^2 Qiso at $85-99 a yard, 2026-10).
+        band_carbon: Fly carbon fabric in the unrun 100-130 km/s band too
+            (False: Kapton, which holds at 99 km/s).
         mounts: Per kilogram of charge mount (assumption).
         lob_climb: The child's lob arriving at 400 km still climbing at 1.1
             km/s (lob_rise.booster_growth, ADR 0042-0043), for parity.  A
@@ -1368,10 +1613,18 @@ class SolarDivePrices:
     shield: float = 1000.0
     avionics: float = 1000.0
     sheet_body: float = 3.0
+    carbon_fabric: float = 100.0
+    band_carbon: bool = False
     mounts: float = 50.0
     lob_climb: float = 1.0648
     package: LearningCurve = LearningCurve(100.0, 10.0, 0.8, anchor=1.0e5)
     packages_per_kg: float = 2.0 / 60.0
+
+    def sheet_price(self, stream: float) -> float:
+        """Per kilogram of sheet body flying in a ``stream`` km/s wave at 400 km."""
+        if stream > KAPTON_FAILS or (stream > KAPTON_HOLDS and self.band_carbon):
+            return self.carbon_fabric
+        return self.sheet_body
 
     def plate_curve(self, share: float) -> LearningCurve:
         """The spray cup's per-kilogram curve at ``share`` of its price."""
@@ -1379,13 +1632,6 @@ class SolarDivePrices:
 
 
 ESTIMATE = SolarDivePrices()
-
-#: Graphite sheet body (the parent's S39 item 4), per kilogram: flexible
-#: graphite foil is listed at Rs 350-1000/kg for 0.35-3 mm rolls and Rs 1800/kg
-#: for 0.5 mm (IndiaMART asking prices, 2026-10, about $4-21/kg); a 100 um film
-#: is dearer than either, so $20/kg is taken, with the parent's $100/kg bound
-#: as the dear row.  Its steering packages are priced as the Kapton sheet's.
-GRAPHITE_SHEET_BODY = 20.0
 
 
 @dataclass(frozen=True)
@@ -1502,8 +1748,13 @@ def _unit_dollars(
     packages: List[float],
     guidance: float,
     lob: float,
+    sheet_body: float,
 ) -> Dict[str, float]:
-    """Dollars one launch unit of this type costs, by line."""
+    """Dollars one launch unit of this type costs, by line.
+
+    ``sheet_body`` is the per-kg price of the sheets it returns, by the
+    stream they will fly in (:meth:`SolarDivePrices.sheet_price`).
+    """
     m = unit.lines
     earth_curve = prices.plate_curve(prices.earth_plate_share)
     sun_curve = prices.plate_curve(prices.sun_plate_share)
@@ -1533,9 +1784,9 @@ def _unit_dollars(
         + prices.storable * (m["carrier_propellant"] + m["plate_disposal"]),
         "shield": prices.shield * m["shield"],
         "avionics": prices.avionics * m["avionics"],
-        "sheets": prices.sheet_body * m["sheets"] + package,
+        "sheets": sheet_body * m["sheets"] + package,
     }
-    if lob:
+    if lob and m["push_plate"] > 0.0:
         plates["push"] += 1.0
     plates["bowl"] += 1.0
     plates["sun"] += 1.0
@@ -1550,11 +1801,12 @@ class DeliveryUnit:
         sheets: Sheets the push spends.
         cargo: Mass left at L1.
         charge: Polyethylene burned.
-        plate: The delivery plate: the absorber bound at the cargo's g cap.
+        plate: The delivery plate on the spring law.
+        bag: Its gas spring's bags.
         pulse: Impulse per pulse (N s).
-        peak_g: Peak g on the cargo, at the push's end (the cap).
+        stroke: The plate's swing per pulse (m).
+        peak_g: Peak g on the cargo, at the push's end.
         start_g: Peak g at the push's start, on the full unit.
-        pulse_ms: Absorber stroke time per pulse (ms).
         climb: The delivery lob's price over the child's 1.1 km/s lob.
     """
 
@@ -1562,10 +1814,11 @@ class DeliveryUnit:
     cargo: float
     charge: float
     plate: float
+    bag: float
     pulse: float
+    stroke: float
     peak_g: float
     start_g: float
-    pulse_ms: float
     climb: float
 
 
@@ -1574,14 +1827,13 @@ def delivery_unit(
 ) -> DeliveryUnit:
     """The harvest push, at its own cadence (``Design.slow_delivery``).
 
-    The plate is the absorber bound ``I^2 / (2 s M a)`` with ``M`` the pushed
-    stack at the end and ``a`` the cargo's cap, as the push plate is sized at
-    the ship's 100 g.  A constant-force stroke ``s`` from ``I / plate`` to
-    rest takes ``2 s plate / I``.
+    The plate rides a gas spring (:func:`gas_spring`), as every plate does,
+    so the cargo feels the mean thrust times :func:`peak_to_mean`, whatever
+    the stroke: under 2 g at the end of a 1 g push.
 
     Args:
         stream_excess: The delivering wave's Earth excess (km/s).
-        design: The knobs (``k_delivery``, ``slow_delivery``, ``delivery_g_cap``).
+        design: The knobs (``k_delivery``, ``slow_delivery``, the spring).
         laws: The stage laws.
 
     Returns:
@@ -1589,7 +1841,7 @@ def delivery_unit(
     """
     w = wave_speed(stream_excess, PUSH_ALTITUDE)
     k = design.k_delivery
-    ve = laws.push_ve(k, w)
+    ve = laws.push_ve(k, w, sheet_material(w), design.push_law)
     mr = math.exp(l1_transfer_speed() / ve)
     pushed = LAUNCH_UNIT / mr
     halo = math.exp(-HALO_INSERTION / VE_METHALOX)
@@ -1599,18 +1851,18 @@ def delivery_unit(
         if design.slow_delivery
         else (CHILD_DELIVERY_G, CHILD_DELIVERY_RATE)
     )
-    pulse = g * 9.80665 * LAUNCH_UNIT / rate
-    plate = _inertia_plate(pulse, pushed, design.delivery_g_cap)
-    stroke_m = ABSORBER_STROKE * 1e3
+    force = g * 9.80665 * LAUNCH_UNIT
+    spring = gas_spring(force, rate, pushed, design)
     return DeliveryUnit(
         sheets=charge / k,
-        cargo=(pushed - plate) * halo,
+        cargo=(pushed - spring.plate - spring.bag) * halo,
         charge=charge,
-        plate=plate,
-        pulse=pulse,
-        peak_g=design.delivery_g_cap,
-        start_g=pulse**2 / (2.0 * stroke_m * plate * LAUNCH_UNIT * 9.80665),
-        pulse_ms=2.0 * stroke_m * plate / pulse * 1e3,
+        plate=spring.plate,
+        bag=spring.bag,
+        pulse=force / rate,
+        stroke=spring.stroke,
+        peak_g=spring.peak_g,
+        start_g=spring.peak_g * pushed / LAUNCH_UNIT,
         climb=lob_climb_factor(push_climb(g, l1_transfer_speed())),
     )
 
@@ -1664,14 +1916,18 @@ def value_design(
     delivery = delivery_unit(departure.earth_excess, design, laws)
     lob = prices.lob * prices.lob_climb
     gap_years = push.early_days * _DAY / _SECONDS_PER_YEAR
+    bodies = (
+        prices.sheet_price(wave_speed(push.earth_excess, PUSH_ALTITUDE)),
+        prices.sheet_price(wave_speed(departure.earth_excess, PUSH_ALTITUDE)),
+    )
 
     plates = {"push": 0.0, "bowl": 0.0, "sun": 0.0}
     packages = [0.0]
     s = steady.push_share
     seed_mass = s * p_unit.lines["departing"] + (1 - s) * d_unit.lines["departing"]
     seed_contents = 0.0
-    for unit, share in ((p_unit, s), (d_unit, 1 - s)):
-        lines = _unit_dollars(unit, prices, plates, packages, guidance, lob=0.0)
+    for unit, share, body in ((p_unit, s, bodies[0]), (d_unit, 1 - s, bodies[1])):
+        lines = _unit_dollars(unit, prices, plates, packages, guidance, 0.0, body)
         seed_contents += share * sum(lines.values())
     seed_outlay = seed_price * seed_mass + seed_contents
     pv_cost = seed_outlay
@@ -1700,22 +1956,19 @@ def value_design(
             max(caught - new_units * growth.sheets_per_unit, 0.0) if harvesting else 0.0
         )
         cost: Dict[str, float] = {}
-        for unit, share in (
-            (p_unit, growth.push_share),
-            (d_unit, 1 - growth.push_share),
+        for unit, share, body in (
+            (p_unit, growth.push_share, bodies[0]),
+            (d_unit, 1 - growth.push_share, bodies[1]),
         ):
             for key, value in _unit_dollars(
-                unit, prices, plates, packages, guidance, lob
+                unit, prices, plates, packages, guidance, lob, body
             ).items():
                 cost[key] = cost.get(key, 0.0) + share * value * new_units
         deliveries = surplus / delivery.sheets
         cost["delivery_lob"] = lob * delivery.climb * LAUNCH_UNIT * deliveries
-        cost["delivery_plate"] = (
-            prices.plate_curve(prices.earth_plate_share).batch_cost(
-                plates["push"], deliveries
-            )
-            * delivery.plate
-        )
+        cost["delivery_plate"] = prices.plate_curve(
+            prices.earth_plate_share
+        ).batch_cost(plates["push"], deliveries) * (delivery.plate + delivery.bag)
         cost["delivery_charge"] = prices.polyethylene * delivery.charge * deliveries
         plates["push"] += deliveries
         cargo = deliveries * delivery.cargo
@@ -1948,19 +2201,20 @@ COMPARISONS = ((9.86, 90.0), (4.0, 150.0))
 #: The growth-to-departure gaps swept (the parent's S39 item 8).
 GAPS = (3.0, 5.0, 10.0)
 #: Where the optimizer starts each closure: the optima of the run recorded
-#: in ADR 0074 (so the headline reproduces; bounds ``_BOUNDS``).
+#: in ADR 0076 (so the headline reproduces; bounds ``_BOUNDS``).  Starting
+#: from ``_SWEEP_START`` instead lands within $1 at every closure.
 HEADLINE_STARTS = {
     (9.86, 60.0): Design(
-        k_push=7.06, k_earth=12.54, k_sun=20.0, arc_hours=4.89, k_delivery=5.57
+        k_push=6.50, k_earth=12.53, k_sun=20.0, arc_hours=5.44, k_delivery=5.0
     ),
     (4.0, 90.0): Design(
-        k_push=6.62, k_earth=12.07, k_sun=20.45, arc_hours=2.16, k_delivery=5.01
+        k_push=8.28, k_earth=11.16, k_sun=20.0, arc_hours=2.17, k_delivery=5.0
     ),
     (9.86, 90.0): Design(
-        k_push=7.94, k_earth=13.90, k_sun=20.0, arc_hours=5.12, k_delivery=6.83
+        k_push=12.99, k_earth=13.57, k_sun=20.0, arc_hours=5.23, k_delivery=6.72
     ),
     (4.0, 150.0): Design(
-        k_push=8.23, k_earth=13.71, k_sun=20.0, arc_hours=2.32, k_delivery=7.33
+        k_push=25.93, k_earth=12.95, k_sun=20.0, arc_hours=2.41, k_delivery=12.55
     ),
 }
 SWEEP_RADII = (4.0, 6.0, 8.0, 9.86, 12.0, 15.0, 20.0)
@@ -2021,8 +2275,10 @@ def corrections_report() -> str:
 def _ledger_rows(unit: UnitLedger) -> List[List[str]]:
     keys = (
         "push_plate",
+        "push_bag",
         "plate_disposal",
         "bowl",
+        "bowl_bag",
         "push_charge",
         "methalox",
         "departure_charge",
@@ -2064,6 +2320,26 @@ def _ledger_rows(unit: UnitLedger) -> List[List[str]]:
     return rows
 
 
+def _spring_line(unit: Dict[str, float], design: Design) -> str:
+    """The Earth plates on their springs, and the push plate's fate."""
+    if design.shared_spring:
+        fate = "one shared assembly through push and departure"
+    else:
+        fate = (
+            f"push plate left with a {unit['plate_disposal_dv'] * 1e3:.1f} m/s nudge"
+            f" ({unit['plate_disposal']:.0f} kg storable) to a"
+            f" {DISPOSAL_PERIGEE:g} km perigee"
+        )
+    return (
+        f"  springs at theta {math.degrees(design.spring_theta):.0f} deg"
+        f" (peak x{unit['spring_peak']:.2f}): push {unit['push_stroke']:.1f} m,"
+        f" +/-{unit['push_swing']:.0f} m/s, {unit['push_bag'] / 1e3:.2f} t bags,"
+        f" ship peaks {unit['push_peak_g']:.2f} g; bowl {unit['bowl_stroke']:.1f} m"
+        f" (floor {unit['bowl_floor'] / 1e3:.1f} t), {unit['bowl_bag'] / 1e3:.2f} t bags,"
+        f" peaks {unit['departure_peak_g']:.2f} g; {fate}\n"
+    )
+
+
 def headline_report(
     closures: Sequence[Tuple[float, float]] = HEADLINES,
     days: float = PARKING_DAYS,
@@ -2103,13 +2379,12 @@ def headline_report(
             f" {unit['departure_pulse'] / 1e6:.2f} MN s departure;"
             f" lob climbing {unit['lob_rise']:.2f} km/s (x{unit['lob_climb']:.3f});"
             f" apoapsis turn {unit['methalox_dv']:.3f} km/s\n"
-            f"  push plate left with a {unit['plate_disposal_dv'] * 1e3:.1f} m/s nudge"
-            f" ({unit['plate_disposal']:.0f} kg storable) to a {DISPOSAL_PERIGEE:g} km perigee\n"
-            f"  delivery at {'2 Hz, 1 g' if d.slow_delivery else '4 Hz, 3.26 g'}:"
-            f" {delivery.pulse / 1e6:.2f} MN s, plate {delivery.plate / 1e3:.1f} t for"
-            f" {delivery.peak_g:g} g at the end ({delivery.start_g:.1f} g at the start),"
-            f" {delivery.pulse_ms:.0f} ms a pulse; lob x{delivery.climb:.3f};"
-            f" {delivery.cargo / 1e3:.0f} t at L1\n"
+            + _spring_line(unit, d)
+            + f"  delivery at {'2 Hz, 1 g' if d.slow_delivery else '4 Hz, 3.26 g'}:"
+            f" {delivery.pulse / 1e6:.2f} MN s, plate {delivery.plate / 1e3:.1f} t"
+            f" + {delivery.bag / 1e3:.2f} t bags on a {delivery.stroke:.1f} m stroke,"
+            f" cargo peaks {delivery.start_g:.2f} -> {delivery.peak_g:.2f} g;"
+            f" lob x{delivery.climb:.3f}; {delivery.cargo / 1e3:.0f} t at L1\n"
             f"  growth {v.growth:.2f} per 3S ({growth.per_total_impactor:.2f} with the disks"
             f" counted as impactor), doubling {v.doubling:.2f} yr, push share {growth.push_share:.2f}\n"
             f"  steady ${v.steady_cost:.1f}/kg at L1; break-even ${_money(v.break_even)} /"
@@ -2212,8 +2487,16 @@ SENSITIVITIES = (
     Sensitivity("guidance 2%", guidance=0.02),
     Sensitivity("guidance 10%", guidance=0.10),
     Sensitivity("Sun film flat in v_e (exponent 0)", design={"film_exponent": 0.0}),
-    Sensitivity("g cap 20", design={"g_cap": 20.0}),
-    Sensitivity("g cap 500", design={"g_cap": 500.0}),
+    Sensitivity("spring stroke 4 m", design={"spring_stroke": 4.0}),
+    Sensitivity("spring stroke 12 m", design={"spring_stroke": 12.0}),
+    Sensitivity("spring theta pi (stiffest)", design={"spring_theta": math.pi}),
+    Sensitivity(
+        "bag fittings at the paper's 5 t per 1.7e8 J",
+        design={"bag_fittings": PAPER_BAG_FITTINGS},
+    ),
+    Sensitivity(
+        "two springs, the push plate left in orbit", design={"shared_spring": False}
+    ),
     Sensitivity("bonds returned", bonds="bonds returned"),
     Sensitivity("shade scales with sunlight", design={"shield_exponent": 1.0}),
     Sensitivity("carrier perijove <= 2 R_J", design={"carrier_perijove": 2.0}),
@@ -2225,13 +2508,13 @@ SENSITIVITIES = (
     Sensitivity(
         "deliveries at the child's 4 Hz / 3.26 g", design={"slow_delivery": False}
     ),
-    Sensitivity("delivery g cap 10", design={"delivery_g_cap": 10.0}),
-    Sensitivity("delivery g cap 50", design={"delivery_g_cap": 50.0}),
+    Sensitivity("carbon fabric in the 100-130 km/s band", prices={"band_carbon": True}),
+    Sensitivity("carbon fabric $34/kg (bulk tow)", prices={"carbon_fabric": 34.0}),
+    Sensitivity("carbon fabric $165/kg (retail)", prices={"carbon_fabric": 165.0}),
     Sensitivity(
-        f"graphite sheets ${GRAPHITE_SHEET_BODY:g}/kg",
-        prices={"sheet_body": GRAPHITE_SHEET_BODY},
+        "every sheet carbon fabric $100/kg (the parent's S43 table)",
+        prices={"sheet_body": 100.0},
     ),
-    Sensitivity("graphite sheets $100/kg", prices={"sheet_body": 100.0}),
     Sensitivity("Earth plates 25% of spray cup", prices={"earth_plate_share": 0.25}),
     Sensitivity("Earth plates 100%", prices={"earth_plate_share": 1.0}),
     Sensitivity("disks $500/kg", prices={"disk": 500.0}),
@@ -2296,28 +2579,49 @@ def sensitivity_report(optimum: Optimum) -> str:
 
 
 def _sweep_point(point: Tuple[float, float, float]) -> List[str]:
+    """One sweep row; a headline closure starts from its recorded optimum.
+
+    Where the growth stream is in the unrun 100-130 km/s band, the point is
+    re-optimized with carbon fabric there too, and both policies print.
+    """
     radii, excess, days = point
+    start = HEADLINE_STARTS.get((radii, excess), _SWEEP_START)
     try:
         departure = departure_route(radii, excess)
         push = push_route(radii, excess, days) if departure else None
         if departure is None or push is None:
             return [f"{radii:g}", f"{excess:g}", "no closure"]
-        found = optimize_design(departure, push, _SWEEP_START)
+        found = optimize_design(departure, push, start)
+        stream = wave_speed(push.earth_excess, PUSH_ALTITUDE)
+        band = None
+        if KAPTON_HOLDS < stream <= KAPTON_FAILS:
+            band = optimize_design(
+                departure, push, start, prices=replace(ESTIMATE, band_carbon=True)
+            )
     except ValueError as error:
         return [f"{radii:g}", f"{excess:g}", str(error)]
     v = found.valuation
     if v.break_even is None or v.growth <= 1.0:
         return [f"{radii:g}", f"{excess:g}", f"does not grow ({v.growth:.2f})"]
+    material = "carbon" if stream > KAPTON_FAILS else "Kapton"
     return [
         f"{radii:g}",
         f"{excess:g}",
         f"{push.return_excess:.1f}",
-        f"{wave_speed(push.earth_excess, PUSH_ALTITUDE):.1f}",
-        f"{wave_speed(departure.earth_excess, DEPARTURE_ALTITUDE):.1f}",
+        f"{stream:.1f}",
+        f"{wave_speed(departure.earth_excess, PUSH_ALTITUDE):.1f}",
+        material,
         f"{v.growth:.2f}",
         f"{v.doubling:.2f}",
         f"{v.steady_cost:.0f}",
         f"{_money(v.break_even)} / {_money(found.dear_break_even)}",
+        (
+            "-"
+            if band is None
+            else f"{band.valuation.growth:.2f}, {band.valuation.doubling:.2f} yr,"
+            f" ${band.valuation.steady_cost:.0f}, {_money(band.valuation.break_even)}"
+            f" / {_money(band.dear_break_even)}"
+        ),
     ]
 
 
@@ -2335,11 +2639,13 @@ def sweep_report(workers: int = 4, days: float = PARKING_DAYS) -> str:
             "return excess",
             "push wave's",
             "growth stream (400 km)",
-            "departure stream (600 km)",
+            "delivery stream (400 km)",
+            "growth sheets",
             "growth",
             "doubling",
             "steady $/kg",
             "break-even cheap / dear",
+            "carbon in the band: growth, doubling, steady, cheap / dear",
         ],
     )
 
