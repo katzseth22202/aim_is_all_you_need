@@ -8,6 +8,9 @@ Answers `puffsat_impact_simulation` a6742a2, `docs/solar_dive_cycle_ask_for_calc
 (D1-D7, gathering G1-G4 and G10). Reply: `docs/solar_dive_cycle_reply_for_sim.md`.
 Supersedes ADR 0040's single 50% odds for the reports that quote this cycle, and adds a
 15-synodic growth phase; the child's existing reports are unchanged.
+**Superseded in part by ADR 0073** (2026-10-19): the canted plate's departure sign hides
+the stream behind Earth; the cycle now flies two plates, the visible sign and a 1 g push.
+This ADR's figures reproduce at commit 127162f.
 
 ## Context
 

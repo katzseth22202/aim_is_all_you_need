@@ -1,0 +1,229 @@
+kind,k,theta_deg,w_m_s,bonds,value
+capture,5,89.2,,,1.663235
+capture,5,117,,,1.228990
+capture,5,129.9,,,1.074767
+capture,5,180,,,0.809186
+capture,10,89.2,,,2.346361
+capture,10,117,,,1.903016
+capture,10,129.9,,,1.738528
+capture,10,180,,,1.446404
+capture,20,89.2,,,3.312809
+capture,20,117,,,2.861043
+capture,20,129.9,,,2.691885
+capture,20,180,,,2.379569
+capture,30,89.2,,,4.054336
+capture,30,117,,,3.599691
+capture,30,129.9,,,3.427083
+capture,30,180,,,3.107456
+capture,40,89.2,,,4.679220
+capture,40,117,,,4.222624
+capture,40,129.9,,,4.046814
+capture,40,180,,,3.724432
+capture,60,89.2,,,5.727898
+capture,60,117,,,5.269492
+capture,60,129.9,,,5.091442
+capture,60,180,,,4.761322
+speed,5,,60000,carbon atomic,0.146484
+speed,5,,60000,condensed,0.161475
+speed,5,,70000,carbon atomic,0.149034
+speed,5,,70000,condensed,0.159788
+speed,5,,80000,carbon atomic,0.150023
+speed,5,,80000,condensed,0.158102
+speed,5,,90000,carbon atomic,0.151508
+speed,5,,90000,condensed,0.157845
+speed,5,,100000,carbon atomic,0.152556
+speed,5,,100000,condensed,0.157663
+speed,5,,110000,carbon atomic,0.153337
+speed,5,,110000,condensed,0.157542
+speed,5,,120000,carbon atomic,0.154061
+speed,5,,120000,condensed,0.157588
+speed,5,,130000,carbon atomic,0.154632
+speed,5,,130000,condensed,0.157634
+speed,5,,140000,carbon atomic,0.154692
+speed,5,,140000,condensed,0.157271
+speed,5,,150000,carbon atomic,0.154382
+speed,5,,150000,condensed,0.156616
+speed,5,,160000,carbon atomic,0.154008
+speed,5,,160000,condensed,0.155961
+speed,5,,170000,carbon atomic,0.152419
+speed,5,,170000,condensed,0.154128
+speed,5,,180000,carbon atomic,0.150659
+speed,5,,180000,condensed,0.152163
+speed,5,,190000,carbon atomic,0.148867
+speed,5,,190000,condensed,0.150199
+speed,5,,200000,carbon atomic,0.147049
+speed,5,,200000,condensed,0.148235
+speed,5,,210000,carbon atomic,0.145209
+speed,5,,210000,condensed,0.146270
+speed,5,,220000,carbon atomic,0.143342
+speed,5,,220000,condensed,0.144295
+speed,10,,60000,carbon atomic,0.066791
+speed,10,,60000,condensed,0.081271
+speed,10,,70000,carbon atomic,0.070897
+speed,10,,70000,condensed,0.081243
+speed,10,,80000,carbon atomic,0.072865
+speed,10,,80000,condensed,0.080593
+speed,10,,90000,carbon atomic,0.073952
+speed,10,,90000,condensed,0.079943
+speed,10,,100000,carbon atomic,0.074515
+speed,10,,100000,condensed,0.079292
+speed,10,,110000,carbon atomic,0.075059
+speed,10,,110000,condensed,0.078969
+speed,10,,120000,carbon atomic,0.075630
+speed,10,,120000,condensed,0.078899
+speed,10,,130000,carbon atomic,0.076055
+speed,10,,130000,condensed,0.078829
+speed,10,,140000,carbon atomic,0.076382
+speed,10,,140000,condensed,0.078767
+speed,10,,150000,carbon atomic,0.076711
+speed,10,,150000,condensed,0.078784
+speed,10,,160000,carbon atomic,0.076982
+speed,10,,160000,condensed,0.078802
+speed,10,,170000,carbon atomic,0.077209
+speed,10,,170000,condensed,0.078819
+speed,10,,180000,carbon atomic,0.077241
+speed,10,,180000,condensed,0.078673
+speed,10,,190000,carbon atomic,0.077141
+speed,10,,190000,condensed,0.078420
+speed,10,,200000,carbon atomic,0.077018
+speed,10,,200000,condensed,0.078168
+speed,10,,210000,carbon atomic,0.076812
+speed,10,,210000,condensed,0.077850
+speed,10,,220000,carbon atomic,0.076156
+speed,10,,220000,condensed,0.077093
+speed,20,,60000,carbon atomic,0.025257
+speed,20,,60000,condensed,0.040955
+speed,20,,70000,carbon atomic,0.030227
+speed,20,,70000,condensed,0.040955
+speed,20,,80000,carbon atomic,0.033055
+speed,20,,80000,condensed,0.040955
+speed,20,,90000,carbon atomic,0.034862
+speed,20,,90000,condensed,0.040955
+speed,20,,100000,carbon atomic,0.035966
+speed,20,,100000,condensed,0.040805
+speed,20,,110000,carbon atomic,0.036628
+speed,20,,110000,condensed,0.040558
+speed,20,,120000,carbon atomic,0.037056
+speed,20,,120000,condensed,0.040310
+speed,20,,130000,carbon atomic,0.037325
+speed,20,,130000,condensed,0.040063
+speed,20,,140000,carbon atomic,0.037481
+speed,20,,140000,condensed,0.039816
+speed,20,,150000,carbon atomic,0.037744
+speed,20,,150000,condensed,0.039766
+speed,20,,160000,carbon atomic,0.037965
+speed,20,,160000,condensed,0.039736
+speed,20,,170000,carbon atomic,0.038142
+speed,20,,170000,condensed,0.039706
+speed,20,,180000,carbon atomic,0.038285
+speed,20,,180000,condensed,0.039675
+speed,20,,190000,carbon atomic,0.038410
+speed,20,,190000,condensed,0.039655
+speed,20,,200000,carbon atomic,0.038548
+speed,20,,200000,condensed,0.039670
+speed,20,,210000,carbon atomic,0.038668
+speed,20,,210000,condensed,0.039685
+speed,20,,220000,carbon atomic,0.038774
+speed,20,,220000,condensed,0.039700
+speed,30,,60000,carbon atomic,0.008018
+speed,30,,60000,condensed,0.027465
+speed,30,,70000,carbon atomic,0.015728
+speed,30,,70000,condensed,0.027465
+speed,30,,80000,carbon atomic,0.019136
+speed,30,,80000,condensed,0.027465
+speed,30,,90000,carbon atomic,0.021158
+speed,30,,90000,condensed,0.027465
+speed,30,,100000,carbon atomic,0.022493
+speed,30,,100000,condensed,0.027465
+speed,30,,110000,carbon atomic,0.023431
+speed,30,,110000,condensed,0.027465
+speed,30,,120000,carbon atomic,0.024038
+speed,30,,120000,condensed,0.027370
+speed,30,,130000,carbon atomic,0.024434
+speed,30,,130000,condensed,0.027231
+speed,30,,140000,carbon atomic,0.024711
+speed,30,,140000,condensed,0.027091
+speed,30,,150000,carbon atomic,0.024901
+speed,30,,150000,condensed,0.026952
+speed,30,,160000,carbon atomic,0.025028
+speed,30,,160000,condensed,0.026812
+speed,30,,170000,carbon atomic,0.025110
+speed,30,,170000,condensed,0.026675
+speed,30,,180000,carbon atomic,0.025266
+speed,30,,180000,condensed,0.026657
+speed,30,,190000,carbon atomic,0.025394
+speed,30,,190000,condensed,0.026638
+speed,30,,200000,carbon atomic,0.025500
+speed,30,,200000,condensed,0.026620
+speed,30,,210000,carbon atomic,0.025588
+speed,30,,210000,condensed,0.026601
+speed,30,,220000,carbon atomic,0.025662
+speed,30,,220000,condensed,0.026582
+speed,40,,60000,carbon atomic,0.000000
+speed,40,,60000,condensed,0.019579
+speed,40,,70000,carbon atomic,0.006527
+speed,40,,70000,condensed,0.019579
+speed,40,,80000,carbon atomic,0.011066
+speed,40,,80000,condensed,0.019579
+speed,40,,90000,carbon atomic,0.013312
+speed,40,,90000,condensed,0.019579
+speed,40,,100000,carbon atomic,0.014710
+speed,40,,100000,condensed,0.019579
+speed,40,,110000,carbon atomic,0.015664
+speed,40,,110000,condensed,0.019579
+speed,40,,120000,carbon atomic,0.016352
+speed,40,,120000,condensed,0.019579
+speed,40,,130000,carbon atomic,0.016866
+speed,40,,130000,condensed,0.019576
+speed,40,,140000,carbon atomic,0.017188
+speed,40,,140000,condensed,0.019489
+speed,40,,150000,carbon atomic,0.017424
+speed,40,,150000,condensed,0.019403
+speed,40,,160000,carbon atomic,0.017596
+speed,40,,160000,condensed,0.019316
+speed,40,,170000,carbon atomic,0.017721
+speed,40,,170000,condensed,0.019229
+speed,40,,180000,carbon atomic,0.017810
+speed,40,,180000,condensed,0.019143
+speed,40,,190000,carbon atomic,0.017870
+speed,40,,190000,condensed,0.019056
+speed,40,,200000,carbon atomic,0.017946
+speed,40,,200000,condensed,0.019010
+speed,40,,210000,carbon atomic,0.018035
+speed,40,,210000,condensed,0.018998
+speed,40,,220000,carbon atomic,0.018111
+speed,40,,220000,condensed,0.018985
+speed,60,,60000,carbon atomic,0.000000
+speed,60,,60000,condensed,0.012061
+speed,60,,70000,carbon atomic,0.000000
+speed,60,,70000,condensed,0.012061
+speed,60,,80000,carbon atomic,0.000000
+speed,60,,80000,condensed,0.012061
+speed,60,,90000,carbon atomic,0.005393
+speed,60,,90000,condensed,0.012061
+speed,60,,100000,carbon atomic,0.007155
+speed,60,,100000,condensed,0.012061
+speed,60,,110000,carbon atomic,0.008219
+speed,60,,110000,condensed,0.012061
+speed,60,,120000,carbon atomic,0.008944
+speed,60,,120000,condensed,0.012061
+speed,60,,130000,carbon atomic,0.009470
+speed,60,,130000,condensed,0.012061
+speed,60,,140000,carbon atomic,0.009868
+speed,60,,140000,condensed,0.012061
+speed,60,,150000,carbon atomic,0.010177
+speed,60,,150000,condensed,0.012061
+speed,60,,160000,carbon atomic,0.010414
+speed,60,,160000,condensed,0.012050
+speed,60,,170000,carbon atomic,0.010576
+speed,60,,170000,condensed,0.012008
+speed,60,,180000,carbon atomic,0.010702
+speed,60,,180000,condensed,0.011966
+speed,60,,190000,carbon atomic,0.010800
+speed,60,,190000,condensed,0.011923
+speed,60,,200000,carbon atomic,0.010876
+speed,60,,200000,condensed,0.011881
+speed,60,,210000,carbon atomic,0.010935
+speed,60,,210000,condensed,0.011839
+speed,60,,220000,carbon atomic,0.010979
+speed,60,,220000,condensed,0.011797

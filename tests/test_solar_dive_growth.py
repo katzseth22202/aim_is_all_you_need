@@ -19,10 +19,13 @@ from src.solar_dive_growth import (
     departure_burn,
     departure_route,
     doubling_years,
+    lob_climb_factor,
     miss_fraction,
+    push_climb,
     push_route,
     ship_perijove_rj,
     value_design,
+    visible_departure,
 )
 
 
@@ -33,6 +36,17 @@ def test_stage_laws_reproduce_the_simulations_optimum_inputs() -> None:
     assert laws.sun_ve(29.907, 391.692) == pytest.approx(30.07, rel=1e-3)
     # The overtake handoff: mass ratio ~1.49 for 11 km/s at k = 10.
     assert math.exp(11.0 / laws.push_ve(10.0, 100.0)) == pytest.approx(1.493, rel=1e-3)
+
+
+def test_the_bowl_law_reproduces_the_simulations_hole_ve() -> None:
+    """departure_hole_law.csv's visible routes, within the k-interpolation."""
+    laws = StageLaws.load()
+    for k, v in ((5.0, 13.601), (10.0, 10.716), (20.0, 7.658), (30.0, 5.774)):
+        assert laws.hole_ve(k, 84.0, 129.9) == pytest.approx(v, rel=0.006)
+    for k, v in ((5.0, 20.310), (20.0, 11.272)):
+        assert laws.hole_ve(k, 107.9, 117.0) == pytest.approx(v, rel=0.006)
+    condensed = StageLaws.load(bonds="bonds returned")
+    assert condensed.hole_ve(30.0, 84.0, 129.9) == pytest.approx(7.907, rel=0.006)
 
 
 def test_stage_laws_refuse_to_extrapolate_the_slug_ratio() -> None:
@@ -137,3 +151,27 @@ def test_everything_charged_the_cycle_still_grows_and_breaks_even() -> None:
     assert growth.per_total_impactor < growth.growth
     value = value_design(departure, push, Design())
     assert value.break_even is not None and value.break_even > value.steady_cost > 0.0
+
+
+@pytest.mark.slow
+def test_the_visible_sign_is_the_parents_s38_geometry() -> None:
+    """ADR 0072's sign hides the stream behind Earth; the other is S38's."""
+    departure = departure_route(9.86, 60.0)
+    assert departure is not None
+    assert departure.impact_angle_deg == pytest.approx(89.2, abs=0.1)
+    seen = visible_departure(departure, departure)
+    assert seen.impact_angle_deg == pytest.approx(129.9, abs=0.1)
+    assert seen.closing == pytest.approx(84.0, abs=0.1)
+    deep = departure_route(4.0, 90.0)
+    assert deep is not None
+    seen = visible_departure(deep, deep)
+    assert seen.impact_angle_deg == pytest.approx(117.0, abs=0.1)
+    assert seen.closing == pytest.approx(107.9, abs=0.1)
+
+
+@pytest.mark.slow
+def test_the_1_g_push_climbs_faster_and_the_childs_push_does_not() -> None:
+    assert 2.25 < push_climb(1.0) < 2.5
+    assert push_climb(3.26) == pytest.approx(1.1)
+    assert 1.4 < lob_climb_factor(push_climb(1.0)) < 1.6
+    assert lob_climb_factor(1.1) == 1.0

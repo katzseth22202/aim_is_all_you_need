@@ -35,6 +35,7 @@ lofts 1575 t (380 s) where ADR 0037 quoted 1422 t for the same vehicle; only
 ratios are taken from it.
 """
 
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Tuple
@@ -128,6 +129,25 @@ def brake_dv(altitude: float, speed: float) -> float:
     return float(speed - np.sqrt(after_sq))
 
 
+def entry_burn_dv(altitude: float, speed: float) -> float:
+    """The brake that makes a booster cross 60 km at 1.5 km/s, burned on the way down.
+
+    The booster coasts unbraked over its apex and burns just above 60 km, as
+    Falcon 9's entry burn does; impulsive.  It closes at any separation, where
+    :func:`brake_dv` has no answer once a fall from rest at separation already
+    crosses 60 km faster than 1.5 km/s (a ~2.5 km/s climb at 400 km, the
+    parent's S33).
+
+    Args:
+        altitude: Separation altitude, m.
+        speed: Vertical speed at separation, m/s.
+
+    Returns:
+        The brake, m/s.
+    """
+    return float(abs(_coast_speed(altitude, speed, ENTRY_ALTITUDE)) - ENTRY_SPEED)
+
+
 @dataclass(frozen=True)
 class BrakedLob:
     """A vertical lob whose booster holds back its brake and landing burn.
@@ -150,7 +170,9 @@ class BrakedLob:
 
 
 @lru_cache(maxsize=64)
-def braked_lob(rise_speed: float, scale: float = 1.0, isp: float = ISP) -> BrakedLob:
+def braked_lob(
+    rise_speed: float, scale: float = 1.0, isp: float = ISP, entry_burn: bool = False
+) -> BrakedLob:
     """A vertical lob to 400 km climbing at ``rise_speed``, the brake held back.
 
     The reserve brakes the empty booster and lands it, so it depends on where
@@ -161,6 +183,8 @@ def braked_lob(rise_speed: float, scale: float = 1.0, isp: float = ISP) -> Brake
         rise_speed: Vertical speed at 400 km, m/s.
         scale: Booster size relative to ADR 0037's 5000 t vehicle.
         isp: Average specific impulse, s.
+        entry_burn: Brake on the way down (:func:`entry_burn_dv`) instead of
+            at separation (:func:`brake_dv`, ADR 0043's).
 
     Returns:
         The lob.
@@ -178,7 +202,7 @@ def braked_lob(rise_speed: float, scale: float = 1.0, isp: float = ISP) -> Brake
             )
         )
         altitude, speed = _burnout(payload, scale, isp, held)
-        brake = brake_dv(altitude, speed)
+        brake = (entry_burn_dv if entry_burn else brake_dv)(altitude, speed)
         reserve = dry * float(np.expm1((brake + LANDING_BURN) / (isp * _G0)))
         if abs(reserve - held) < _RESERVE_TOLERANCE * scale:
             break
@@ -223,6 +247,7 @@ def booster_growth(
     isp: float = ISP,
     baseline: float = BASELINE_RISE_SPEED,
     brake: bool = True,
+    entry_burn: bool = False,
 ) -> float:
     """How much bigger the booster must be to loft the same mass climbing.
 
@@ -237,14 +262,15 @@ def booster_growth(
             first did.
         brake: Hold back the booster's brake and landing (ADR 0043), as the
             parent's priced lob does; False is ADR 0041-0042's unbraked charge.
+        entry_burn: Burn that brake on the way down (:func:`entry_burn_dv`).
 
     Returns:
         Lofted mass at ``baseline`` over lofted mass at ``rise_speed``.
     """
     if brake:
         return (
-            braked_lob(baseline, isp=isp).lofted
-            / braked_lob(rise_speed, isp=isp).lofted
+            braked_lob(baseline, isp=isp, entry_burn=entry_burn).lofted
+            / braked_lob(rise_speed, isp=isp, entry_burn=entry_burn).lofted
         )
     return lofted_mass(baseline, isp=isp) / lofted_mass(rise_speed, isp=isp)
 
@@ -259,6 +285,8 @@ class PushTrack:
         above: Highest it sits above the path, km (>= 0).
         stream_rise: How far the stream's path climbs over the push, km.
         final_periapsis: Periapsis altitude of the orbit the push ends on, km.
+        lowest: Lowest altitude over the push, km (the growth-wave floor is
+            400; ADR 0062).
     """
 
     duration: float
@@ -266,6 +294,7 @@ class PushTrack:
     above: float
     stream_rise: float
     final_periapsis: float
+    lowest: float = math.nan
 
 
 def push_track(
@@ -334,6 +363,7 @@ def push_track(
         above=float(max(gap.max(), 0.0)),
         stream_rise=float(stream_radius(theta[-1]) - rp),
         final_periapsis=float(a * (1.0 - ecc) - _R_EARTH * 1e-3),
+        lowest=float(r.min() - _R_EARTH * 1e-3),
     )
 
 

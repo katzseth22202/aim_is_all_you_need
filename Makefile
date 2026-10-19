@@ -62,7 +62,7 @@ chamber-departure:  ## Price the walled chamber's departure over the flown chain
 growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
 	python -m src.growth_ledger
 
-solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072; ~2 min, ARGS="--sweep --child" adds the depth sweep and the child's rows)
+solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072, 0073; ~30 s, ARGS="--sweep --child" adds the depth sweep and the child's rows)
 	python -m src.solar_dive_growth $(ARGS)
 
 carbon-equilibrium:  ## B' of graphite in hot hydrogen: the carbon a pitch coat loses to the gas (companion reply 2026-10-04)

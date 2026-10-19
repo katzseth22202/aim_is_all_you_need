@@ -4,14 +4,20 @@ The impact simulation (``puffsat_impact_simulation`` a6742a2,
 ``docs/solar_dive_cycle_ask_for_calcs.md``, asks D1-D7) proposes a different
 growth loop from the child paper's chamber cycle:
 
-1. **Push.** The returning **Earth wave** (Kapton sheets at ~100 km/s) overtakes
-   a lofted launch unit at 400 km and pushes it onto the 10-day parking orbit,
-   each sheet striking a polyethylene charge held off a flat plate.
-2. **Departure.** Ten days later a second Earth wave meets the ship at the
-   600 km periapsis at ~100 degrees to its thrust axis, sweeping past the same
-   flat plate (the **canted plate**), and sends it onto the three-synodic
-   Earth -> Jupiter -> Sun -> Earth closure of
-   :mod:`src.jovian_solar_dive_cycle`.  The plate then diverts into Jupiter.
+1. **Push.** The returning **Earth wave** (~100 um Kapton sheets at ~100 km/s)
+   overtakes a lofted launch unit at 400 km and pushes it onto the 10-day
+   parking orbit at 2 Hz and 1 g, each sheet striking a polyethylene charge
+   held off a 12 t flat **push plate** (the simulation's ADR-0064).  The lob
+   climbs at ~2.4 km/s so that the unit stays above 400 km until it is
+   orbital.  The push plate is left in the parking orbit.
+2. **Departure.** Ten days later a second Earth wave of compact impactors
+   meets the ship at the 600 km periapsis on the **visible sign**, ~117-140
+   degrees to its thrust axis (the other sign's stream passes through Earth,
+   ADR 0066), threads a hole in a paraboloid **departure bowl** and stops in a
+   charge at its focus (the simulation's ADR-0065), at 1 Hz and 0.25 g, and
+   sends the ship onto the three-synodic Earth -> Jupiter -> Sun -> Earth
+   closure of :mod:`src.jovian_solar_dive_cycle`.  The bowl then diverts into
+   Jupiter.  Both Earth plates fly up in the launch unit (ADR 0073).
 3. **Jupiter.** The ship rides an unpowered flyby into a prograde dive.  Its
    **Sun-wave** graphite disks ride a carrier bus to a lower perijove and burn
    onto the mirror-image retrograde dive, so they meet the ship head-on.
@@ -23,7 +29,8 @@ growth loop from the child paper's chamber cycle:
 Everything is float arithmetic (km, km/s, kg, years, dollars), like
 :mod:`src.growth_cost`; the closures come from the Quantity-free conic code.
 The stage laws (exhaust speed against slug ratio ``k``) are the impact
-simulation's, vendored in ``data/solar_dive_stage_laws.csv``.
+simulation's, vendored in ``data/solar_dive_stage_laws.csv`` and, for the
+departure bowl, ``data/departure_hole_law.csv``.
 
 **Growth is counted in launch units.**  Both Earth waves are fleet mass that
 flies the cycle and returns, like the child's growth PuffSats and rods.  The
@@ -62,6 +69,7 @@ from src.jovian_solar_dive_cycle import (
     _evaluate,
     _intercept_miss,
     _solve_dive_state,
+    _vehicle_frame_impact,
     departure_nozzle_ledger,
     solve_synodic_closure,
     synodic_period,
@@ -73,6 +81,7 @@ from src.two_wave_growth import VE_METHALOX
 STAGE_LAWS = (
     Path(__file__).resolve().parent.parent / "data" / "solar_dive_stage_laws.csv"
 )
+HOLE_LAW = Path(__file__).resolve().parent.parent / "data" / "departure_hole_law.csv"
 
 _MU_EARTH = 398600.4418
 _R_EARTH = 6378.137
@@ -86,32 +95,37 @@ LAUNCH_UNIT = 1500.0e3  # kg lofted per unit (growth_ledger.LAUNCH_UNIT)
 PARKING_DAYS = 10.0  # growth_ledger.DEFAULT_PARKING_DAYS: the split gap
 PUSH_ALTITUDE = 400.0
 DEPARTURE_ALTITUDE = 600.0
-#: The child's pulse (growth_ledger.PULSE_IMPULSE).  Keeping it keeps the
-#: child's push schedule, so its lob and gravity charges carry over.
-PULSE_IMPULSE = 12.0e6  # N s
-#: Sun pulse rate cap (author, 2026-10-16: the methane chamber's 2 Hz).  The
-#: Earth departure fires at the same rate.
+#: Sun pulse rate cap (author, 2026-10-16: the methane chamber's 2 Hz).
 SUN_PULSE_RATE = 2.0  # Hz
-EARTH_PULSE_RATE = 2.0  # Hz
+#: The growth push (author, 2026-10-18; the simulation's ADR-0064): 2 Hz at
+#: 1 g on the 1500 t unit at the start, 7.35 MN s a pulse, so ~100 um sheets
+#: survive the earlier pulses' gas.  Pulsed: each pulse a burst, then coast.
+PUSH_RATE = 2.0  # Hz
+PUSH_G = 1.0
+#: The departure (author, 2026-10-19; the simulation's ADR-0065): 1 Hz at a
+#: 0.25 g mean, the time between pulses spent aligning the hole.
+DEPARTURE_RATE = 1.0  # Hz
+DEPARTURE_G = 0.25
 _LOSS_ITERATIONS = 6
 
 # --- Plates (impact simulation's charge ledger and overtake handoff).
 SURVIVAL_AREAL = 30.0  # kg/m^2, the parent's "tens of kilograms per square metre"
-#: The flat plate with a 4 m skirt (charge_ledger "flat + skirt 4 m"), and the
-#: impactor per pulse it takes at 400 MPa (overtake handoff: ~11-14 kg).
-FLAT_PLATE_AREA = 565.487  # m^2
-FLAT_PLATE_PULSE = 12.5  # kg of ~100 km/s sheet per pulse
+#: The push plate keeps 94-97% of the 20 m skirted plate's impulse on a 9.5 m
+#: plate with a 2 m skirt (the simulation's ADR-0064); the overtake law is
+#: the full plate's.
+PUSH_SKIRT_SHARE = 0.955
 #: The delta/D 0.5 paraboloid at 1.5 F, rated for a 1 kg disk at 400 km/s
 #: (the simulation's own dead-fraction convention, mission.plate_dead_fraction).
+#: The departure bowl is the same paraboloid with a hole (ADR-0065).
 SUN_PLATE_AREA = 533.041  # m^2
 SUN_PLATE_PULSE = 1.0  # kg at 400 km/s
 SUN_PLATE_SPEED = 400.0  # km/s
-BORE_COLLAR = 1.0e3  # kg, the simulation's ~0.5-1 t
+BORE_COLLAR = 1.0e3  # kg, the simulation's ~0.5-1 t; the bowl's hole collar too
 CHARGE_MOUNT_FRACTION = 0.01  # mounts per kg of charge they hold
 ABSORBER_STROKE = 2.0e-3  # km: a short-stroke absorber
 G_CAP = 100.0  # peak g the ship's robust cargo takes (author, 2026-10-16)
 #: Film per unit impulse: the spray cup's vapor-shielded 4-6 kg per 12 MN s
-#: pulse (growth_ledger.SPRAY_CUP_FILM_PER_PULSE).  The Sun plate's is scaled
+#: pulse (growth_ledger.SPRAY_CUP_FILM_PER_PULSE), on both Earth plates.  The Sun plate's is scaled
 #: by its gas's energy per unit impulse (~v_e) over the Earth push's, to the
 #: power ``film_exponent`` (1 headline, 0 the author's view).
 FILM_PER_IMPULSE = 5.0 / 12.0e6  # kg per N s
@@ -123,19 +137,22 @@ AVIONICS_FRACTION = 0.01  # avionics and attitude control, of the ship at the Su
 CARRIER_DRY_FRACTION = 0.10  # carrier bus and stage dry mass, per kg of disk
 STORABLE_ISP = 330.0  # s, the carrier's stage (the simulation's)
 CARRIER_PERIJOVE = 6.5  # R_J: the highest that still turns the disks (<= 6.7)
-PLATE_DIVERT = 0.020  # km/s: the flat plate's nudge into Jupiter
+PLATE_DIVERT = 0.020  # km/s: the departure bowl's nudge into Jupiter
+#: Occultation at the 600 km periapsis: an upstream direction within this of
+#: nadir passes through Earth (orbit_turn_analysis.occultation_half_angle).
+OCCULTATION_HALF_ANGLE = math.degrees(math.asin(6378.137 / (6378.137 + 600.0)))
 
-# --- The L1 delivery (harvest.py): fragile cargo keeps the child's plate.
+# --- The L1 delivery (harvest.py): fragile cargo keeps the child's plate, at
+# the child's 4 Hz, 3.3 g, on the child's 1.1 km/s lob.
 L1_DISTANCE = 1.5e6  # km
 HALO_INSERTION = 0.030  # km/s
 DELIVERY_PLATE = 156.0e3  # kg: 150 t plate and 6 t absorber
 
 # --- Search bounds (recorded so the optimum is reproducible; CLAUDE.md).
 K_PUSH = (5.0, 40.0)
-K_EARTH = (5.0, 60.0)
+K_EARTH = (5.0, 60.0)  # the hole-bowl runs
 K_SUN = (20.0, 100.0)
 ARC_HOURS = (0.5, 12.0)
-DEPARTURE_PULSE = (2.0e6, 60.0e6)  # N s
 #: Return excesses each depth is closed at; the optimizer picks among them.
 RETURN_EXCESSES = (60.0, 75.0, 90.0, 110.0, 130.0, 150.0, 175.0)
 
@@ -150,23 +167,35 @@ class StageLaws:
     """The impact simulation's exhaust speeds, vendored.
 
     Attributes:
-        earth: Canted departure: ``(theta_deg, w km/s, k, v_e km/s)`` rows.
+        earth: Canted departure (ADR 0072's, the hidden sign): ``(theta_deg,
+            w km/s, k, v_e km/s)`` rows.
         sun: Sun boost: ``(w km/s, k, v_e km/s)`` rows.
         push: Overtake push at 100 km/s: ``(k, v_e km/s)`` rows.
+        capture: The departure bowl's impulse per ``m w``: ``(theta_deg, k,
+            capture)`` rows.
+        hole: The bowl's ``v_e / (w capture)``: ``(k, w km/s, factor)`` rows.
     """
 
     earth: Tuple[Tuple[float, float, float, float], ...]
     sun: Tuple[Tuple[float, float, float], ...]
     push: Tuple[Tuple[float, float], ...]
+    capture: Tuple[Tuple[float, float, float], ...] = ()
+    hole: Tuple[Tuple[float, float, float], ...] = ()
 
     @staticmethod
     @functools.lru_cache(maxsize=None)
-    def load(path: Path = STAGE_LAWS, bonds: str = "carbon atomic") -> "StageLaws":
-        """Read the vendored table.
+    def load(
+        path: Path = STAGE_LAWS,
+        bonds: str = "carbon atomic",
+        hole_path: Path = HOLE_LAW,
+    ) -> "StageLaws":
+        """Read the vendored tables.
 
         Args:
-            path: The CSV.
-            bonds: ``carbon atomic`` (headline) or ``bonds returned``.
+            path: The stage-law CSV.
+            bonds: ``carbon atomic`` (headline) or ``bonds returned`` (the
+                bowl's ``condensed`` rows).
+            hole_path: The departure bowl's CSV.
 
         Returns:
             The laws.
@@ -182,7 +211,18 @@ class StageLaws:
                     sun.append((w, k, v))
                 elif row["stage"] == "overtake_push":
                     push.append((k, v))
-        return StageLaws(tuple(earth), tuple(sun), tuple(push))
+        hole_bonds = "carbon atomic" if bonds == "carbon atomic" else "condensed"
+        capture, hole = [], []
+        with hole_path.open() as handle:
+            for row in csv.DictReader(handle):
+                k, value = float(row["k"]), float(row["value"])
+                if row["kind"] == "capture":
+                    capture.append((float(row["theta_deg"]), k, value))
+                elif row["bonds"] == hole_bonds:
+                    hole.append((k, float(row["w_m_s"]) / 1e3, value))
+        return StageLaws(
+            tuple(earth), tuple(sun), tuple(push), tuple(capture), tuple(hole)
+        )
 
     def earth_ve(self, k: float, w: float, theta_deg: float) -> float:
         """Canted departure exhaust speed (km/s).
@@ -218,6 +258,38 @@ class StageLaws:
         """Overtake push exhaust speed (km/s), carried from 100 km/s by ``w / 100``."""
         rows = sorted(self.push)
         return _log_interp(k, [r[0] for r in rows], [r[1] for r in rows]) * w / 100.0
+
+    def hole_ve(self, k: float, w: float, theta_deg: float) -> float:
+        """Departure-bowl exhaust speed (km/s), per kg of charge.
+
+        The simulation's ``departure_hole.hole_ve`` for the delta/D 0.5
+        paraboloid at 1.5 F, factored exactly as ``capture(theta, k) w
+        f(k, w)``: the capture is log-interpolated in ``k`` and linear in
+        ``cos theta`` between the run angles (extrapolated linearly past
+        them, as the simulation does), ``f`` (rebound, mixing and the bond
+        toll) log in ``k`` and linear in ``w``.
+        """
+        thetas = sorted({row[0] for row in self.capture})
+        captures = []
+        for theta in thetas:
+            rows = sorted(
+                (r for r in self.capture if r[0] == theta), key=lambda r: r[1]
+            )
+            captures.append(_log_interp(k, [r[1] for r in rows], [r[2] for r in rows]))
+        cosines = [math.cos(math.radians(theta)) for theta in thetas]
+        order = sorted(range(len(thetas)), key=lambda i: cosines[i])
+        xs = [cosines[i] for i in order]
+        ys = [captures[i] for i in order]
+        c = math.cos(math.radians(theta_deg))
+        i = int(np.clip(np.searchsorted(xs, c) - 1, 0, len(xs) - 2))
+        capture = ys[i] + (ys[i + 1] - ys[i]) * (c - xs[i]) / (xs[i + 1] - xs[i])
+        speeds = sorted({row[1] for row in self.hole})
+        _check(w, speeds[0], speeds[-1], "departure closing speed")
+        factors = []
+        for speed in speeds:
+            rows = sorted((r for r in self.hole if r[1] == speed), key=lambda r: r[0])
+            factors.append(_log_interp(k, [r[0] for r in rows], [r[2] for r in rows]))
+        return capture * w * float(np.interp(w, speeds, factors))
 
 
 def _check(value: float, low: float, high: float, name: str) -> None:
@@ -639,6 +711,131 @@ def arc_loss(arc_hours: float, route: DiveRoute) -> float:
     return ratio * ratio * (1.0 / 96.0 + 1.0 / 24.0)
 
 
+@dataclass(frozen=True)
+class DepartureGeometry:
+    """The departure on the visible sign, as the bowl sees it.
+
+    Attributes:
+        thrust_axis_deg: The burn's thrust axis (deg from Earth's prograde).
+        impact_angle_deg: Mean stream angle to the thrust axis over the burn.
+        closing: Mean closing speed over the burn (km/s).
+        clearance_deg: The upstream direction's angle from nadir at periapsis;
+            visible above :data:`OCCULTATION_HALF_ANGLE`.
+    """
+
+    thrust_axis_deg: float
+    impact_angle_deg: float
+    closing: float
+    clearance_deg: float
+
+
+@functools.lru_cache(maxsize=None)
+def visible_departure(ship: DiveRoute, stream: DiveRoute) -> DepartureGeometry:
+    """The departure sign whose stream does not pass through Earth.
+
+    Every ship is departed by the departure wave, so the stream is the
+    departure-wave route's return and the aim is the ship's own.  Of the two
+    mirror signs, the one :func:`departure_nozzle_ledger` prefers (the
+    route's ``impact_angle_deg``, ~76-101 degrees) puts periapsis behind
+    Earth: its upstream direction lies inside the occultation cone (the
+    parent's S38, ADR 0066).  At periapsis the position is the thrust axis
+    turned 90 degrees against the turn; the stream is hidden when its
+    direction lies within :data:`OCCULTATION_HALF_ANGLE` of it.
+
+    Args:
+        ship: The ship's route (its departure excess and aim).
+        stream: The departure-wave route (its returning wave).
+
+    Returns:
+        The visible sign's geometry.
+
+    Raises:
+        ValueError: If both signs are hidden.
+    """
+    p = _powered_flyby_params()
+    burn_radius = _R_EARTH + 200.0  # departure_nozzle_ledger's convention
+    mirror = math.degrees(
+        half_turn_angle(
+            hyperbolic_eccentricity(_MU_EARTH, burn_radius, ship.departure_excess)
+        )
+    )
+    end = speed_with_escape_energy(ship.departure_excess, p.v_esc_leo)
+    w = speed_with_escape_energy(stream.earth_excess, p.v_esc_leo)
+    best: Optional[DepartureGeometry] = None
+    for sign in (1.0, -1.0):
+        axis = ship.departure_aim_deg + sign * mirror
+        a0, c0 = _vehicle_frame_impact(stream.push_axis_deg, axis, w, p.v_depart_from)
+        a1, c1 = _vehicle_frame_impact(stream.push_axis_deg, axis, w, end)
+        clearance = abs(
+            math.degrees(
+                wrap_pi(math.radians(stream.push_axis_deg - (axis + sign * 90.0)))
+            )
+        )
+        candidate = DepartureGeometry(
+            axis,
+            0.5 * math.degrees(a0 + a1),
+            0.5 * (c0 + c1),
+            clearance,
+        )
+        if clearance > OCCULTATION_HALF_ANGLE and (
+            best is None or candidate.impact_angle_deg < best.impact_angle_deg
+        ):
+            best = candidate
+    if best is None:
+        raise ValueError("Earth hides the departure stream on both signs")
+    return best
+
+
+@functools.lru_cache(maxsize=None)
+def push_climb(push_g: float, mass_ratio: float = 1.33) -> float:
+    """The least lob climb at 400 km (km/s) that a ``push_g`` push needs.
+
+    The growth-wave floor (ADR 0062, CONTEXT.md): each sheet is aimed on its
+    own with its perigee at or above 400 km, so the unit must stay above
+    400 km through the push and end on an orbit whose periapsis is above it.
+    Flown on :func:`src.lob_rise.push_track`, thrust along the stream.  At
+    1 g the unit takes ~700 s to become orbital, and the climb is ~2.4 km/s
+    (the parent's S33: 2.5 km/s holds, 2.25 does not); at the child's 3.3 g
+    the floor binds below the child's 1.1 km/s, which is then kept.
+
+    Args:
+        push_g: Thrust in g on the unit at the push's start.
+        mass_ratio: The push's mass ratio (the climb barely depends on it).
+
+    Returns:
+        The climb, km/s.
+    """
+    from src.lob_rise import OPERATING_RISE_SPEED, push_track
+
+    end = periapsis_speed(PARKING_DAYS, PUSH_ALTITUDE)
+    w = wave_speed(90.0, PUSH_ALTITUDE)  # the climb hardly depends on it
+
+    def margin(rise: float) -> float:
+        track = push_track(rise, w, end, 1.0 / mass_ratio, push_g * 9.80665)
+        return min(track.final_periapsis, track.lowest + 1.0) - PUSH_ALTITUDE
+
+    child = OPERATING_RISE_SPEED / 1e3
+    if margin(child) >= 0.0:
+        return child
+    return float(brentq(margin, child, 4.0, xtol=1e-3))
+
+
+@functools.lru_cache(maxsize=None)
+def lob_climb_factor(rise: float) -> float:
+    """The lob's price at ``rise`` over the child's 1.1 km/s lob it is priced at.
+
+    Above ~2.4 km/s the child's brake at separation no longer closes (a fall
+    from rest there already crosses 60 km above 1.5 km/s; the parent's S33),
+    so both lobs are flown with the brake burned on the way down
+    (:func:`src.lob_rise.entry_burn_dv`) and only their ratio is taken.
+    """
+    from src.lob_rise import OPERATING_RISE_SPEED, booster_growth
+
+    if rise <= OPERATING_RISE_SPEED / 1e3 + 1e-9:
+        return 1.0
+    return booster_growth(rise * 1e3, baseline=OPERATING_RISE_SPEED, entry_burn=True)
+
+
 # --------------------------------------------------------------------------
 # One launch unit
 # --------------------------------------------------------------------------
@@ -650,12 +847,19 @@ class Design:
 
     Attributes:
         k_push: Polyethylene per kg of sheet in the 400 km overtake push.
-        k_earth: The same at the canted departure.
+        k_earth: Polyethylene per kg of impactor in the departure bowl.
         k_sun: Polyethylene per kg of disk at the Sun.
         arc_hours: The Sun boost's arc, centred on perihelion.
         k_delivery: The L1 delivery push's slug ratio.
-        departure_pulse: Impulse per departure pulse (N s): a larger pulse
-            shortens the burn and its loss but needs a larger plate.
+        push_g: The push's thrust in g on the launch unit at its start.
+        push_rate: Push pulses a second.
+        departure_g: The departure's mean acceleration in g.
+        departure_rate: Departure pulses a second.
+        charge_lob_climb: Charge the climb the push needs (False: the child's
+            1.1 km/s lob, the simulation's assumption, for comparison).
+        slow_delivery: Fly the L1 delivery at the growth push's cadence and
+            lob too (the sheets may not survive the child's 4 Hz plume, the
+            simulation's S37); False keeps the child's 4 Hz delivery.
         film_exponent: The Sun film's scaling with energy per unit impulse.
         g_cap: Peak g the ship takes.
         carrier_perijove: The disks' highest perijove (Jupiter radii); lower
@@ -667,11 +871,16 @@ class Design:
     """
 
     k_push: float = 10.0
-    k_earth: float = 24.0
+    k_earth: float = 20.0
     k_sun: float = 30.0
     arc_hours: float = 4.0
     k_delivery: float = 10.0
-    departure_pulse: float = PULSE_IMPULSE
+    push_g: float = PUSH_G
+    push_rate: float = PUSH_RATE
+    departure_g: float = DEPARTURE_G
+    departure_rate: float = DEPARTURE_RATE
+    charge_lob_climb: bool = True
+    slow_delivery: bool = False
     film_exponent: float = 1.0
     g_cap: float = G_CAP
     carrier_perijove: float = CARRIER_PERIJOVE
@@ -714,94 +923,117 @@ def _inertia_plate(pulse_impulse: float, ship: float, g_cap: float) -> float:
 def fly_unit(
     route: DiveRoute,
     push_wave: DiveRoute,
+    departure_wave: DiveRoute,
     design: Design,
     laws: Optional[StageLaws] = None,
 ) -> UnitLedger:
     """Carry one launch unit from the lob to its returned sheets.
 
+    Both Earth plates fly up in the unit (ADR 0073): the push plate is left
+    in the parking orbit at apoapsis, before the methalox burn; the
+    departure bowl rides through the departure, then diverts into Jupiter.
+
     Args:
         route: This ship's own route.
         push_wave: The push-wave route (sets the push's sheet speed).
+        departure_wave: The departure-wave route (its return departs every
+            ship).
         design: The knobs.
-        laws: The stage laws; the vendored table by default.
+        laws: The stage laws; the vendored tables by default.
 
     Returns:
         The ledger.
     """
     law = laws or StageLaws.load(bonds=design.bonds)
     lines: Dict[str, float] = {}
-    # 1. The overtake push at 400 km, from rest to the parking orbit.
+    # 1. The overtake push at 400 km, from rest to the parking orbit, on the
+    # skirted 9.5 m plate.  Its thrust is set on the unit at the start; the
+    # lob climbs fast enough to keep the unit above 400 km until it is
+    # orbital (push_climb), charged as the booster's lost lofted mass.
     w_push = wave_speed(push_wave.earth_excess, PUSH_ALTITUDE)
-    ve_push = law.push_ve(design.k_push, w_push)
+    ve_push = law.push_ve(design.k_push, w_push) * PUSH_SKIRT_SHARE
     push_dv = periapsis_speed(PARKING_DAYS, PUSH_ALTITUDE)
     mr_push = math.exp(push_dv / ve_push)
     pushed = LAUNCH_UNIT / mr_push
     push_charge = LAUNCH_UNIT - pushed
     push_sheets = push_charge / design.k_push
     push_impulse = push_charge * ve_push * 1e3
-    # 3. Apoapsis: raise periapsis and turn the orbit (methalox).
+    push_pulse = design.push_g * 9.80665 * LAUNCH_UNIT / design.push_rate
+    push_plate = _inertia_plate(push_pulse, pushed, design.g_cap)
+    rise = push_climb(design.push_g) if design.charge_lob_climb else 1.1
+    # 2. Apoapsis: leave the push plate, raise periapsis and turn the orbit
+    # onto the visible sign's thrust axis (methalox).
+    geometry = visible_departure(route, departure_wave)
     rotation = abs(
         math.degrees(
-            wrap_pi(math.radians(push_wave.push_axis_deg - route.thrust_axis_deg))
+            wrap_pi(math.radians(push_wave.push_axis_deg - geometry.thrust_axis_deg))
         )
     )
     methalox_dv = apoapsis_methalox(rotation)
-    stack = pushed * math.exp(-methalox_dv / VE_METHALOX)
-    lines["methalox"] = pushed - stack
-    # 4. The canted departure; the plate rides through it, then diverts.  The
-    # burn lasts as long as its pulses take at the Earth rate, and that finite
-    # burn, its thrust held in one direction (the stream's angle is the
-    # plate's law), loses Oberth at the 11-minute periapsis.
-    ve_earth = law.earth_ve(
-        design.k_earth, route.departure_closing, route.impact_angle_deg
-    )
+    kept = pushed - push_plate
+    stack = kept * math.exp(-methalox_dv / VE_METHALOX)
+    lines["methalox"] = kept - stack
+    # 3. The departure on the bowl.  Its mean acceleration sets the burn's
+    # length, and that finite burn, its thrust held in one direction (the
+    # hole slides as the stream turns), loses Oberth at the periapsis.
+    ve_earth = law.hole_ve(design.k_earth, geometry.closing, geometry.impact_angle_deg)
     impulsive = departure_burn(route.departure_excess)
     dv = impulsive
     for _ in range(_LOSS_ITERATIONS):
-        mr_earth = math.exp(dv / ve_earth)
-        departure_charge = stack * (1.0 - 1.0 / mr_earth)
-        departure_impulse = departure_charge * ve_earth * 1e3
-        burn_seconds = departure_impulse / (design.departure_pulse * EARTH_PULSE_RATE)
+        burn_seconds = dv / (design.departure_g * _G0)
         dv = impulsive + departure_loss(impulsive, burn_seconds)
+    mr_earth = math.exp(dv / ve_earth)
+    departure_charge = stack * (1.0 - 1.0 / mr_earth)
+    departure_impulse = departure_charge * ve_earth * 1e3
     after = stack / mr_earth
     departure_sheets = departure_charge / design.k_earth
+    departure_pulse = departure_impulse / (burn_seconds * design.departure_rate)
     lines["departure_loss"] = dv - impulsive
     lines["departure_minutes"] = burn_seconds / 60.0
-    # 2. The flat plate, sized for the larger of its two pulses (the push's and
-    # the departure's sheet per pulse, by energy) and checked for the g cap.
-    push_pulse_sheet = PULSE_IMPULSE / (design.k_push * ve_push * 1e3)
-    departure_pulse_sheet = design.departure_pulse / (design.k_earth * ve_earth * 1e3)
-    flat = max(
-        _plate_for(push_pulse_sheet, FLAT_PLATE_PULSE, FLAT_PLATE_AREA, w_push / 100.0),
-        _plate_for(
-            departure_pulse_sheet,
-            FLAT_PLATE_PULSE,
-            FLAT_PLATE_AREA,
-            route.departure_closing / 100.0,
-        ),
-        _inertia_plate(PULSE_IMPULSE, pushed, design.g_cap),
-        _inertia_plate(design.departure_pulse, after, design.g_cap),
+    # The bowl: the paraboloid's point-blast survival floor at the pulse's
+    # energy, checked for the g cap, plus the hole's collar.
+    pulse_impactor = departure_pulse / (design.k_earth * ve_earth * 1e3)
+    bowl = (
+        max(
+            _plate_for(
+                pulse_impactor,
+                SUN_PLATE_PULSE,
+                SUN_PLATE_AREA,
+                geometry.closing / SUN_PLATE_SPEED,
+            ),
+            _inertia_plate(departure_pulse, after, design.g_cap),
+        )
+        + BORE_COLLAR
     )
-    lines["flat_plate"] = flat
     film_earth = FILM_PER_IMPULSE * (push_impulse + departure_impulse)
-    divert = flat * (math.exp(PLATE_DIVERT / (STORABLE_ISP * _G0)) - 1.0)
+    divert = bowl * (math.exp(PLATE_DIVERT / (STORABLE_ISP * _G0)) - 1.0)
     mounts_earth = CHARGE_MOUNT_FRACTION * (push_charge + departure_charge)
     lines.update(
+        push_plate=push_plate,
+        bowl=bowl,
         push_charge=push_charge,
         departure_charge=departure_charge,
         film_earth=film_earth,
         plate_divert=divert,
         earth_mounts=mounts_earth,
+        push_pulse=push_pulse,
+        departure_pulse=departure_pulse,
+        impact_angle=geometry.impact_angle_deg,
+        departure_closing=geometry.closing,
+        lob_rise=rise,
+        lob_climb=lob_climb_factor(rise),
     )
-    departing = after - flat - divert - film_earth - mounts_earth
-    # 5. Jupiter: the carrier takes the disks onto the mirror dive.
+    # The film and mounts ride up and are spent through the push and the
+    # departure; they are charged off the departing stack, as ADR 0072 did.
+    departing = after - bowl - divert - film_earth - mounts_earth
+    # 4. Jupiter: the carrier takes the disks onto the mirror dive.
     burn = carrier_burn(route, carrier_perijove(route, design.carrier_perijove))
     if burn.bend_available_deg < burn.bend_required_deg - 1e-9:
         raise ValueError("the disks' flyby cannot turn even at Jupiter's surface")
     carrier_per_disk = (1.0 + CARRIER_DRY_FRACTION) * math.exp(
         burn.burn / (STORABLE_ISP * _G0)
     )
-    # 6. The Sun: boost on the arc, disks per kg of ship, paraboloid, film.
+    # 5. The Sun: boost on the arc, disks per kg of ship, paraboloid, film.
     w_sun = route.sun_closing
     ve_sun = law.sun_ve(design.k_sun, w_sun)
     boost = route.periapsis_boost / (1.0 - arc_loss(design.arc_hours, route))
@@ -898,7 +1130,9 @@ def cycle_growth(
         The growth.
     """
     return balance(
-        fly_unit(push, push, design), fly_unit(departure, push, design), arrives
+        fly_unit(push, push, departure, design),
+        fly_unit(departure, push, departure, design),
+        arrives,
     )
 
 
@@ -946,8 +1180,10 @@ class SolarDivePrices:
 
     Attributes:
         lob: Per kilogram lofted (growth_cost.ESTIMATE).
-        flat_plate_share: The flat plate's price on the spray cup's per-kg
-            curve (author, 2026-10-16: half).
+        earth_plate_share: The push plate's and the departure bowl's price on
+            the spray cup's per-kg curve, each on its own learning count
+            (author: half, ADR 0072's flat plate's; 2026-10-19: two lighter
+            plates cost about half the one heavy one).
         sun_plate_share: The paraboloid's (author: the full curve).
         film: Per kilogram of film (growth_cost.ESTIMATE).
         methalox: Per kilogram (growth_cost.ESTIMATE).
@@ -961,14 +1197,16 @@ class SolarDivePrices:
         sheet_body: Per kilogram of sheet body (the child's PuffSat body).
         mounts: Per kilogram of charge mount (assumption).
         lob_climb: The child's lob arriving at 400 km still climbing at 1.1
-            km/s (lob_rise.booster_growth, ADR 0042-0043), for parity.
+            km/s (lob_rise.booster_growth, ADR 0042-0043), for parity.  A
+            growth lob is charged its push's faster climb on top
+            (:func:`lob_climb_factor`); a delivery keeps the child's.
         package: The child's steering package curve, per package.
         packages_per_kg: Packages per kilogram of sheet: the child's two per
             60 kg PuffSat, read as a 5% guidance mass (scaled by the bracket).
     """
 
     lob: float = 25.0
-    flat_plate_share: float = 0.5
+    earth_plate_share: float = 0.5
     sun_plate_share: float = 1.0
     film: float = 10.0
     methalox: float = 0.2
@@ -1052,7 +1290,7 @@ def solar_dive_gates(route: DiveRoute, push: DiveRoute) -> Tuple[Gate, ...]:
         Gate("first Sun boost", push.sun_years, 0.75),
         # Settled as the first growth lob is bought, at the push wave's arrival.
         Gate("sheets unfurl and arrive face-on", push.cycle_years - 1e-6, 0.85),
-        Gate("first push and canted departure", route.cycle_years, 0.90),
+        Gate("first 1 g push and hole-bowl departure", route.cycle_years, 0.90),
     )
 
 
@@ -1109,16 +1347,19 @@ def _unit_dollars(
 ) -> Dict[str, float]:
     """Dollars one launch unit of this type costs, by line."""
     m = unit.lines
-    flat_curve = prices.plate_curve(prices.flat_plate_share)
+    earth_curve = prices.plate_curve(prices.earth_plate_share)
     sun_curve = prices.plate_curve(prices.sun_plate_share)
     count = m["sheets"] * prices.packages_per_kg * guidance / 0.05
     package = prices.package.batch_cost(packages[0], count)
     packages[0] += count
     lines = {
-        "lob": lob * LAUNCH_UNIT,
-        "flat_plate": (
-            flat_curve.batch_cost(plates["flat"], 1.0) * m["flat_plate"] if lob else 0.0
+        "lob": lob * m["lob_climb"] * LAUNCH_UNIT,
+        "push_plate": (
+            earth_curve.batch_cost(plates["push"], 1.0) * m["push_plate"]
+            if lob
+            else 0.0
         ),
+        "bowl": earth_curve.batch_cost(plates["bowl"], 1.0) * m["bowl"],
         "sun_plate": sun_curve.batch_cost(plates["sun"], 1.0)
         * (m["sun_plate"] + m["bore_collar"]),
         "film": prices.film * (m["film_earth"] + m["film_sun"]),
@@ -1136,7 +1377,9 @@ def _unit_dollars(
         "avionics": prices.avionics * m["avionics"],
         "sheets": prices.sheet_body * m["sheets"] + package,
     }
-    plates["flat"] += 1.0
+    if lob:
+        plates["push"] += 1.0
+    plates["bowl"] += 1.0
     plates["sun"] += 1.0
     return lines
 
@@ -1208,15 +1451,16 @@ def value_design(
     schedule = GatedSchedule(
         rate, solar_dive_gates(departure, push) if gates is None else gates
     )
-    p_unit = fly_unit(push, push, design, laws)
-    d_unit = fly_unit(departure, push, design, laws)
+    p_unit = fly_unit(push, push, departure, design, laws)
+    d_unit = fly_unit(departure, push, departure, design, laws)
     steady = balance(p_unit, d_unit, 1.0 - MISS_FLOOR)
     cycle_years = departure.cycle_years
     harvest = int(round(growth_synodic / 3))
     delivery = delivery_unit(departure, design.k_delivery, laws)
     lob = prices.lob * prices.lob_climb
+    delivery_climb = d_unit.lines["lob_climb"] if design.slow_delivery else 1.0
 
-    plates = {"flat": 0.0, "sun": 0.0}
+    plates = {"push": 0.0, "bowl": 0.0, "sun": 0.0}
     packages = [0.0]
     s = steady.push_share
     seed_mass = s * p_unit.lines["departing"] + (1 - s) * d_unit.lines["departing"]
@@ -1260,15 +1504,15 @@ def value_design(
             ).items():
                 cost[key] = cost.get(key, 0.0) + share * value * new_units
         deliveries = surplus / delivery.sheets
-        cost["delivery_lob"] = lob * LAUNCH_UNIT * deliveries
+        cost["delivery_lob"] = lob * delivery_climb * LAUNCH_UNIT * deliveries
         cost["delivery_plate"] = (
-            prices.plate_curve(prices.flat_plate_share).batch_cost(
-                plates["flat"], deliveries
+            prices.plate_curve(prices.earth_plate_share).batch_cost(
+                plates["push"], deliveries
             )
             * DELIVERY_PLATE
         )
         cost["delivery_charge"] = prices.polyethylene * delivery.charge * deliveries
-        plates["flat"] += deliveries
+        plates["push"] += deliveries
         cargo = deliveries * delivery.cargo
         factor = schedule.factor(years)
         pv_cost += factor * sum(cost.values())
@@ -1308,14 +1552,13 @@ def seed_price(route: DiveRoute, dear: bool = False) -> float:
     return prices.high if dear else prices.low
 
 
-_KNOBS = ("k_push", "k_earth", "k_sun", "arc_hours", "k_delivery", "departure_pulse")
+_KNOBS = ("k_push", "k_earth", "k_sun", "arc_hours", "k_delivery")
 _BOUNDS = {
     "k_push": K_PUSH,
     "k_earth": K_EARTH,
     "k_sun": K_SUN,
     "arc_hours": ARC_HOURS,
     "k_delivery": K_PUSH,
-    "departure_pulse": DEPARTURE_PULSE,
 }
 
 
@@ -1350,7 +1593,10 @@ def optimize_design(
     gates: Optional[Tuple[Gate, ...]] = None,
     growth_synodic: int = GROWTH_SYNODIC,
 ) -> Optimum:
-    """Choose the slug ratios and the Sun arc for the lowest cost per kilogram.
+    """Choose the four slug ratios and the Sun arc for the lowest cost per kilogram.
+
+    The pulse sizes are not knobs: the push's is set by its 1 g at 2 Hz and
+    the departure's by its 0.25 g at 1 Hz (ADR 0073).
 
     The objective is the break-even L1 price on the gated schedule, on the
     dear seed by default (author, 2026-10-16: the more realistic end)
@@ -1487,39 +1733,33 @@ def child_break_even(
 # The report (make solar-dive)
 # --------------------------------------------------------------------------
 
-#: The two headline closures: Parker's perihelion (the shade has flown there)
-#: at its cheapest return excess in the sweep, and the 4 R_sun upgrade, whose
-#: shade is unsolved (the parent's E-items).
-HEADLINES = ((9.86, 60.0), (4.0, 90.0))
-#: Where the optimizer starts each headline: the depth sweep's cheap-seed
-#: optima (recorded so the headline reproduces; the sweep itself is
-#: ``--sweep``, its bounds ``_BOUNDS`` and ``RETURN_EXCESSES``).
+#: The two headline closures (author, 2026-10-19): Parker's perihelion with a
+#: ~100 km/s Earth wave (X 90: 100.8 km/s at Earth) and 4 R_sun with a ~150
+#: km/s one (X 150: 157 km/s), the closures the simulation first asked
+#: about.  The 4 R_sun shade is unsolved (the parent's E-items).
+HEADLINES = ((9.86, 90.0), (4.0, 150.0))
+#: ADR 0072's cheapest return excesses at the same depths, re-flown for
+#: comparison.
+COMPARISONS = ((9.86, 60.0), (4.0, 90.0))
+#: Where the optimizer starts each closure: the optima of the run recorded
+#: in ADR 0073 (so the headline reproduces; bounds ``_BOUNDS``).
 HEADLINE_STARTS = {
+    (9.86, 90.0): Design(
+        k_push=7.94, k_earth=13.94, k_sun=20.0, arc_hours=5.09, k_delivery=6.98
+    ),
+    (4.0, 150.0): Design(
+        k_push=8.23, k_earth=13.74, k_sun=20.0, arc_hours=2.32, k_delivery=7.51
+    ),
     (9.86, 60.0): Design(
-        k_push=6.74,
-        k_earth=5.21,
-        k_sun=20.0,
-        arc_hours=4.86,
-        k_delivery=5.10,
-        departure_pulse=3.71e6,
+        k_push=7.07, k_earth=12.67, k_sun=20.0, arc_hours=4.93, k_delivery=5.77
     ),
     (4.0, 90.0): Design(
-        k_push=6.83,
-        k_earth=5.0,
-        k_sun=29.9,
-        arc_hours=2.37,
-        k_delivery=5.0,
-        departure_pulse=3.66e6,
+        k_push=6.65, k_earth=12.12, k_sun=20.3, arc_hours=2.16, k_delivery=5.39
     ),
 }
 SWEEP_RADII = (4.0, 6.0, 8.0, 9.86, 12.0, 15.0, 20.0)
 _SWEEP_START = Design(
-    k_push=8.0,
-    k_earth=8.0,
-    k_sun=25.0,
-    arc_hours=3.0,
-    k_delivery=6.0,
-    departure_pulse=6.0e6,
+    k_push=8.0, k_earth=10.0, k_sun=25.0, arc_hours=3.0, k_delivery=6.0
 )
 
 
@@ -1566,7 +1806,8 @@ def corrections_report() -> str:
 
 def _ledger_rows(unit: UnitLedger) -> List[List[str]]:
     keys = (
-        "flat_plate",
+        "push_plate",
+        "bowl",
         "push_charge",
         "methalox",
         "departure_charge",
@@ -1608,10 +1849,12 @@ def _ledger_rows(unit: UnitLedger) -> List[List[str]]:
     return rows
 
 
-def headline_report() -> Tuple[str, Dict[Tuple[float, float], Optimum]]:
-    """The two headline closures, optimized for the dear-seed break-even."""
+def headline_report(
+    closures: Sequence[Tuple[float, float]] = HEADLINES,
+) -> Tuple[str, Dict[Tuple[float, float], Optimum]]:
+    """Closures optimized for the dear-seed break-even, each with its ledger."""
     out, optima = [], {}
-    for key in HEADLINES:
+    for key in closures:
         departure = departure_route(*key)
         push = push_route(*key)
         assert departure is not None and push is not None
@@ -1622,7 +1865,14 @@ def headline_report() -> Tuple[str, Dict[Tuple[float, float], Optimum]]:
         out.append(
             f"{key[0]:g} R_sun, return excess {key[1]:g} km/s (push wave {push.return_excess:.1f}):"
             f" k_P {d.k_push:.2f}, k_E {d.k_earth:.2f}, k_S {d.k_sun:.2f}, arc {d.arc_hours:.2f} h,"
-            f" departure pulse {d.departure_pulse / 1e6:.2f} MN s, k_L {d.k_delivery:.2f}\n"
+            f" k_L {d.k_delivery:.2f}\n"
+            f"  departure on the visible sign at {growth.departure_unit.lines['impact_angle']:.1f} deg,"
+            f" {growth.departure_unit.lines['departure_closing']:.1f} km/s"
+            f" (push-wave ship {growth.push_unit.lines['impact_angle']:.1f} deg);"
+            f" pulses {growth.departure_unit.lines['push_pulse'] / 1e6:.2f} MN s push,"
+            f" {growth.departure_unit.lines['departure_pulse'] / 1e6:.2f} MN s departure;"
+            f" lob climbing {growth.departure_unit.lines['lob_rise']:.2f} km/s"
+            f" (x{growth.departure_unit.lines['lob_climb']:.3f})\n"
             f"  growth {v.growth:.2f} per 3S ({growth.per_total_impactor:.2f} with the disks"
             f" counted as impactor), doubling {v.doubling:.2f} yr, push share {growth.push_share:.2f}\n"
             f"  steady ${v.steady_cost:.0f}/kg at L1; break-even ${_money(v.break_even)} /"
@@ -1677,8 +1927,12 @@ SENSITIVITIES = (
     Sensitivity("bonds returned", bonds="bonds returned"),
     Sensitivity("shade scales with sunlight", design={"shield_exponent": 1.0}),
     Sensitivity("carrier perijove <= 2 R_J", design={"carrier_perijove": 2.0}),
-    Sensitivity("flat plate 25% of spray cup", prices={"flat_plate_share": 0.25}),
-    Sensitivity("flat plate 100%", prices={"flat_plate_share": 1.0}),
+    Sensitivity("lob climb not charged (1.1 km/s)", design={"charge_lob_climb": False}),
+    Sensitivity("push at 3.26 g (the child's 4 Hz)", design={"push_g": 3.26}),
+    Sensitivity("departure at 0.5 g", design={"departure_g": 0.5}),
+    Sensitivity("deliveries at 2 Hz / 1 g too", design={"slow_delivery": True}),
+    Sensitivity("Earth plates 25% of spray cup", prices={"earth_plate_share": 0.25}),
+    Sensitivity("Earth plates 100%", prices={"earth_plate_share": 1.0}),
     Sensitivity("disks $500/kg", prices={"disk": 500.0}),
     Sensitivity("disks $2000/kg", prices={"disk": 2000.0}),
     Sensitivity("lob $50/kg", prices={"lob": 50.0}),
@@ -1846,6 +2100,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         "\nHeadline: gated rNPV at 10%/yr, 15 synodic periods of growth, dear-seed optimum\n"
         + report
     )
+    compared, _ = headline_report(COMPARISONS)
+    print("\nADR 0072's closures, re-flown\n" + compared)
     for key, optimum in optima.items():
         print(
             f"\nSensitivities at {key[0]:g} R_sun (headline design held)\n"

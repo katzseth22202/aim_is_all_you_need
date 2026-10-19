@@ -1817,14 +1817,16 @@ both cargo per lob and `P` (ADR 0036). _Avoid_: a constant k = 10 delivery.
 
 The impact simulation's alternative growth loop (its Results 10-12), charged through
 this repo's ledger and cost book (`src/solar_dive_growth.py`, `make solar-dive`, ADR
-`0072-the-solar-dive-charge-pusher-replaces-the-chamber`). Returning **Earth-wave**
+`0072-the-solar-dive-charge-pusher-replaces-the-chamber`, ADR
+`0073-two-plates-the-visible-sign-and-the-1-g-push`). Returning **Earth-wave**
 sheets push a lofted launch unit at 400 km and later depart it from the 10-day orbit
 onto the three-synodic **Jovian solar-dive cycle**; **Sun-wave** disks boost it at
 perihelion; its remainder returns as the next Earth wave. No chamber, rods or plug are
 expended.
 
 **Earth wave**:
-The returning stream of furled Kapton sheets, ~100 km/s Earth-relative, that pushes
+The returning stream of furled ~100 um Kapton sheets (push wave) and compact
+impactors (departure wave), ~100 km/s Earth-relative, that pushes
 and departs the next launch units. Fleet mass: it flies the cycle and comes back.
 _Avoid_: calling it PuffSats (the child's argon-plate stream), or counting the Sun wave
 in it.
@@ -1846,9 +1848,39 @@ It comes home early on a faster climb: a larger Sun boost.
 _Avoid_: one undivided wave for both jobs (a wave arrives as a single pulse).
 
 **Canted plate**:
-The flat plate the departure wave sweeps past at ~95-101 degrees to the thrust axis,
-striking polyethylene charges held off it. One plate takes the 400 km overtake push and
-the departure, sized for the larger pulse, then diverts (~20 m/s) into Jupiter.
+ADR 0072's flat plate, which the departure wave swept past at ~76-101 degrees to the
+thrust axis. That sign's stream passes through Earth (the parent's S38), so it is
+superseded by the **departure bowl** on the **visible sign** (ADR 0073).
+_Avoid_: quoting the canted law for the flown departure.
+
+**Push plate**:
+The 9.5 m flat plate with a 2 m skirt (~11-12 t) that takes the 400 km overtake push at
+2 Hz and 1 g on ~100 um sheets. Sized by its absorber (`I^2/(2 s M a)` at 100 g over 2 m),
+not the point-blast floor, since a planar sheet loads it evenly (the simulation's
+ADR-0064). It flies up in the launch unit and is left in the parking orbit at apoapsis.
+
+**Departure bowl**:
+The delta/D 0.5 paraboloid (~13-22 t with its 1 t collar) that departs the ship: compact
+impactors thread a hole and stop in a charge at its focus, as at the Sun, at 1 Hz and a
+0.25 g mean (the simulation's ADR-0065). Sized by the paraboloid's survival floor at the
+pulse's energy. Flies up with the push plate, rides through the departure, then diverts
+into Jupiter.
+
+**Visible sign**:
+The departure-hyperbola sign whose stream does not pass through Earth: the upstream
+direction lies outside the ~66 degree occultation cone around nadir at the 600 km
+periapsis. It meets the stream at ~117-140 degrees and ~8% faster than the hidden sign,
+and its thrust axis swings ~42 degrees further from the push wave, so the apoapsis turn
+costs 0.33-0.35 km/s instead of 0.24-0.28. Every ship, push-wave ones included, is
+departed by the **departure wave**'s stream.
+
+**Push climb**:
+The lob's vertical speed at 400 km that keeps a push above the **growth-wave floor**: the
+unit must stay above 400 km until it is orbital (~700 s at 1 g) and end on a periapsis
+above it. ~2.43 km/s at 1 g, against the child's 1.1 km/s at 3.3 g. Above ~2.4 km/s the
+booster's brake at separation no longer closes, so it brakes on the way down (an entry
+burn), and the growth lob costs x1.48 the child's.
+_Avoid_: "a slightly faster lob"; it is more than twice the climb.
 
 **True mirror excess**:
 The Jupiter-relative excess the disks' carrier must burn to: the ship's post-flyby state

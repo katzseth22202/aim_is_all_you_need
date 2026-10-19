@@ -16,6 +16,7 @@ with its provenance rather than fetched.
 | `plume_state.csv` | `puffsat_impact_simulation` @ `0216a09`, `data/results/plume_state.csv` | `make analysis-plume` there |
 | `departure_visibility.csv` | this repository (ADR 0066) | `make departure-visibility` |
 | `solar_dive_stage_laws.csv` | `puffsat_impact_simulation` @ `a6742a2` (ADR 0072) | see below |
+| `departure_hole_law.csv` | `puffsat_impact_simulation` @ `bfea495` (ADR 0073) | see below |
 
 ## `plume_state.csv`
 
@@ -62,3 +63,33 @@ The impact simulation's exhaust speeds `v_e(k)` for the solar-dive charge-pusher
   only the optimum.
 - `overtake_push`: the flat plate with a 4 m skirt, point fireball, grid x1, carbon frozen,
   at 100 km/s, k = 5-40. Copied from its `overtake_ledger.csv`.
+
+## `departure_hole_law.csv`
+
+The impact simulation's departure bowl (its Result 14, ADR-0065): compact impactors thread a hole
+in a delta/D 0.5 paraboloid and stop in a charge at 1.5 F. Its `departure_hole.hole_ve(plate,
+theta, k, w)` factors exactly as
+
+    v_e = capture(theta, k) * w * speed(k, w)
+
+because the only run-dependent terms are the capture and `confined_ratio`, and the latter is one
+constant (1 / 0.571655). So the table has two kinds of row:
+
+- `capture`: impulse per `m w` for "paraboloid 0.50 at 1.5 F" at theta = 89.2 / 117 / 129.9 / 180
+  deg and k = 5-60, copied from its committed `data/results/xray_collision/departure_hole_law.csv`
+  (its 2-D runs' JSONL is not committed).
+- `speed`: `speed(k, w) = (1 + e(u_rms)) / k * mixing(k) * (1 - bond toll(k, w)) / confined_ratio`
+  for k = 5-60 and w = 60-220 km/s, `bonds` = `carbon atomic` (toll charged) or `condensed` (none).
+  Generated with its own code at `bfea495`, after building its polyethylene table
+  (`PYTHONPATH=python python -m puffsat.tables --ch2`):
+
+  ```python
+  u_rms = w * sqrt(k) / (1 + k)
+  column = (1 + k) * growth.REBOUND_IMPACTOR / (2 * pi * charge.PLATE_R**2)
+  v = (1 + charge.rebound(u_rms, column)) / k * charge.mixing_factor(growth.SUN_PLATE, k)
+  speed = 0.571655 * v * (1 - departure_hole.bond_loss(k, w))   # condensed: no bond term
+  ```
+
+`StageLaws.hole_ve` interpolates the capture linearly in `cos theta` (extrapolating past the run
+angles, as the simulation does) and both factors log-linearly in k. It reproduces the simulation's
+`hole_ve` columns to within 0.5% (the k-interpolation between its runs).

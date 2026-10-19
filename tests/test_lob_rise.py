@@ -7,7 +7,9 @@ from src.lob_rise import (
     ISP_PESSIMISTIC,
     OPERATING_RISE_SPEED,
     booster_growth,
+    brake_dv,
     braked_lob,
+    entry_burn_dv,
     lofted_mass,
     push_track,
 )
@@ -89,3 +91,32 @@ def test_an_unsupported_push_falls_off_the_stream_and_a_climbing_one_tracks_it()
     assert flat.below > 350.0
     assert max(climbing.below, climbing.above) < 80.0
     assert climbing.final_periapsis > 400.0
+
+
+@pytest.mark.slow
+def test_a_1_g_push_needs_a_2_4_km_s_climb_to_hold_400_km() -> None:
+    """The parent's S33 on push_track: 2.25 km/s ends below 400 km, 2.5 holds."""
+    short = push_track(2.25, 101.0, 10.75, 1 / 1.33, 9.80665)
+    holds = push_track(2.5, 101.0, 10.75, 1 / 1.33, 9.80665)
+    assert 950.0 < holds.duration < 1050.0
+    assert short.final_periapsis < 400.0 < holds.final_periapsis
+    assert holds.lowest == pytest.approx(400.0, abs=0.5)
+
+
+@pytest.mark.slow
+def test_the_entry_burn_closes_where_the_separation_brake_cannot() -> None:
+    """At 2.5 km/s a fall from rest at separation already crosses 60 km above
+    1.5 km/s (S33): no separation brake works, the entry burn does."""
+    lob = braked_lob(2500.0, entry_burn=True)
+    assert lob.separation_altitude > 185.0e3
+    assert brake_dv(lob.separation_altitude, lob.separation_speed) != pytest.approx(
+        brake_dv(lob.separation_altitude, lob.separation_speed)
+    )  # NaN
+    assert entry_burn_dv(
+        lob.separation_altitude, lob.separation_speed
+    ) == pytest.approx(lob.brake)
+    assert (
+        1.4
+        < booster_growth(2500.0, baseline=OPERATING_RISE_SPEED, entry_burn=True)
+        < 1.6
+    )
