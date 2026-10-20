@@ -27,8 +27,8 @@ growth loop from the child paper's chamber cycle:
 4. **Sun.** The disks strike polyethylene charges in a paraboloid over an arc
    of hours around periapsis, at 2 Hz.
 5. **Return.** The ship's remainder is released as furled sheets: the next
-   Earth wave.  Its sheets are Kapton below 130 km/s and dry woven carbon
-   fabric above (the simulation's Result 15).
+   Earth wave.  Its sheets are Kapton as wide as the push plate up to
+   140 km/s and dry woven carbon fabric above (the simulation's Result 18).
 
 Everything is float arithmetic (km, km/s, kg, years, dollars), like
 :mod:`src.growth_cost`; the closures come from the Quantity-free conic code.
@@ -90,6 +90,7 @@ HOLE_LAW = Path(__file__).resolve().parent.parent / "data" / "departure_hole_law
 FAST_WAVE_LAW = (
     Path(__file__).resolve().parent.parent / "data" / "fast_wave_push_law.csv"
 )
+FAR_BOWL = Path(__file__).resolve().parent.parent / "data" / "far_bowl_capture.csv"
 
 _MU_EARTH = 398600.4418
 _R_EARTH = 6378.137
@@ -143,15 +144,23 @@ SPRING_THETA = 2.0 * math.pi / 3.0
 #: The bag: a fibre wall carrying its gas in tension needs at least
 #: ``3 P V rho / sigma`` (the parent's S45 item 3), worked at half a 2.5 GPa,
 #: 1600 kg/m^3 fibre (Vectran-class) and charged at the peak pressure; the
-#: fill is helium at room temperature.  The paper's liner, felt, rings and
-#: guides (5 t on its 1.7e8 J bag) are a sensitivity (``Design.bag_fittings``).
+#: fill is at room temperature.  The paper's liner, felt, rings and guides
+#: (5 t on its 1.7e8 J bag) are a sensitivity (``Design.bag_fittings``).
 BAG_WALL_FACTOR = 3.0
 BAG_FIBRE_STRENGTH = 2.5e9  # Pa
 BAG_FIBRE_DENSITY = 1600.0  # kg/m^3
 BAG_SAFETY = 2.0
-HELIUM_GAMMA = 5.0 / 3.0
-HELIUM_GAS_CONSTANT = 2077.1  # J/(kg K)
+#: The bags' gas, ``(gamma, R J/(kg K))``.  Nitrogen is the simulation's
+#: choice (Result 17): it warms 65-74 K over a push with no cooling, inside
+#: Vectran's ~150 C; helium saves gas but warms 140-152 K and must radiate.
+BAG_GASES = {"nitrogen": (1.4, 296.8), "helium": (5.0 / 3.0, 2077.1)}
 BAG_TEMPERATURE = 293.0  # K
+#: The gas-tight bladder inside the fibre, per joule of mean PV: the
+#: simulation's whole-floor 52 kPa bag, 1.3 t on its 63 t, 8 m, 2 pi / 3
+#: spring's 259.6 MJ (Result 17, ``gas_spring_design.csv``).  Its 1 MPa,
+#: four-cell bag carries 0.13 t (:data:`CELL_BLADDER_PER_PV`).
+BLADDER_PER_PV = 1.3e3 / 259.6e6  # kg/J
+CELL_BLADDER_PER_PV = 0.13e3 / 259.6e6  # kg/J
 PAPER_BAG_FITTINGS = 5.0e3 / 1.7e8  # kg per J of PV: the paper's 5 t on 1.7e8 J
 #: Film per unit impulse: the spray cup's vapor-shielded 4-6 kg per 12 MN s
 #: pulse (growth_ledger.SPRAY_CUP_FILM_PER_PULSE), on both Earth plates.  The Sun plate's is scaled
@@ -182,22 +191,24 @@ CHILD_DELIVERY_G = 3.26
 CHILD_DELIVERY_RATE = 4.0  # Hz
 
 # --- The sheets' material, by the stream they fly in at 400 km (the
-# simulation's Result 15, the parent's S43 item 2): 100 um Kapton holds at
-# 99 km/s and fails at 132; dry woven carbon fabric flies above 130 km/s;
-# 100-130 km/s is unrun (``SolarDivePrices.band_carbon``).  The growth sheets
-# fly the growth stream; the departure wave's returns are priced by their
-# delivery stream at 400 km, the faster of their two uses.
-KAPTON_HOLDS = 100.0  # km/s
-KAPTON_FAILS = 130.0  # km/s
+# simulation's Result 18, the parent's S47 item 1): Kapton as wide as the
+# push plate's 9.5 m floor, on a maraging-300 face, holds in the computed
+# backward plume at every printed closure through 137.1 km/s; dry woven
+# carbon fabric flies above (``Design.kapton_limit``).  Result 15's narrower
+# sheet failed at 132 km/s, and the 100-130 km/s band it left unrun holds
+# (Result 16).  The growth sheets fly the growth stream; the departure
+# wave's returns are priced by their delivery stream at 400 km, the faster
+# of their two uses.
+KAPTON_LIMIT = 140.0  # km/s
 
 
-def sheet_material(stream: float) -> str:
-    """The impactor the overtake law charges: carbon above 130 km/s, else Kapton.
+def sheet_material(stream: float, limit: float = KAPTON_LIMIT) -> str:
+    """The impactor the overtake law charges: carbon above ``limit``, else Kapton.
 
-    In the 100-130 km/s band either may fly (``SolarDivePrices.band_carbon``);
-    the law charges Kapton there, which moves ``v_e`` under 0.1% (Result 15).
+    The two differ in the law only by the impactor's atomization, under
+    0.1% of ``v_e`` (Result 15).
     """
-    return "graphite" if stream > KAPTON_FAILS else "Kapton"
+    return "graphite" if stream > limit else "Kapton"
 
 
 # --- Search bounds (recorded so the optimum is reproducible; CLAUDE.md).
@@ -205,6 +216,10 @@ K_PUSH = (5.0, 40.0)
 K_EARTH = (5.0, 60.0)  # the hole-bowl runs
 K_SUN = (20.0, 100.0)
 ARC_HOURS = (0.5, 12.0)
+#: The departure bowl's line through its rim: a stream shallower than this
+#: (to the thrust axis) sends a bare impactor into the far wall at 1.5 F, so
+#: the charge sits at 2.5 F there (the simulation's Results 15-16).
+RIM_LINE_DEG = 122.0
 #: Return excesses each depth is closed at; the optimizer picks among them.
 RETURN_EXCESSES = (60.0, 75.0, 90.0, 110.0, 130.0, 150.0, 175.0)
 
@@ -229,6 +244,8 @@ class StageLaws:
         hole: The bowl's ``v_e / (w capture)``: ``(k, w km/s, factor)`` rows.
         fast: The overtake push re-priced at each closing speed (the
             simulation's Result 15): ``(impactor, k, w km/s, v_e km/s)`` rows.
+        far: The bowl with its charge at 2.5 F (Result 16): ``(theta_deg,
+            k, capture at 1.5 F, capture at 2.5 F)`` rows.
     """
 
     earth: Tuple[Tuple[float, float, float, float], ...]
@@ -237,6 +254,7 @@ class StageLaws:
     capture: Tuple[Tuple[float, float, float], ...] = ()
     hole: Tuple[Tuple[float, float, float], ...] = ()
     fast: Tuple[Tuple[str, float, float, float], ...] = ()
+    far: Tuple[Tuple[float, float, float, float], ...] = ()
 
     @staticmethod
     @functools.lru_cache(maxsize=None)
@@ -245,6 +263,7 @@ class StageLaws:
         bonds: str = "carbon atomic",
         hole_path: Path = HOLE_LAW,
         fast_path: Path = FAST_WAVE_LAW,
+        far_path: Path = FAR_BOWL,
     ) -> "StageLaws":
         """Read the vendored tables.
 
@@ -254,6 +273,7 @@ class StageLaws:
                 bowl's ``condensed`` rows).
             hole_path: The departure bowl's CSV.
             fast_path: The overtake law at speed.
+            far_path: The bowl at 2.5 F.
 
         Returns:
             The laws.
@@ -288,8 +308,24 @@ class StageLaws:
                 )
                 for row in csv.DictReader(handle)
             )
+        with far_path.open() as handle:
+            far = tuple(
+                (
+                    float(row["theta"]),
+                    float(row["k"]),
+                    float(row["capture_15"]),
+                    float(row["capture_25"]),
+                )
+                for row in csv.DictReader(handle)
+            )
         return StageLaws(
-            tuple(earth), tuple(sun), tuple(push), tuple(capture), tuple(hole), fast
+            tuple(earth),
+            tuple(sun),
+            tuple(push),
+            tuple(capture),
+            tuple(hole),
+            fast,
+            far,
         )
 
     def earth_ve(self, k: float, w: float, theta_deg: float) -> float:
@@ -350,7 +386,25 @@ class StageLaws:
             values.append(_log_interp(k, [r[1] for r in grid], [r[3] for r in grid]))
         return float(np.interp(w, speeds, values))
 
-    def hole_ve(self, k: float, w: float, theta_deg: float) -> float:
+    def far_focus(self, k: float) -> float:
+        """The capture at 2.5 F over that at 1.5 F, below the rim line.
+
+        Result 16 ran the 2.5 F bowl at 117 deg, the only flown angle below
+        :data:`RIM_LINE_DEG`, at k = 10, 20 and 30: 0.907-0.919.  Its rows at
+        1.5 F are this table's own capture rows exactly, and the move changes
+        only the capture (its ``hole_ve`` falls by the same ratio).  Log in
+        ``k``, held flat outside 10-30.
+        """
+        rows = sorted((r for r in self.far if r[0] < RIM_LINE_DEG), key=lambda r: r[1])
+        return float(
+            np.interp(
+                math.log(k), np.log([r[1] for r in rows]), [r[3] / r[2] for r in rows]
+            )
+        )
+
+    def hole_ve(
+        self, k: float, w: float, theta_deg: float, far_focus: bool = True
+    ) -> float:
         """Departure-bowl exhaust speed (km/s), per kg of charge.
 
         The simulation's ``departure_hole.hole_ve`` for the delta/D 0.5
@@ -358,7 +412,9 @@ class StageLaws:
         f(k, w)``: the capture is log-interpolated in ``k`` and linear in
         ``cos theta`` between the run angles (extrapolated linearly past
         them, as the simulation does), ``f`` (rebound, mixing and the bond
-        toll) log in ``k`` and linear in ``w``.
+        toll) log in ``k`` and linear in ``w``.  Below :data:`RIM_LINE_DEG`
+        the charge sits at 2.5 F (``far_focus``, :meth:`far_focus`); False
+        keeps 1.5 F there, where a bare impactor would strike the far wall.
         """
         thetas = sorted({row[0] for row in self.capture})
         captures = []
@@ -380,6 +436,8 @@ class StageLaws:
         for speed in speeds:
             rows = sorted((r for r in self.hole if r[1] == speed), key=lambda r: r[0])
             factors.append(_log_interp(k, [r[0] for r in rows], [r[2] for r in rows]))
+        if far_focus and theta_deg < RIM_LINE_DEG:
+            capture *= self.far_focus(k)
         return capture * w * float(np.interp(w, speeds, factors))
 
 
@@ -1031,6 +1089,13 @@ class Design:
             in the parking orbit); False flies two, the push plate left there.
         push_law: The overtake law (:meth:`StageLaws.push_ve`): ``fast wave``
             (the simulation's, headline) or ``linear`` (ADR 0074's).
+        kapton_limit: The fastest stream Kapton sheets fly in (km/s); carbon
+            fabric above.  It sets both the overtake law's impactor and the
+            sheet's price (140 headline, Result 18; 130 Result 15's).
+        bag_gas: The springs' gas, a key of :data:`BAG_GASES`.
+        bladder: The bags' bladder per joule of mean PV (kg/J).
+        far_focus: Fly the bowl's charge at 2.5 F below the rim line
+            (:meth:`StageLaws.hole_ve`); False keeps ADR 0076's 1.5 F.
         bag_fittings: Liner, felt, rings and guides per joule of the bag's PV
             (kg/J; 0 headline, :data:`PAPER_BAG_FITTINGS` the paper's).
         carrier_perijove: The disks' highest perijove (Jupiter radii); lower
@@ -1057,6 +1122,10 @@ class Design:
     spring_theta: float = SPRING_THETA
     shared_spring: bool = True
     push_law: str = "fast wave"
+    kapton_limit: float = KAPTON_LIMIT
+    bag_gas: str = "nitrogen"
+    bladder: float = BLADDER_PER_PV
+    far_focus: bool = True
     bag_fittings: float = 0.0
     carrier_perijove: float = CARRIER_PERIJOVE
     bonds: str = "carbon atomic"
@@ -1125,7 +1194,7 @@ class GasSpring:
     Attributes:
         plate: The moving plate (kg).
         stroke: Its swing per pulse (m).
-        bag: The bags' wall, helium and fittings (kg).
+        bag: The bags' wall, gas, bladder and fittings (kg).
         pv: The gas's mean pressure times volume (J).
         peak_ratio: The force's peak over its mean.
         swing_speed: The plate's speed relative to the craft at each pulse (m/s).
@@ -1141,8 +1210,14 @@ class GasSpring:
     peak_g: float
 
 
-def bag_mass(pv: float, theta: float, fittings: float = 0.0) -> float:
-    """The bags' wall at the peak pressure, the helium fill and the fittings (kg)."""
+def bag_mass(
+    pv: float,
+    theta: float,
+    fittings: float = 0.0,
+    gas: str = "nitrogen",
+    bladder: float = BLADDER_PER_PV,
+) -> float:
+    """The bags' wall at the peak pressure, their gas, bladder and fittings (kg)."""
     wall = (
         BAG_WALL_FACTOR
         * peak_to_mean(theta)
@@ -1151,8 +1226,8 @@ def bag_mass(pv: float, theta: float, fittings: float = 0.0) -> float:
         * BAG_SAFETY
         / BAG_FIBRE_STRENGTH
     )
-    helium = pv / (HELIUM_GAS_CONSTANT * BAG_TEMPERATURE)
-    return wall + helium + fittings * pv
+    fill = pv / (BAG_GASES[gas][1] * BAG_TEMPERATURE)
+    return wall + fill + (bladder + fittings) * pv
 
 
 def gas_spring(
@@ -1175,7 +1250,7 @@ def gas_spring(
         force: The mean thrust (N).
         rate: Pulses a second.
         stack: Everything the pulses push at the leg's end, plate included (kg).
-        design: ``spring_stroke``, ``spring_theta`` and ``bag_fittings``.
+        design: ``spring_stroke``, ``spring_theta`` and the bag's terms.
         floor: The plate's survival floor (kg).
         plate: A plate already fixed (a shared assembly); overrides the law.
 
@@ -1188,11 +1263,11 @@ def gas_spring(
     craft = stack - m
     reduced = m * craft / (m + craft)
     stiffness = reduced * (theta * rate) ** 2
-    pv = HELIUM_GAMMA * (force * craft / stack) ** 2 / stiffness
+    pv = BAG_GASES[design.bag_gas][0] * (force * craft / stack) ** 2 / stiffness
     return GasSpring(
         plate=m,
         stroke=product / m,
-        bag=bag_mass(pv, theta, design.bag_fittings),
+        bag=bag_mass(pv, theta, design.bag_fittings, design.bag_gas, design.bladder),
         pv=pv,
         peak_ratio=peak_to_mean(theta),
         swing_speed=force / (2.0 * m * rate),
@@ -1260,7 +1335,10 @@ def fly_earth(
     # orbital (push_climb), charged as the booster's lost lofted mass.
     ve_push = (
         law.push_ve(
-            design.k_push, push_stream, sheet_material(push_stream), design.push_law
+            design.k_push,
+            push_stream,
+            sheet_material(push_stream, design.kapton_limit),
+            design.push_law,
         )
         * PUSH_SKIRT_SHARE
     )
@@ -1292,7 +1370,9 @@ def fly_earth(
     # 3. The departure on the bowl.  Its mean acceleration sets the burn's
     # length, and that finite burn, its thrust held in one direction (the
     # hole slides as the stream turns), loses Oberth at the periapsis.
-    ve_earth = law.hole_ve(design.k_earth, geometry.closing, geometry.impact_angle_deg)
+    ve_earth = law.hole_ve(
+        design.k_earth, geometry.closing, geometry.impact_angle_deg, design.far_focus
+    )
     impulsive = departure_burn(departure_excess, days)
     dv = impulsive
     for _ in range(_LOSS_ITERATIONS):
@@ -1589,8 +1669,6 @@ class SolarDivePrices:
             flown where Kapton fails (the parent's hypothesis, S43 item 2:
             between bulk tow at ~$34/kg and retail dry triaxial fabric at
             ~$145-167/kg, Rock West's 532 g/m^2 Qiso at $85-99 a yard, 2026-10).
-        band_carbon: Fly carbon fabric in the unrun 100-130 km/s band too
-            (False: Kapton, which holds at 99 km/s).
         mounts: Per kilogram of charge mount (assumption).
         lob_climb: The child's lob arriving at 400 km still climbing at 1.1
             km/s (lob_rise.booster_growth, ADR 0042-0043), for parity.  A
@@ -1614,17 +1692,14 @@ class SolarDivePrices:
     avionics: float = 1000.0
     sheet_body: float = 3.0
     carbon_fabric: float = 100.0
-    band_carbon: bool = False
     mounts: float = 50.0
     lob_climb: float = 1.0648
     package: LearningCurve = LearningCurve(100.0, 10.0, 0.8, anchor=1.0e5)
     packages_per_kg: float = 2.0 / 60.0
 
-    def sheet_price(self, stream: float) -> float:
+    def sheet_price(self, stream: float, limit: float = KAPTON_LIMIT) -> float:
         """Per kilogram of sheet body flying in a ``stream`` km/s wave at 400 km."""
-        if stream > KAPTON_FAILS or (stream > KAPTON_HOLDS and self.band_carbon):
-            return self.carbon_fabric
-        return self.sheet_body
+        return self.carbon_fabric if stream > limit else self.sheet_body
 
     def plate_curve(self, share: float) -> LearningCurve:
         """The spray cup's per-kilogram curve at ``share`` of its price."""
@@ -1841,7 +1916,7 @@ def delivery_unit(
     """
     w = wave_speed(stream_excess, PUSH_ALTITUDE)
     k = design.k_delivery
-    ve = laws.push_ve(k, w, sheet_material(w), design.push_law)
+    ve = laws.push_ve(k, w, sheet_material(w, design.kapton_limit), design.push_law)
     mr = math.exp(l1_transfer_speed() / ve)
     pushed = LAUNCH_UNIT / mr
     halo = math.exp(-HALO_INSERTION / VE_METHALOX)
@@ -1917,8 +1992,12 @@ def value_design(
     lob = prices.lob * prices.lob_climb
     gap_years = push.early_days * _DAY / _SECONDS_PER_YEAR
     bodies = (
-        prices.sheet_price(wave_speed(push.earth_excess, PUSH_ALTITUDE)),
-        prices.sheet_price(wave_speed(departure.earth_excess, PUSH_ALTITUDE)),
+        prices.sheet_price(
+            wave_speed(push.earth_excess, PUSH_ALTITUDE), design.kapton_limit
+        ),
+        prices.sheet_price(
+            wave_speed(departure.earth_excess, PUSH_ALTITUDE), design.kapton_limit
+        ),
     )
 
     plates = {"push": 0.0, "bowl": 0.0, "sun": 0.0}
@@ -2201,20 +2280,21 @@ COMPARISONS = ((9.86, 90.0), (4.0, 150.0))
 #: The growth-to-departure gaps swept (the parent's S39 item 8).
 GAPS = (3.0, 5.0, 10.0)
 #: Where the optimizer starts each closure: the optima of the run recorded
-#: in ADR 0076 (so the headline reproduces; bounds ``_BOUNDS``).  Starting
-#: from ``_SWEEP_START`` instead lands within $1 at every closure.
+#: in ADR 0077 (so the headline reproduces; bounds ``_BOUNDS``).  Starting
+#: from ``_SWEEP_START`` instead lands within $0.1 at three closures; at
+#: 9.86 R_sun, X 90 it stops in a local optimum $8 dearer.
 HEADLINE_STARTS = {
     (9.86, 60.0): Design(
-        k_push=6.50, k_earth=12.53, k_sun=20.0, arc_hours=5.44, k_delivery=5.0
+        k_push=6.50, k_earth=12.50, k_sun=20.0, arc_hours=4.97, k_delivery=5.0
     ),
     (4.0, 90.0): Design(
-        k_push=8.28, k_earth=11.16, k_sun=20.0, arc_hours=2.17, k_delivery=5.0
+        k_push=7.55, k_earth=12.25, k_sun=20.0, arc_hours=2.19, k_delivery=5.0
     ),
     (9.86, 90.0): Design(
-        k_push=12.99, k_earth=13.57, k_sun=20.0, arc_hours=5.23, k_delivery=6.72
+        k_push=12.94, k_earth=13.65, k_sun=20.0, arc_hours=5.26, k_delivery=6.67
     ),
     (4.0, 150.0): Design(
-        k_push=25.93, k_earth=12.95, k_sun=20.0, arc_hours=2.41, k_delivery=12.55
+        k_push=25.91, k_earth=13.04, k_sun=20.0, arc_hours=2.39, k_delivery=12.53
     ),
 }
 SWEEP_RADII = (4.0, 6.0, 8.0, 9.86, 12.0, 15.0, 20.0)
@@ -2473,7 +2553,7 @@ class Sensitivity:
     """
 
     name: str
-    design: Dict[str, float] = field(default_factory=dict)
+    design: Dict[str, object] = field(default_factory=dict)
     prices: Dict[str, float] = field(default_factory=dict)
     odds: Optional[Tuple[float, ...]] = None
     guidance: float = 0.05
@@ -2497,6 +2577,17 @@ SENSITIVITIES = (
     Sensitivity(
         "two springs, the push plate left in orbit", design={"shared_spring": False}
     ),
+    Sensitivity(
+        "helium bags, no bladder (ADR 0076)",
+        design={"bag_gas": "helium", "bladder": 0.0},
+    ),
+    Sensitivity(
+        "bladder at the sim's 1 MPa cells", design={"bladder": CELL_BLADDER_PER_PV}
+    ),
+    Sensitivity(
+        "bowl charge at 1.5 F below the rim line (ADR 0076)",
+        design={"far_focus": False},
+    ),
     Sensitivity("bonds returned", bonds="bonds returned"),
     Sensitivity("shade scales with sunlight", design={"shield_exponent": 1.0}),
     Sensitivity("carrier perijove <= 2 R_J", design={"carrier_perijove": 2.0}),
@@ -2508,7 +2599,10 @@ SENSITIVITIES = (
     Sensitivity(
         "deliveries at the child's 4 Hz / 3.26 g", design={"slow_delivery": False}
     ),
-    Sensitivity("carbon fabric in the 100-130 km/s band", prices={"band_carbon": True}),
+    Sensitivity(
+        "Kapton only to 130 km/s (Result 15's narrow sheet)",
+        design={"kapton_limit": 130.0},
+    ),
     Sensitivity("carbon fabric $34/kg (bulk tow)", prices={"carbon_fabric": 34.0}),
     Sensitivity("carbon fabric $165/kg (retail)", prices={"carbon_fabric": 165.0}),
     Sensitivity(
@@ -2579,11 +2673,7 @@ def sensitivity_report(optimum: Optimum) -> str:
 
 
 def _sweep_point(point: Tuple[float, float, float]) -> List[str]:
-    """One sweep row; a headline closure starts from its recorded optimum.
-
-    Where the growth stream is in the unrun 100-130 km/s band, the point is
-    re-optimized with carbon fabric there too, and both policies print.
-    """
+    """One sweep row; a headline closure starts from its recorded optimum."""
     radii, excess, days = point
     start = HEADLINE_STARTS.get((radii, excess), _SWEEP_START)
     try:
@@ -2593,17 +2683,12 @@ def _sweep_point(point: Tuple[float, float, float]) -> List[str]:
             return [f"{radii:g}", f"{excess:g}", "no closure"]
         found = optimize_design(departure, push, start)
         stream = wave_speed(push.earth_excess, PUSH_ALTITUDE)
-        band = None
-        if KAPTON_HOLDS < stream <= KAPTON_FAILS:
-            band = optimize_design(
-                departure, push, start, prices=replace(ESTIMATE, band_carbon=True)
-            )
     except ValueError as error:
         return [f"{radii:g}", f"{excess:g}", str(error)]
     v = found.valuation
     if v.break_even is None or v.growth <= 1.0:
         return [f"{radii:g}", f"{excess:g}", f"does not grow ({v.growth:.2f})"]
-    material = "carbon" if stream > KAPTON_FAILS else "Kapton"
+    material = "carbon" if stream > found.design.kapton_limit else "Kapton"
     return [
         f"{radii:g}",
         f"{excess:g}",
@@ -2615,13 +2700,6 @@ def _sweep_point(point: Tuple[float, float, float]) -> List[str]:
         f"{v.doubling:.2f}",
         f"{v.steady_cost:.0f}",
         f"{_money(v.break_even)} / {_money(found.dear_break_even)}",
-        (
-            "-"
-            if band is None
-            else f"{band.valuation.growth:.2f}, {band.valuation.doubling:.2f} yr,"
-            f" ${band.valuation.steady_cost:.0f}, {_money(band.valuation.break_even)}"
-            f" / {_money(band.dear_break_even)}"
-        ),
     ]
 
 
@@ -2645,7 +2723,6 @@ def sweep_report(workers: int = 4, days: float = PARKING_DAYS) -> str:
             "doubling",
             "steady $/kg",
             "break-even cheap / dear",
-            "carbon in the band: growth, doubling, steady, cheap / dear",
         ],
     )
 

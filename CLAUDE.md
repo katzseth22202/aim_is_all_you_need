@@ -89,9 +89,9 @@ make hardware-recovery # spent tanks and chamber recycled into rods: growth, $/k
 make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold boil-off (ADR 0051)
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
-make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0076; ARGS="--gaps" sweeps the gap)
+make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ARGS="--gaps" sweeps the gap)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
-make plate-disposal  # the left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076; ~10 min)
+make plate-disposal  # the left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076; ~10 min); ARGS="--drift": the ship's own parking orbit, ~10 s (ADR 0077)
 
 # Conda environment
 conda env create -f environment.yml
@@ -345,13 +345,16 @@ solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.rol
                                 for Jupiter's phase; vendored stage laws and the sim's
                                 overtake law at speed; every plate on a lossless gas
                                 spring (63 t on 8 m), push plate and bowl one shared
-                                assembly; Kapton sheets below 130 km/s, carbon fabric
-                                above; the gap carried by the push route (ADR 0072-0076)
+                                assembly on nitrogen bags; floor-wide Kapton sheets to
+                                140 km/s, carbon fabric above; the bowl's charge at 2.5 F
+                                below the 122 deg rim line; the gap carried by the push
+                                route (ADR 0072-0077)
 
 plate_disposal.py            ← leaf (numpy + scipy): the left push plate's apoapsis
                                 nudge flown with the Moon and the Sun's tide, swept
                                 over lunar phase; the two-spring comparison's only
-                                (ADR 0076)
+                                (ADR 0076). `parking_drift`: the ship's own uncorrected
+                                parking orbit, the Moon's capture band (ADR 0077)
 
 plate_jupiter_loop.py        ← solar_dive_growth.fly_earth + departure_visibility +
                                 two_wave_growth: the child's flown chain on the solar

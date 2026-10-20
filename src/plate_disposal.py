@@ -334,6 +334,235 @@ def report(days: float = 10.0) -> str:
     )
 
 
+#: The ship's own parking orbit (the parent's S47 item 7): pushed at 400 km,
+#: periapsis raised to 600 km at the two-body apoapsis time, for the departure.
+DEPARTURE_PERIGEE = 600.0  # km
+#: The Moon's Hill sphere (~61 500 km), inside which its pull rivals Earth's.
+HILL_RADIUS = _MOON_DISTANCE * (_MU_MOON / (3.0 * _MU_EARTH)) ** (1.0 / 3.0)
+
+
+@dataclass(frozen=True)
+class Drift:
+    """The ship's departure perigee flown through Earth, Moon and Sun, uncorrected.
+
+    Attributes:
+        altitude: The perigee's altitude (km), negative below the surface
+            (Earth is a point mass here); NaN if the ship strikes the Moon.
+        hours: Its time less the two-body time (h).
+        apse_deg: Its direction less the two-body one, in the orbit's plane.
+        moon_closest: The closest approach to the Moon's centre (km).
+    """
+
+    altitude: float
+    hours: float
+    apse_deg: float
+    moon_closest: float
+
+    @property
+    def captured(self) -> bool:
+        """Inside the Moon's Hill sphere: the Moon, not Earth, sets the orbit."""
+        return bool(self.moon_closest < HILL_RADIUS)
+
+
+def parking_drift(
+    days: float,
+    moon_phase_deg: float,
+    inclination_deg: float,
+    sun_phase_deg: float = 0.0,
+    moon: bool = True,
+    sun: bool = True,
+) -> Drift:
+    """Fly the ship from the push perigee, with the two-body raise at apoapsis.
+
+    The push perigee is on -x at ``t = 0``, so the two-body apoapsis is on +x
+    at half the period; the Moon's phase and the Sun's direction are at that
+    time, in :func:`next_perigee`'s convention.  The raise to 600 km is the
+    two-body tangential burn, applied at the two-body apoapsis time.  What
+    remains at the departure perigee is what a navigated orbit must correct.
+
+    Args:
+        days: The parking orbit's period: the growth-to-departure gap.
+        moon_phase_deg: The Moon's angle from the apoapsis at the apoapsis time.
+        inclination_deg: The Moon's orbit against the parking orbit.
+        sun_phase_deg: The Sun's direction then.
+        moon: Include the Moon.
+        sun: Include the Sun's tide.
+
+    Returns:
+        The drift.
+    """
+    a = _orbit_a(days)
+    low = _R_EARTH + PUSH_PERIGEE
+    high = _R_EARTH + DEPARTURE_PERIGEE
+    apo = 2.0 * a - low
+    raised = 0.5 * (apo + high)
+    t_apo = 0.5 * days * _DAY
+    t_peri = t_apo + math.pi * math.sqrt(raised**3 / _MU_EARTH)
+    raise_dv = math.sqrt(_MU_EARTH * (2.0 / apo - 1.0 / raised)) - math.sqrt(
+        _MU_EARTH * (2.0 / apo - 1.0 / a)
+    )
+    phase = math.radians(moon_phase_deg)
+    tilt = math.radians(inclination_deg)
+    sun_phase = math.radians(sun_phase_deg)
+
+    def rates(t: float, y: np.ndarray) -> np.ndarray:
+        r = y[:3]
+        acc = -_MU_EARTH * r / np.linalg.norm(r) ** 3
+        if moon:
+            m = _moon(t - t_apo, phase, tilt)
+            acc = acc - _MU_MOON * (
+                (r - m) / np.linalg.norm(r - m) ** 3 + m / _MOON_DISTANCE**3
+            )
+        if sun:
+            s = _sun(t - t_apo, sun_phase)
+            acc = acc - _MU_SUN * ((r - s) / np.linalg.norm(r - s) ** 3 + s / _AU**3)
+        return np.concatenate([y[3:], acc])
+
+    def struck(t: float, y: np.ndarray) -> float:
+        lunar = np.linalg.norm(y[:3] - _moon(t - t_apo, phase, tilt)) - _R_MOON
+        return float(lunar if moon else 1.0)
+
+    struck.terminal = True  # type: ignore[attr-defined]
+
+    def closest(run: object) -> float:
+        times = np.linspace(run.t[0], run.t[-1], 2000)  # type: ignore[attr-defined]
+        states = run.sol(times)  # type: ignore[attr-defined]
+        moons = np.array([_moon(t - t_apo, phase, tilt) for t in times]).T
+        return float(np.min(np.linalg.norm(states[:3] - moons, axis=0)))
+
+    start = [-low, 0.0, 0.0, 0.0, -math.sqrt(_MU_EARTH * (2.0 / low - 1.0 / a)), 0.0]
+    out = solve_ivp(
+        rates,
+        (0.0, t_apo),
+        start,
+        method="DOP853",
+        rtol=1e-11,
+        atol=1e-9,
+        events=(struck,),
+        dense_output=True,
+    )
+    near = closest(out) if moon else math.inf
+    if out.t_events[0].size:
+        return Drift(math.nan, math.nan, math.nan, 0.0)
+    state = out.y[:, -1].copy()
+    state[4] += raise_dv
+
+    def at_perigee(t: float, y: np.ndarray) -> float:
+        if np.linalg.norm(y[:3]) > 0.5 * apo:
+            return -1.0
+        return float(np.dot(y[:3], y[3:]))
+
+    at_perigee.terminal = True  # type: ignore[attr-defined]
+    at_perigee.direction = 1.0  # type: ignore[attr-defined]
+    back = solve_ivp(
+        rates,
+        (t_apo, t_apo + 3.0 * days * _DAY),
+        state,
+        method="DOP853",
+        rtol=1e-11,
+        atol=1e-9,
+        events=(at_perigee, struck),
+        dense_output=True,
+    )
+    if moon:
+        near = min(near, closest(back))
+    if back.t_events[1].size or not back.t_events[0].size:
+        return Drift(
+            math.nan, math.nan, math.nan, 0.0 if back.t_events[1].size else near
+        )
+    y = back.y_events[0][0]
+    return Drift(
+        float(np.linalg.norm(y[:3]) - _R_EARTH),
+        float((back.t_events[0][0] - t_peri) / 3600.0),
+        math.degrees(math.atan2(y[1], -y[0])),
+        near,
+    )
+
+
+def drift_report(days: float = 10.0) -> str:
+    """The departure perigee's drift, by Moon phase and Sun direction."""
+    rows = []
+    for sun_phase in SUN_PHASES:
+        rows.append(
+            [f"Sun only, Sun {sun_phase:g}"]
+            + _drift_cells(parking_drift(days, 0.0, 0.0, sun_phase, moon=False))
+        )
+    for phase in (60.0, 90.0, 180.0, 270.0, 300.0):
+        rows.append(
+            [f"Moon only, phase {phase:g}"]
+            + _drift_cells(parking_drift(days, phase, 5.1, sun=False))
+        )
+    for sun_phase in SUN_PHASES:
+        for phase in (60.0, 90.0, 180.0, 270.0, 300.0):
+            rows.append(
+                [f"both, phase {phase:g}, Sun {sun_phase:g}"]
+                + _drift_cells(parking_drift(days, phase, 5.1, sun_phase))
+            )
+    summary = []
+    for inclination in (0.0, 5.1, 28.6):
+        flown = [
+            parking_drift(days, phase, inclination, sun_phase)
+            for sun_phase in SUN_PHASES
+            for phase in range(0, 360, 5)
+        ]
+        clear = [d for d in flown if not d.captured and not math.isnan(d.altitude)]
+        summary.append(
+            f"Moon at {inclination:g} deg, 72 phases x 2 Sun directions:"
+            f" {1.0 - len(clear) / len(flown):.0%} pass inside the Moon's"
+            f" {HILL_RADIUS / 1e3:.0f} 000 km Hill sphere"
+            + (f" (phases {_phase_runs(flown)});" if len(clear) < len(flown) else ";")
+            + f" the rest reach perigee at {min(d.altitude for d in clear):.0f} to"
+            f" {max(d.altitude for d in clear):.0f} km,"
+            f" up to {max(abs(d.hours) for d in clear):.1f} h off,"
+            f" apse up to {max(abs(d.apse_deg) for d in clear):.1f} deg"
+        )
+    return (
+        f"The ship's {days:g}-day parking orbit, uncorrected (Moon at 5.1 deg):"
+        f" the departure perigee against the two-body {DEPARTURE_PERIGEE:g} km\n"
+        + tabulate(
+            rows,
+            headers=[
+                "forces",
+                "perigee (km)",
+                "time (h)",
+                "apse (deg)",
+                "Moon (1000 km)",
+            ],
+        )
+        + "\n"
+        + "\n".join(summary)
+    )
+
+
+def _phase_runs(flown: Sequence[Drift]) -> str:
+    """The phases (5 deg grid, either Sun direction) a pass is captured at."""
+    hit = {
+        (i % 72) * 5
+        for i, d in enumerate(flown)
+        if d.captured or math.isnan(d.altitude)
+    }
+    runs, start = [], None
+    for p in range(0, 365, 5):
+        inside = p in hit
+        if inside and start is None:
+            start = p
+        if not inside and start is not None:
+            runs.append(f"{start}-{p - 5}")
+            start = None
+    return ", ".join(runs) + " deg"
+
+
+def _drift_cells(d: Drift) -> List[str]:
+    if math.isnan(d.altitude):
+        return ["strikes the Moon", "-", "-", "0"]
+    return [
+        f"{d.altitude:.0f}",
+        f"{d.hours:+.2f}",
+        f"{d.apse_deg:+.2f}",
+        f"{d.moon_closest / 1e3:.0f}" + (" (inside Hill)" if d.captured else ""),
+    ]
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the disposal sweep.
 
@@ -342,8 +571,13 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--days", type=float, default=10.0, help="the parking orbit")
+    parser.add_argument(
+        "--drift",
+        action="store_true",
+        help="the ship's own uncorrected parking orbit instead (S47 item 7)",
+    )
     args = parser.parse_args(argv)
-    print(report(args.days))
+    print(drift_report(args.days) if args.drift else report(args.days))
 
 
 if __name__ == "__main__":

@@ -397,6 +397,13 @@ def value_chain(
     horizon.  ``delay_years`` shifts every
     flow after the seed's outlay (a seed route that arrives later).
 
+    From the harvest on, the fleet is held at its harvest size: a window that
+    grows less than 1x shrinks it, and the next windows rebuild it before any
+    surplus is delivered.  The windows are unequal (0.97-2.4x), so the steady
+    cost is one whole chain's cost over its cargo, from six cycles after the
+    harvest, not one window's (ADR 0077: a single window after a sub-1x one
+    read $1466/kg where the chain averages ~$180).
+
     Returns:
         The valuation; ``growth`` is the chain's growth per three synodic
         periods.
@@ -421,7 +428,9 @@ def value_chain(
     seed_contents = 0.0
     # The loop's streams are 57-69 km/s, so its sheets price as Kapton; the
     # stream is read anyway so a faster window would be charged its fabric.
-    body = prices.sheet_price(wave_speed(windows[0].stream_excess, PUSH_ALTITUDE))
+    body = prices.sheet_price(
+        wave_speed(windows[0].stream_excess, PUSH_ALTITUDE), design.kapton_limit
+    )
     for unit, part in ((p0, share), (r0, 1 - share)):
         lines = _unit_dollars(unit, prices, plates, packages, guidance, 0.0, body)
         seed_contents += part * sum(lines.values())
@@ -433,6 +442,7 @@ def value_chain(
     count, cumulative, fleet = 1.0, 0.0, 0.0
     years, synodics = 0.0, 0
     harvest: Optional[int] = None
+    level = 0.0
     tally: Dict[str, float] = {}
     tally_cargo = 0.0
     n = 1
@@ -456,12 +466,14 @@ def value_chain(
         growth = balance(p_unit, r_unit, arrives)
         caught = returned * arrives
         if harvest is None and synodics >= growth_synodic:
-            harvest, fleet = n, caught
+            harvest, fleet, level = n, caught, count
         harvesting = harvest is not None
-        new = count * (min(growth.growth, 1.0) if harvesting else growth.growth)
+        new = min(count * growth.growth, level) if harvesting else count * growth.growth
         surplus = max(caught - new * growth.sheets_per_unit, 0.0) if harvesting else 0.0
         cost: Dict[str, float] = {}
-        body = prices.sheet_price(wave_speed(windows[now].stream_excess, PUSH_ALTITUDE))
+        body = prices.sheet_price(
+            wave_speed(windows[now].stream_excess, PUSH_ALTITUDE), design.kapton_limit
+        )
         for unit, part in (
             (p_unit, growth.push_share),
             (r_unit, 1 - growth.push_share),
@@ -482,8 +494,10 @@ def value_chain(
         factor = schedule.factor(when)
         pv_cost += factor * sum(cost.values())
         pv_cargo += factor * cargo
-        if harvest is not None and n == harvest + 6:
-            tally, tally_cargo = cost, cargo
+        if harvest is not None and harvest + 6 <= n < harvest + 6 + n_windows:
+            for key, value in cost.items():
+                tally[key] = tally.get(key, 0.0) + value
+            tally_cargo += cargo
         count, share = new, growth.push_share
         n += 1
     lines = (

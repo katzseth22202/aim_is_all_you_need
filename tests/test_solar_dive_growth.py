@@ -63,7 +63,8 @@ def test_the_fast_wave_law_reproduces_the_simulations_closures() -> None:
     assert laws.push_ve(8.21, 207.8, "graphite") / laws.push_ve(
         8.21, 207.8, law="linear"
     ) == pytest.approx(0.911, abs=0.006)
-    assert sheet_material(132.0) == "graphite" and sheet_material(120.0) == "Kapton"
+    assert sheet_material(137.1) == "Kapton" and sheet_material(141.0) == "graphite"
+    assert sheet_material(132.0, limit=130.0) == "graphite"
 
 
 def test_the_bowl_law_reproduces_the_simulations_hole_ve() -> None:
@@ -72,9 +73,23 @@ def test_the_bowl_law_reproduces_the_simulations_hole_ve() -> None:
     for k, v in ((5.0, 13.601), (10.0, 10.716), (20.0, 7.658), (30.0, 5.774)):
         assert laws.hole_ve(k, 84.0, 129.9) == pytest.approx(v, rel=0.006)
     for k, v in ((5.0, 20.310), (20.0, 11.272)):
-        assert laws.hole_ve(k, 107.9, 117.0) == pytest.approx(v, rel=0.006)
+        assert laws.hole_ve(k, 107.9, 117.0, far_focus=False) == pytest.approx(
+            v, rel=0.006
+        )
     condensed = StageLaws.load(bonds="bonds returned")
     assert condensed.hole_ve(30.0, 84.0, 129.9) == pytest.approx(7.907, rel=0.006)
+
+
+def test_below_the_rim_line_the_bowl_is_the_simulations_2p5_f_run() -> None:
+    """S47 item 3: band_far_bowl.csv's hole_ve_25 at 117 deg; 129.9 deg stays 1.5 F."""
+    laws = StageLaws.load()
+    for k, v in ((10.0, 13.954), (20.0, 10.318), (30.0, 8.299)):
+        assert laws.hole_ve(k, 107.9, 117.0) == pytest.approx(v, rel=0.006)
+    assert laws.far_focus(20.0) == pytest.approx(2.619036 / 2.861043, rel=1e-6)
+    assert laws.far_focus(5.0) == laws.far_focus(10.0)  # held flat outside 10-30
+    assert laws.hole_ve(20.0, 84.0, 129.9) == laws.hole_ve(
+        20.0, 84.0, 129.9, far_focus=False
+    )
 
 
 def test_stage_laws_refuse_to_extrapolate_the_slug_ratio() -> None:
@@ -179,16 +194,33 @@ def test_the_parents_s45_ballpark() -> None:
     assert held.plate == 50.0e3 and held.stroke < 8.0
 
 
-def test_the_bags_are_the_fibre_wall_and_the_helium() -> None:
-    """3 PV rho / sigma at half of 2.5 GPa, 1600 kg/m^3, plus helium at 293 K."""
+def test_the_bags_are_the_fibre_wall_the_gas_and_the_bladder() -> None:
+    """3 PV rho / sigma at half of 2.5 GPa, 1600 kg/m^3, gas at 293 K, bladder."""
+    theta = 2.0 * math.pi / 3.0
     pv = 1.7e8
-    wall = 3.0 * peak_to_mean(2.0 * math.pi / 3.0) * pv * 1600.0 / 1.25e9
+    wall = 3.0 * peak_to_mean(theta) * pv * 1600.0 / 1.25e9
     helium = pv / (2077.1 * 293.0)
-    assert bag_mass(pv, 2.0 * math.pi / 3.0) == pytest.approx(wall + helium)
-    assert 1.0e3 < bag_mass(pv, 2.0 * math.pi / 3.0) < 1.2e3
-    assert bag_mass(pv, 2.0 * math.pi / 3.0, 5.0e3 / 1.7e8) == pytest.approx(
-        wall + helium + 5.0e3
+    nitrogen = pv / (296.8 * 293.0)
+    bladder = pv * 1.3e3 / 259.6e6
+    assert bag_mass(pv, theta, gas="helium", bladder=0.0) == pytest.approx(
+        wall + helium
     )
+    assert bag_mass(pv, theta) == pytest.approx(wall + nitrogen + bladder)
+    assert bag_mass(pv, theta, 5.0e3 / 1.7e8) == pytest.approx(
+        wall + nitrogen + bladder + 5.0e3
+    )
+
+
+def test_the_nitrogen_bags_are_the_simulations_result_17() -> None:
+    """63 t on 8 m: the sim's 2.9 t of nitrogen and 1.3 t of bladder, 5-6 t in all."""
+    spring = gas_spring(1500.0e3 * 9.80665, 2.0, 1300.0e3, Design())
+    assert spring.plate == pytest.approx(63.4e3, rel=0.01)
+    assert spring.pv / (296.8 * 293.0) == pytest.approx(2.9e3, rel=0.1)
+    assert 5.0e3 < spring.bag < 6.0e3
+    helium = gas_spring(
+        1500.0e3 * 9.80665, 2.0, 1300.0e3, Design(bag_gas="helium", bladder=0.0)
+    )
+    assert 1.5e3 < helium.bag < 2.5e3  # ADR 0076's 1.9 t
 
 
 def test_the_delivery_plate_rides_the_spring() -> None:
@@ -197,7 +229,7 @@ def test_the_delivery_plate_rides_the_spring() -> None:
     slow = delivery_unit(75.5, Design(k_delivery=5.6), laws)
     assert slow.pulse == pytest.approx(7.355e6, rel=1e-3)
     assert slow.plate == pytest.approx(63.4e3, rel=0.01) and slow.stroke == 8.0
-    assert 1.0e3 < slow.bag < 5.0e3
+    assert 5.0e3 < slow.bag < 6.0e3  # nitrogen and its bladder
     assert 1.2 < slow.start_g < slow.peak_g < 2.0
     longer = delivery_unit(75.5, Design(k_delivery=5.6, spring_stroke=16.0), laws)
     assert longer.plate == pytest.approx(slow.plate / 2.0)
@@ -320,17 +352,14 @@ def test_the_1_g_push_climbs_faster_and_the_childs_push_does_not() -> None:
     assert lob_climb_factor(1.1) == 1.0
 
 
-def test_sheets_are_kapton_below_130_km_s_and_carbon_fabric_above() -> None:
-    """S43 item 2: $100/kg fabric above 130 km/s; the 100-130 band a switch."""
-    from dataclasses import replace
-
+def test_sheets_are_kapton_below_140_km_s_and_carbon_fabric_above() -> None:
+    """S47 item 1: floor-wide Kapton through 137.1 km/s (Result 18), fabric above."""
     from src.solar_dive_growth import ESTIMATE
 
     assert ESTIMATE.sheet_price(99.2) == ESTIMATE.sheet_body == 3.0
-    assert ESTIMATE.sheet_price(121.8) == 3.0
-    assert ESTIMATE.sheet_price(137.1) == ESTIMATE.carbon_fabric == 100.0
-    band = replace(ESTIMATE, band_carbon=True)
-    assert band.sheet_price(121.8) == 100.0 and band.sheet_price(99.2) == 3.0
+    assert ESTIMATE.sheet_price(137.1) == 3.0
+    assert ESTIMATE.sheet_price(207.8) == ESTIMATE.carbon_fabric == 100.0
+    assert ESTIMATE.sheet_price(137.1, limit=130.0) == 100.0
 
 
 @pytest.mark.slow

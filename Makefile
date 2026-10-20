@@ -62,10 +62,10 @@ chamber-departure:  ## Price the walled chamber's departure over the flown chain
 growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per-pulse k) and walled chamber, the scenario matrix
 	python -m src.growth_ledger
 
-solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0076; ~1 min, ARGS="--sweep --child --gaps --parking-days N" adds the depth sweep, the child's rows and the 3/5/10-day gap sweep)
+solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ~1 min, ARGS="--sweep --child --gaps --parking-days N" adds the depth sweep, the child's rows and the 3/5/10-day gap sweep)
 	python -m src.solar_dive_growth $(ARGS)
 
-plate-disposal:  ## The left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076)
+plate-disposal:  ## The left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076); ARGS="--drift" flies the ship's own parking orbit (ADR 0077)
 	python -m src.plate_disposal $(ARGS)
 
 plate-jupiter-loop:  ## The Jupiter-only chain on the solar dive's plates, no Sun dive (ADR 0075; ~10 min, ARGS="--family" adds the return family)

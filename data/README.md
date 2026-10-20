@@ -18,6 +18,7 @@ with its provenance rather than fetched.
 | `solar_dive_stage_laws.csv` | `puffsat_impact_simulation` @ `a6742a2` (ADR 0072) | see below |
 | `departure_hole_law.csv` | `puffsat_impact_simulation` @ `bfea495` (ADR 0073) | see below |
 | `fast_wave_push_law.csv` | `puffsat_impact_simulation` @ `f7cce80` (ADR 0076) | see below |
+| `far_bowl_capture.csv` | `puffsat_impact_simulation` @ `1bed1c6`, `data/results/xray_collision/band_far_bowl.csv` (ADR 0077) | `make xray-collision-band-bowl` there |
 
 ## `plume_state.csv`
 
@@ -112,3 +113,14 @@ with `python -m puffsat.tables --ch2` (both @ `f7cce80`). The sim's
 `law_rows()` on that rerun reproduce its committed `fast_wave_law.csv` to every
 printed digit, and this grid, interpolated linearly in log k and in w
 (`StageLaws.push_ve`), reproduces those rows to 0.13%.
+
+## `far_bowl_capture.csv`
+
+The impact simulation's Result 16 (its ADR-0067), copied unchanged: the departure bowl
+(delta/D 0.5 paraboloid) re-run with its charge at 2.5 F instead of 1.5 F, on both visible
+routes (4 R_sun at 117 deg, 9.86 R_sun at 129.9 deg) at k = 10, 20 and 30. Its `capture_15`
+columns are `departure_hole_law.csv`'s capture rows to every digit, and `hole_ve_25 /
+hole_ve_15` equals `capture_25 / capture_15`, so moving the charge changes only the capture.
+`StageLaws.far_focus` takes that ratio at the angles below the rim line (122 deg; only the
+117 deg rows), log-linearly in k and held flat outside 10-30. At 129.9 deg a bare impactor
+already leaves through the bowl's mouth at 1.5 F, so those rows are carried but not used.

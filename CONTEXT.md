@@ -1877,8 +1877,9 @@ Every plate rides a nearly lossless gas spring tuned across pulses (the parent's
 sec:pusher_plate_damping): each pulse reverses the plate's swing, the craft feels only the
 spring. Swinging `theta` between pulses (2 pi / 3), the peak is `(theta/2)/sin(theta/2)`
 = 1.21x the mean, and `m x stroke = F tan(theta/4) / (2 theta nu^2)`, 507 t m at 2 Hz and
-1 g, whatever the craft's mass. The bags (fibre wall at peak pressure plus helium) are
-~2 t. A plate held at its survival floor swings less. (ADR 0076)
+1 g, whatever the craft's mass. The bags (fibre wall at peak pressure, nitrogen and a
+bladder, the simulation's Result 17) are ~5.4 t. A plate held at its survival floor swings
+less. (ADR 0076, 0077)
 _Avoid_: a g cap as the plate's sizing; the cargo sees ~1.2-1.7 g however long the stroke.
 
 **Shared assembly**:
@@ -1895,16 +1896,18 @@ k ~7-8, but above it at high k and high w, and 10-20% below it at the plate loop
 55-65 km/s. _Avoid_: the 100 km/s law carried by `w / 100`.
 
 **Sheet material**:
-Growth sheets are 100 um Kapton up to 130 km/s and dry woven carbon fabric above it,
-$100/kg (the parent's hypothesis, between bulk tow ~$34 and retail ~$145-167). The
-100-130 km/s band is unrun: Kapton by default, carbon a switch. Each wave is priced by its
-own stream at 400 km: the push wave by the growth stream, the departure wave by its
-delivery stream (ADR 0076).
+Growth sheets are Kapton, as wide as the push plate's 9.5 m floor, up to 140 km/s, and dry
+woven carbon fabric above it, $100/kg (the parent's hypothesis, between bulk tow ~$34 and
+retail ~$145-167). On the floor-wide sheet the computed backward plume lets Kapton hold
+through 137.1 km/s (the simulation's Result 18); one limit sets both the law's impactor and
+the price (`Design.kapton_limit`). Each wave is priced by its own stream at 400 km: the
+push wave by the growth stream, the departure wave by its delivery stream (ADR 0076, 0077).
+_Avoid_: the retired 100-130 km/s band switch; Result 16 ran the band.
 
 **Delivery plate**:
 The plate that pushes a cargo lob to L1. Like every Earth push it flies 2 Hz and 1 g from
-its own climbing lob (ADR 0074), on the **spring law**: 63 t plus ~2 t of bags on 8 m, the
-cargo peaking at 1.2-1.7 g (ADR 0076).
+its own climbing lob (ADR 0074), on the **spring law**: 63 t plus ~5.4 t of bags on 8 m,
+the cargo peaking at 1.2-1.7 g (ADR 0076).
 _Avoid_: ADR 0074's 25 g absorber bound (~51 t); reading the delivery's cadence or lob
 from the growth push's knobs.
 
@@ -1913,17 +1916,29 @@ How much earlier the push wave arrives than the departure wave. It is also the p
 orbit's period (the child's **split gap**). The push route carries it
 (`DiveRoute.early_days`), and every leg reads it from there. Shorter gaps slow the growth
 stream (the near-Sun hyperbola must straighten to cross 1 AU earlier) and widen the
-apoapsis turn: 5 days costs 5% of growth at 9.86 R_sun at the same dear break-even, and at
-4 R_sun keeps the sheets on Kapton (119 km/s) and is $9 cheaper (ADR 0076).
+apoapsis turn: 5 days costs 5% of growth at 9.86 R_sun and $1 of dear break-even ($147),
+and is $2 cheaper at 4 R_sun (ADR 0077). The 10-day orbit's apoapsis is at the Moon's
+distance (**lunar capture band**); the 5-day orbit's 240 000 km apoapsis never is.
 _Avoid_: overriding a module default to change it; it is frozen into function defaults and
 caches.
 
 **Departure bowl**:
 The delta/D 0.5 paraboloid that departs the ship: compact impactors thread a hole and stop
 in a charge at its focus, as at the Sun, at 1 Hz and a 0.25 g mean (the simulation's
-ADR-0065). Its survival floor at the pulse's energy (12-19 t) is a minimum under the
-spring law. Part of the **shared assembly**: rides through the departure, then diverts
+ADR-0065). Below the 122 deg rim line (4 R_sun's 117 deg) the charge sits at 2.5 F so a
+bare impactor clears the rim, at 0.91-0.92 of the capture (Result 16, ADR 0077). Its
+survival floor at the pulse's energy (12-19 t) is a minimum under the spring law. Part of the **shared assembly**: rides through the departure, then diverts
 into Jupiter.
+
+**Lunar capture band**:
+The Moon phases, measured from the parking orbit's apoapsis at the apoapsis time, at which
+the ship's pass enters the Moon's 61 500 km Hill sphere: 335-30 deg on the 10-day orbit,
+about 1/6 of cycles, and none on 5 days (`plate_disposal.parking_drift`, ADR 0077). A
+cycle's phase is known when its push wave is aimed, so a banded cycle flies the 5-day
+gap. Outside the band the 10-day orbit still drifts: the Sun's tide alone moves its
+departure by up to 3 h, so it is a navigated orbit at every phase. Its correction budget
+is unsolved.
+_Avoid_: ADR 0076's ±20 deg plate band for the ship; the ship flies both halves.
 
 **Visible sign**:
 The departure-hyperbola sign whose stream does not pass through Earth: the upstream
@@ -1964,8 +1979,10 @@ nozzle (`src/plate_jupiter_loop.py`, `make plate-jupiter-loop`, ADR
 on the bowl, with the chain's stream-in-view loss. The ship returns as sheets less 1%
 avionics and its wave's return burn. ADR 0075 had it at 2.59x per 3S and $238 dear at
 best (1 g departure), 2.01x and $573 at 0.25 g. On spring plates and the overtake law at
-its slow 55-65 km/s streams (ADR 0076) it falls to 1.68x / $1654 at best (0.5 g) and
-1.27x / $9436 at 0.25 g, against the Sun dive's 3.38x and $144.
+its slow 55-65 km/s streams (ADR 0076), with nitrogen bags (ADR 0077), it falls to
+1.65x / $1873 at best (0.5 g) and 1.24x / $10505 at 0.25 g, against the Sun dive's 3.36x
+and $146. Its windows are unequal (0.97-2.41x), so its steady cost is one whole chain's,
+and the harvest holds the fleet at its harvest size ($189/kg at 0.5 g).
 
 **Departure rate** (plate loop):
 The bowl's mean acceleration. It sets the burn's length and so its stream-in-view loss,
