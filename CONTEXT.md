@@ -2017,7 +2017,10 @@ ice and carbon for single-use chemical stages (`src/saturn_methalox.py`, ADR 007
 plant rarely limits growth; Earth mass per kg of PuffSat does. At Phoebe, with carbon
 feed and tanks made at Saturn, it ties the water NTR with hydrogen NTP ($308 / $309) and
 beats it without ($338 / $532). _Avoid_: "the uranium is the expensive line". The water
-engine is ~$8 of ~$90/kg.
+engine is ~$8 of ~$90/kg. With the reactor and the Earth plates made free it still loses
+to the solar dive: Phoebe $206-235 against $143 (ADR 0079 addendum). What stays is
+lofting (the lob and the plug, ~$49 of ~$72 steady) and the round's length (first cargo
+in year 23-24), not hardware.
 
 **Carbon feed**:
 Carbon as elemental or organic carbon, gasified with steam (0.163 kg per kg of methalox,

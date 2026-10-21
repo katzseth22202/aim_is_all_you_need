@@ -154,3 +154,45 @@ better of ceria and electric (electric everywhere).
   - a multi-perigee Earth departure;
   - using the carbon route's surplus hydrogen;
   - the most power a heat-only core reaches.
+
+## Addendum, 2026-10-21: reuse the reactor and the plates; it still loses
+
+The author asked: if the reactor is reused to make methalox (and tanks) at Iapetus or
+Phoebe until its cost is small, and the Earth plates are reused, does the cycle still
+lose? `reuse_report` in `src/saturn_methalox.py` (printed by `make saturn-methalox`)
+stacks the rows below. Coplanar, Ledger A, k 4, electric plant. "Reactor free" is $0
+and a 10-round life, with its mass still flown from Earth. "Plate free" also frees the
+gun. Ledger A already reflies a plate 25 times.
+
+**rNPV at 10% (4% loan)**, $/kg at the eccentric orbit:
+
+| row | Phoebe, H2 NTP | Phoebe, no nuclear | Iapetus, H2 NTP | Iapetus, no nuclear |
+|---|---|---|---|---|
+| base | $308 ($129) | $338 ($129) | $478 ($148) | $666 ($167) |
+| reactor free | $213 ($101) | $248 ($106) | $378 ($125) | $531 ($144) |
+| + plate and gun free | $212 ($100) | $247 ($105) | $377 ($124) | $530 ($143) |
+| + stay 0.1 yr | **$206** ($99) | **$235** ($103) | $357 ($122) | $498 ($141) |
+| + stage braked back, reflown 5 rounds (instead of the stay) | $357 | $430 | $612 | $883 |
+| bound: every price but the lob zeroed, stay 0.1 yr | $71 ($52) | $178 ($75) | $95 ($56) | $404 ($102) |
+
+- **Yes, it still loses.** Reuse cuts Phoebe's rNPV by about a third, to $206-235. That
+  is still above the solar dive's $143 (9.86 R_sun) and $86 (4 R_sun).
+- **The reactor is the only line that moves.** Plates and gun are already $0.4-0.8/kg on
+  Ledger A.
+- **Reusing the methalox stage is worse.** Braking the empty stage back (2.89 km/s) cuts
+  Phoebe's growth from 8.2 to 6.8.
+- **What stays expensive is lofting and time, not hardware.**
+  - Lofting: Phoebe's steady $72 is $32 lob and $16 plug. Each kg of cargo lofts about
+    1.3 kg pushed and 0.65 kg of plug from the ground at $26.6. The $25 lob already
+    assumes a reusable booster. The rest is the outbound hydrogen NTP engines ($10,
+    single use), stage hardware ($8) and kits ($3).
+  - Time: first cargo is sold in year 23-24 at Phoebe and 28-30 at Iapetus, after
+    the seed and two reinvested rounds. The gates multiply to 0.65. So rNPV is 2.9-3.4x
+    steady at Phoebe, against the solar dive's 1.5x.
+- **The bound.**
+  - With every price but the lob zeroed, the no-nuclear scenario at Phoebe is still
+    $178, above $143.
+  - The hydrogen NTP bound ($71 Phoebe, $95 Iapetus) wins only because the single-use
+    outbound nuclear engines are then free too. The ledger then buys enough to fly
+    the departure near-impulsively, and growth rises to 10.8 at Phoebe. Reuse cannot
+    make those engines free.

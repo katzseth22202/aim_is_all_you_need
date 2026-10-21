@@ -178,3 +178,36 @@ unit size:
 - If the paper takes the position that nuclear rockets do not run near Earth, the Saturn
   scenario should be **a kept reactor making methalox at Phoebe**. The water NTR at
   Iapetus is the simpler, carbon-free fallback, at about 1.6x the rNPV.
+
+## Follow-up (2026-10-21): reuse the reactor and the plates
+
+Seth asked: if the reactor stays at Iapetus or Phoebe making methalox (and tanks) until its
+cost is small, and the Earth plates are reused, does the Saturn cycle still lose? **Yes.**
+ADR 0079 addendum; `make saturn-methalox` prints the table (`reuse_report`).
+
+| row (rNPV 10%, loan 4%) | Phoebe, H2 NTP | Phoebe, no nuclear | Iapetus, H2 NTP | Iapetus, no nuclear |
+|---|---|---|---|---|
+| ADR 0079 base | $308 ($129) | $338 ($129) | $478 ($148) | $666 ($167) |
+| reactor free, 10-round life | $213 ($101) | $248 ($106) | $378 ($125) | $531 ($144) |
+| + plate and gun free | $212 ($100) | $247 ($105) | $377 ($124) | $530 ($143) |
+| + stay 0.1 yr | **$206** ($99) | **$235** ($103) | $357 ($122) | $498 ($141) |
+
+- **Against the solar dive** ($143 at 9.86 R_sun, $86 at 4 R_sun), the best cell is
+  about 1.5x the first. Steady cost ($72-73 at Phoebe) ties the 4 R_sun dive's $72.
+- **Plates were already reused** on Ledger A (25 flights, $0.4/kg), so freeing them moves
+  $1. Reflying the methalox stage makes it worse: braking it back costs growth.
+- **What is expensive when everything is reused:**
+  - **Lofting from the ground.** Each kg of cargo lofts about 1.3 kg pushed and 0.65 kg
+    of plug at $26.6/kg: $32 + $16 of the $72. The $25 lob already assumes a reusable
+    booster.
+  - **Time.** The first cargo is sold in year 23-24 at Phoebe, after the seed and two
+    reinvested rounds. At 10% a dollar then is worth about a ninth, and the gates
+    multiply to 0.65. The rNPV is 2.9-3.4x the steady cost, against 1.5x for the solar
+    dive.
+- **Even with every price but the lob zeroed**, the no-nuclear Phoebe cell is $178. Only
+  the hydrogen NTP bound beats the dive ($71), and only because its single-use outbound
+  nuclear engines are free in that row.
+
+**Suggested paper text:** the Saturn cycle's handicap is distance, not hardware. Reusing
+the reactor and plates narrows the gap to the solar dive but does not close it, because
+the lofting floor and the 7.7-9.5 year round remain.

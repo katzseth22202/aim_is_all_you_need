@@ -76,3 +76,25 @@ def test_the_plant_cycle_grows_and_shipped_tanks_stall_it() -> None:
     assert v.break_even is not None and v.steady_cost < v.break_even
     stalled = build_plant_cycle(PHOEBE, stage=replace(CHEM, tanks_shipped=True))
     assert stalled.growth() < c.growth() / 2.0
+
+
+@pytest.mark.slow
+def test_a_free_reactor_and_plate_still_lose_to_the_solar_dive() -> None:
+    """Reuse cuts Phoebe's rNPV by a third, not to the solar dive's $143."""
+    from src.saturn_methalox import (
+        FREE_GUN,
+        FREE_PLANT,
+        FREE_PLATE,
+        build_plant_cycle,
+        value_plant_cycle,
+    )
+
+    base = value_plant_cycle(build_plant_cycle(PHOEBE, ELECTRIC)).break_even
+    free_plant = value_plant_cycle(build_plant_cycle(PHOEBE, FREE_PLANT)).break_even
+    free_both = value_plant_cycle(
+        build_plant_cycle(PHOEBE, FREE_PLANT, FREE_PLATE, prices=FREE_GUN)
+    ).break_even
+    assert base is not None and free_plant is not None and free_both is not None
+    assert free_plant < 0.75 * base
+    assert free_both == pytest.approx(free_plant, rel=0.01)
+    assert free_both > 143.0

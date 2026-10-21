@@ -1146,6 +1146,117 @@ def sensitivity_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     )
 
 
+#: The reactor made free: no price, and a life past the level rounds.  Its
+#: mass is still flown from Earth.
+FREE_PLANT = replace(
+    ELECTRIC, name="free plant", fixed_price=0.0, price_per_mwt=0.0, life_rounds=10.0
+)
+#: The Earth bag plate and its gun made free (Ledger A already reflies a plate 25x).
+FREE_PLATE = replace(
+    LEDGER_A, label="A, plate free", plate_flight=0.0, plate_flights=1.0e9
+)
+FREE_GUN = replace(ESTIMATE, gun=0.0)
+#: Every price but the lob zeroed: the bound lofting alone sets (electronics too).
+LOFT_ONLY = replace(
+    FREE_GUN,
+    engine=0.0,
+    u235=0.0,
+    hydrogen=0.0,
+    stage_hardware=0.0,
+    kit=0.0,
+    skin=0.0,
+    methalox=0.0,
+    graphite=0.0,
+    bullet=0.0,
+)
+REUSE_ROWS = (
+    Sensitivity("ADR 0079 base (electric, Ledger A)", {"plant": ELECTRIC}),
+    Sensitivity("reactor free, 10-round life", {"plant": FREE_PLANT}),
+    Sensitivity(
+        "+ plate and gun free",
+        {"plant": FREE_PLANT, "ledger": FREE_PLATE, "prices": FREE_GUN},
+    ),
+    Sensitivity(
+        "+ stay 0.1 yr (load and leave)",
+        {"plant": FREE_PLANT, "ledger": FREE_PLATE, "prices": FREE_GUN, "stay": 0.1},
+    ),
+    Sensitivity(
+        "+ stage braked back, reflown 5 rounds",
+        {
+            "plant": FREE_PLANT,
+            "ledger": FREE_PLATE,
+            "prices": FREE_GUN,
+            "stage": replace(CHEM, reuse=True),
+        },
+    ),
+    Sensitivity(
+        "bound: every price but the lob zeroed, stay 0.1 yr",
+        {
+            "plant": FREE_PLANT,
+            "ledger": replace(FREE_PLATE, electronics=0.0),
+            "prices": LOFT_ONLY,
+            "stay": 0.1,
+        },
+    ),
+)
+
+
+def reuse_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
+    """The author's question (2026-10-21): reactor and plates reused until nearly free.
+
+    The rows stack.  ``rNPV/steady`` is what time and the gates add to a level
+    round's cost; ``first cargo`` is the year the first level round's cargo is
+    sold (round ``REINVESTMENTS + 1``, after the seed's wait).
+    """
+    rows = []
+    for site in (IAPETUS, PHOEBE):
+        for s in REUSE_ROWS:
+            c = build_plant_cycle(site=site, **s.kwargs, book=book)  # type: ignore[arg-type]
+            v = value_plant_cycle(c)
+            loan = value_plant_cycle(c, 0.04)
+            odds = math.prod(g.odds for g in plant_gates(site, c.stay, c.seed_wait))
+            lines = sorted(v.steady_lines.items(), key=lambda kv: -kv[1])
+            rows.append(
+                [
+                    site.name,
+                    s.label,
+                    f"{c.growth():.2f}",
+                    f"{c.round_years:.2f}",
+                    f"{(REINVESTMENTS + 1) * c.round_years + c.seed_wait:.1f}",
+                    f"{odds:.2f}",
+                    _m(v.steady_cost),
+                    _m(v.break_even),
+                    _m(loan.break_even),
+                    (
+                        f"{v.break_even / v.steady_cost:.1f}"
+                        if v.break_even is not None
+                        else "-"
+                    ),
+                    ", ".join(f"{k_} {x:.1f}" for k_, x in lines[:4]),
+                ]
+            )
+    return (
+        "Reuse (2026-10-21): the reactor and the Earth plates made nearly free, rows stacked.\n"
+        "Lofting (lob, plug) and the round's length are what stay; the solar dive is $143 / $86 rNPV.\n"
+        + tabulate(
+            rows,
+            headers=[
+                "site",
+                "row",
+                "G",
+                "T",
+                "first cargo yr",
+                "gate odds",
+                "steady",
+                "rNPV 10%",
+                "loan 4%",
+                "rNPV/steady",
+                "top steady lines $/kg",
+            ],
+        )
+    )
+
+
 def rate_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Item 6: growth rate by site and propulsion, pipelined and whole rounds."""
     rows = []
@@ -1276,6 +1387,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             carbon_report(book),
             power_report(book),
             sensitivity_report(book),
+            reuse_report(book),
             rate_report(book),
             flip_report(book),
             target_report(book=book),
