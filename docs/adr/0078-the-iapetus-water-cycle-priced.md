@@ -5,7 +5,9 @@ Date: 2026-10-21
 Status: Accepted. Answers the parent's S51 items 1-4 and 7 for the water NTR, and item 6's
 growth rate at Iapetus (`docs/iapetus_cycle_ledger_asks_for_aim_repo.md`, carried from
 `Balloon-Pulse-Propulsion` @ `ec5995d`). Item 5 (the reactor plus chemical rockets) and
-the rest of item 6 (Phoebe, the propagator) follow in their own ADR.
+the rest of item 6 (Phoebe, the propagator) follow in ADR 0079, which also makes the
+chemical-only Earth departure a full scenario (no nuclear near Earth) and replaces this
+ADR's methalox-departure sensitivity row.
 
 ## Context
 

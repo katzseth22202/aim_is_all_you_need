@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive plate-disposal plate-jupiter-loop iapetus-cycle all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -65,8 +65,14 @@ growth-ledger:  ## The 1500 t launch unit over the flown chain: water plate (per
 solar-dive:  ## The solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ~1 min, ARGS="--sweep --child --gaps --parking-days N" adds the depth sweep, the child's rows and the 3/5/10-day gap sweep)
 	python -m src.solar_dive_growth $(ARGS)
 
-iapetus-cycle:  ## The Iapetus water cycle: single-use water NTR, its ledgers A/B, gated rNPV and loan, against the solar dive (ADR 0078; ~20 s)
+iapetus-cycle:  ## The Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, against the solar dive, hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min, ARGS="--scenario chemical")
 	python -m src.iapetus_cycle $(ARGS)
+
+saturn-legs:  ## Saturn-side legs on the real Earth-Saturn arcs and the moons' real planes, 2035-2048 windows (ADR 0079; ~20 s)
+	python -m src.saturn_moon_legs
+
+saturn-methalox:  ## A reactor plus methalox stages at Iapetus and Phoebe against the water NTR, both Earth-departure scenarios (ADR 0079; ~3 min)
+	python -m src.saturn_methalox $(ARGS)
 
 plate-disposal:  ## The left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076); ARGS="--drift" flies the ship's own parking orbit (ADR 0077)
 	python -m src.plate_disposal $(ARGS)

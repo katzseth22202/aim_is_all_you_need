@@ -446,25 +446,28 @@ def impulsive_escape(excess: float, radius: float = LOADING_RADIUS) -> float:
 
 
 @lru_cache(maxsize=None)
-def earth_departure_acceleration(from_leo: bool, isp: float, loss: float) -> float:
+def earth_departure_acceleration(
+    from_leo: bool, isp: float, loss: float, earth_dv: float = EARTH_DEPARTURE_DV
+) -> float:
     """Start acceleration (km/s^2) at which the Earth departure loses ``loss``.
 
     From the eccentric orbit's 200 km perigee, or from a 200 km circular LEO,
     to the excess the 3.0-year transfer needs, thrust along velocity, its
     start optimised (2-D, Earth point mass).  The parent sized its outbound
     stage for at most 5%; the engines are dear, so the ledger picks the loss
-    (:func:`outbound`).
+    (:func:`outbound`).  ``earth_dv`` is the impulsive burn from the
+    eccentric orbit (4.90 coplanar; the real arcs' median is larger).
     """
     rp = R_EARTH + PUSH_ALTITUDE
     vp = ECCENTRIC_SPEED
-    excess_sq = (vp + EARTH_DEPARTURE_DV) ** 2 - 2.0 * MU_EARTH / rp
+    excess_sq = (vp + earth_dv) ** 2 - 2.0 * MU_EARTH / rp
     if from_leo:
         ra = rp
         dv = math.sqrt(excess_sq + 2.0 * MU_EARTH / rp) - math.sqrt(MU_EARTH / rp)
     else:
         a = 1.0 / (2.0 / rp - vp * vp / MU_EARTH)
         ra = 2.0 * a - rp
-        dv = EARTH_DEPARTURE_DV
+        dv = earth_dv
     ve = isp * G0
     finite = dv * (1.0 + loss)
 
@@ -475,15 +478,35 @@ def earth_departure_acceleration(from_leo: bool, isp: float, loss: float) -> flo
     return float(brentq(short, 1e-6, 0.1, xtol=1e-10))
 
 
-def earth_departure_dv(from_leo: bool) -> float:
-    """The impulsive Earth departure (km/s): 4.90 from the eccentric orbit."""
+def earth_departure_dv(from_leo: bool, earth_dv: float = EARTH_DEPARTURE_DV) -> float:
+    """The impulsive Earth departure (km/s): ``earth_dv`` from the eccentric
+    orbit, or the same excess from LEO."""
     if not from_leo:
-        return EARTH_DEPARTURE_DV
+        return earth_dv
     rp = R_EARTH + LEO_ALTITUDE
-    excess_sq = (ECCENTRIC_SPEED + EARTH_DEPARTURE_DV) ** 2 - 2.0 * MU_EARTH / (
+    excess_sq = (ECCENTRIC_SPEED + earth_dv) ** 2 - 2.0 * MU_EARTH / (
         R_EARTH + PUSH_ALTITUDE
     )
     return math.sqrt(excess_sq + 2.0 * MU_EARTH / rp) - math.sqrt(MU_EARTH / rp)
+
+
+@lru_cache(maxsize=None)
+def seed_ship_price(dear: bool = False, earth_dv: float = EARTH_DEPARTURE_DV) -> float:
+    """Dollars per kg a refuelled, expended Starship sends to Saturn's excess.
+
+    The repository's seed ship (:func:`src.seed_cost.seed_price_range`): one
+    burn from LEO, steered finite loss charged, at the excess the 3.0-year
+    transfer needs (11.36 km/s); cheap end ($5M hull, $150/kg flights) or
+    dear.
+    """
+    from astropy import units as u
+
+    from src.seed_cost import seed_price_range
+
+    rp = R_EARTH + PUSH_ALTITUDE
+    excess = math.sqrt((ECCENTRIC_SPEED + earth_dv) ** 2 - 2.0 * MU_EARTH / rp)
+    prices = seed_price_range(excess * u.km / u.s)
+    return float(prices.high if dear else prices.low)
 
 
 # --------------------------------------------------------------------------
@@ -740,6 +763,7 @@ class Outbound:
         earth_dry: Its tanks (LH2) or stage (methalox).
         ntp_engines: Hydrogen engines (count, per kg landed).
         ntp_mass: Their mass.
+        earth_dv: The impulsive burn from the eccentric orbit it was sized for.
     """
 
     from_leo: bool
@@ -752,6 +776,7 @@ class Outbound:
     earth_dry: float
     ntp_engines: float
     ntp_mass: float
+    earth_dv: float = EARTH_DEPARTURE_DV
 
     @property
     def ratio(self) -> float:
@@ -775,7 +800,11 @@ def _stage_on(payload: float, dv: float, isp: float, dry: float) -> Tuple[float,
 
 
 def outbound_at(
-    from_leo: bool, book: OutboundBook, loss: Optional[float] = None
+    from_leo: bool,
+    book: OutboundBook,
+    loss: Optional[float] = None,
+    saturn_dv: Optional[float] = None,
+    earth_dv: float = EARTH_DEPARTURE_DV,
 ) -> Outbound:
     """The outbound stack per kilogram landed, at one Earth departure loss.
 
@@ -784,23 +813,52 @@ def outbound_at(
     Earth side: a hydrogen NTP stage with engines enough to hold ``loss``
     (:func:`earth_departure_acceleration`), or a methalox stage.
     """
-    d = dogleg_dvs()
-    saturn_dv = d["capture"] + d["raise"] + d["match"] + d["land"]
+    if saturn_dv is None:
+        d = dogleg_dvs()
+        saturn_dv = d["capture"] + d["raise"] + d["match"] + d["land"]
     methalox, dry = _stage_on(1.0, saturn_dv, book.methalox_isp, book.methalox_dry)
     stack = 1.0 + methalox + dry
-    dv = earth_departure_dv(from_leo)
+    dv = earth_departure_dv(from_leo, earth_dv)
     if book.earth_stage == "methalox":
         loss = book.methalox_loss if loss is None else loss
+        if from_leo:
+            # The seed: one burn from LEO on a refuelled, expended Starship
+            # (src.seed_cost), priced per kg it sends (:func:`seed_ship_price`).
+            return Outbound(
+                from_leo,
+                "seed ship",
+                0.0,
+                saturn_dv,
+                methalox,
+                dry,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                earth_dv,
+            )
+        # Recurring: the bags push the ship to the eccentric orbit, then one
+        # methalox burn at perigee.
         prop, edry = _stage_on(
             stack, dv * (1.0 + loss), book.methalox_isp, book.methalox_dry
         )
         return Outbound(
-            from_leo, "methalox", loss, saturn_dv, methalox, dry, prop, edry, 0.0, 0.0
+            from_leo,
+            "methalox",
+            loss,
+            saturn_dv,
+            methalox,
+            dry,
+            prop,
+            edry,
+            0.0,
+            0.0,
+            earth_dv,
         )
     if book.earth_stage != "hydrogen NTP":
         raise ValueError(f"unknown Earth stage {book.earth_stage!r}")
     loss = book.losses[0] if loss is None else loss
-    a0 = earth_departure_acceleration(from_leo, book.ntp_isp, loss)
+    a0 = earth_departure_acceleration(from_leo, book.ntp_isp, loss, earth_dv)
     burned = 1.0 - math.exp(-dv * (1.0 + loss) / (book.ntp_isp * G0))
     engines_per_kg = a0 / book.ntp_thrust  # thrust kN is kg km/s^2
     m0 = stack / (
@@ -820,6 +878,7 @@ def outbound_at(
         earth_dry=book.lh2_tank * hydrogen,
         ntp_engines=engines_per_kg * m0,
         ntp_mass=engines_per_kg * m0 * book.ntp_engine,
+        earth_dv=earth_dv,
     )
 
 
@@ -830,6 +889,8 @@ def outbound(
     engine: float = 60.0e6,
     hydrogen: float = 6.0,
     hardware: float = 500.0,
+    saturn_dv: Optional[float] = None,
+    earth_dv: float = EARTH_DEPARTURE_DV,
 ) -> Outbound:
     """The outbound stack, its Earth departure loss chosen on price.
 
@@ -839,11 +900,11 @@ def outbound(
     cost there); with ``per_kg`` None the parent's 5% is kept.
     """
     if book.earth_stage != "hydrogen NTP" or per_kg is None:
-        return outbound_at(from_leo, book)
+        return outbound_at(from_leo, book, saturn_dv=saturn_dv, earth_dv=earth_dv)
     best: Optional[Tuple[float, Outbound]] = None
     for loss in book.losses:
         try:
-            o = outbound_at(from_leo, book, loss)
+            o = outbound_at(from_leo, book, loss, saturn_dv, earth_dv)
         except ValueError:
             continue
         dollars = (
@@ -1026,6 +1087,7 @@ class CyclePrices:
         liner: Graphite consumed per push (kg; Result 20's 2-18 t).
         gun: Per gun, one a plate, flown as the plate is (assumption).
         bullet: Ice bullet (kg).
+        dear_seed: Price a chemical seed at the seed ship's dear end.
     """
 
     lob: float = 25.0
@@ -1044,6 +1106,7 @@ class CyclePrices:
     methalox: float = 0.2
     graphite: float = 20.0
     liner: float = 10.0e3
+    dear_seed: bool = False
     gun: float = 5.0e6
     bullet: float = 0.1
 
@@ -1189,23 +1252,32 @@ class Cycle:
 
     def push_lines(self, bags: float) -> Dict[str, float]:
         """Dollars to push ``bags`` kg of arriving bags, by line."""
-        p, law, k = self.prices, self.law, self.k
-        pushed = bags * self.leverage
-        pushes = pushed / law.pushed_per_push(k)
-        pulses = bags / BAG_MASS
-        lines = {
-            "lob": p.lofted * (pushed + p.liner * pushes),
-            "plug": p.lofted * k * bags,
-            "plate": self.ledger.plate_flight * pushes,
-            "liner": p.graphite * p.liner * pushes,
-            "gun": p.gun / self.ledger.plate_flights * pushes,
-            "bullets": p.lofted * p.bullet * law.miss * pulses,
-        }
-        if self.ledger.electronics is not None:
-            lines["electronics"] = (
-                self.ledger.electronics * pushed * (1.0 - law.plate_share(k))
-            )
-        return lines
+        return push_dollars(self.law, self.k, self.ledger, self.prices, bags)
+
+
+def push_dollars(
+    law: PushLaw, k: float, ledger: Ledger, prices: CyclePrices, bags: float
+) -> Dict[str, float]:
+    """Dollars to push ``bags`` kg of arriving bags on the Earth bag plate, by line.
+
+    Every kilogram pushed rides the lob (cargo, ship, plate and spring), and
+    so do the plug, the liner and the bullets.  Ledger A's electronics are
+    $1 per useful kilogram pushed.
+    """
+    pushed = bags * law.leverage(k)
+    pushes = pushed / law.pushed_per_push(k)
+    pulses = bags / BAG_MASS
+    lines = {
+        "lob": prices.lofted * (pushed + prices.liner * pushes),
+        "plug": prices.lofted * k * bags,
+        "plate": ledger.plate_flight * pushes,
+        "liner": prices.graphite * prices.liner * pushes,
+        "gun": prices.gun / ledger.plate_flights * pushes,
+        "bullets": prices.lofted * prices.bullet * law.miss * pulses,
+    }
+    if ledger.electronics is not None:
+        lines["electronics"] = ledger.electronics * pushed * (1.0 - law.plate_share(k))
+    return lines
 
 
 def build_cycle(
@@ -1218,6 +1290,7 @@ def build_cycle(
     hours: Optional[float] = None,
     book: OutboundBook = OUTBOUND_BOOK,
     loss: Optional[float] = None,
+    real_planes: bool = False,
 ) -> Cycle:
     """Assemble a cycle; ``k`` defaults to the column's lowest tabled ratio.
 
@@ -1225,30 +1298,50 @@ def build_cycle(
     from ``book.losses`` for the lowest gated break-even (10%, whole rounds)
     unless ``loss`` is given: the engines are dear, but every kilogram they
     save in hydrogen is a kilogram less to push, so neither steady dollars
-    nor the parent's 5% rule is the right criterion.  The seed's LEO stage
-    always flies hydrogen (a single methalox stage through 8 km/s is ~340 kg
-    per kg landed), its loss chosen on the launch price.
+    nor the parent's 5% rule is the right criterion.  The seed leaves LEO
+    on the book's Earth stage: hydrogen NTP (its loss chosen on the launch
+    price) or, chemical only, the expended Starship in one burn.
+
+    ``real_planes`` takes the Saturn-side outbound and the return's Saturn
+    excess from :mod:`src.saturn_moon_legs`' medians over 2035-2048 (the
+    coplanar 10.4 km/s shifted by the same amount at other closing speeds).
     """
     excess = (
         RETURN_EXCESS
         if law.closing == CLOSING_SPEED
         else return_excess_for(law.closing)
     )
+    saturn_dv: Optional[float] = None
+    earth_dv = EARTH_DEPARTURE_DV
+    if real_planes:
+        from src.saturn_moon_legs import site_summary
+
+        legs = site_summary("Iapetus")
+        d = dogleg_dvs()
+        excess += legs["saturn_excess"] - RETURN_EXCESS
+        saturn_dv = (
+            legs["capture"] * (1.0 + CAPTURE_MARGIN)
+            + legs["apse"]
+            + d["match"]
+            + d["land"]
+        )
+        earth_dv = legs["earth_dv"]
     stage = return_stage(
         ledger.hours if hours is None else hours, engine, inputs, excess
     )
-    hydrogen = replace(book, earth_stage="hydrogen NTP")
     out_leo = outbound(
         True,
-        hydrogen,
+        book,
         prices.leo,
         prices.engine,
         prices.hydrogen,
         prices.stage_hardware,
+        saturn_dv,
+        earth_dv,
     )
     draft = Cycle(
         stage=stage,
-        out=outbound_at(False, book, loss),
+        out=outbound_at(False, book, loss, saturn_dv, earth_dv),
         out_leo=out_leo,
         law=law,
         k=law.k_range[0] if k is None else k,
@@ -1260,7 +1353,7 @@ def build_cycle(
     best: Optional[Tuple[float, Cycle]] = None
     for trial in book.losses:
         try:
-            c = replace(draft, out=outbound_at(False, book, trial))
+            c = replace(draft, out=outbound_at(False, book, trial, saturn_dv, earth_dv))
         except ValueError:
             continue
         if c.growth() <= 1.0:
@@ -1328,11 +1421,24 @@ def _seed_lines(
     cycle: Cycle, engines: float, packages: List[float]
 ) -> Dict[str, float]:
     lines = {key: value * engines for key, value in cycle.hardware(packages).items()}
-    lines["launch to LEO"] = (
-        cycle.prices.leo * cycle.stage.earth_kg * cycle.out_leo.ratio * engines
-    )
-    # The seed flies from LEO: its Earth departure is the LEO stack's.
     o, s = cycle.out_leo, cycle.stage
+    if o.earth_stage == "seed ship":
+        # One burn from LEO on an expended Starship: its price covers the
+        # launches, the hull and the propellant.
+        for key in ("outbound hydrogen NTP engines", "Earth departure propellant"):
+            lines.pop(key, None)
+        lines["stage hardware"] = (
+            cycle.prices.stage_hardware * o.methalox_dry * s.earth_kg * engines
+        )
+        lines["seed ship"] = (
+            seed_ship_price(cycle.prices.dear_seed, o.earth_dv)
+            * o.ratio
+            * s.earth_kg
+            * engines
+        )
+        return lines
+    lines["launch to LEO"] = cycle.prices.leo * s.earth_kg * o.ratio * engines
+    # The seed flies from LEO: its Earth departure is the LEO stack's.
     lines["outbound hydrogen NTP engines"] = (
         cycle.prices.engine * o.ntp_engines * s.earth_kg * engines
     )
@@ -1483,7 +1589,7 @@ def rate_rows(growth: float, round_years: float) -> Dict[str, float]:
     r = math.log(growth) / round_years
     return {
         "rate": r,
-        "doubling": math.log(2.0) / r,
+        "doubling": math.log(2.0) / r if r > 0.0 else math.inf,
         "pipelined_19": math.exp(19.0 * r),
         "whole_rounds": float(math.floor(ROUND_HORIZON / round_years + 1e-9)),
         "whole_19": growth ** math.floor(ROUND_HORIZON / round_years + 1e-9),
@@ -1603,6 +1709,19 @@ def outbound_report() -> str:
                 except ValueError:
                     continue
                 engines = ESTIMATE.engine * o.ntp_engines
+                if o.earth_stage == "seed ship":
+                    rows.append(
+                        [
+                            "seed ship (one burn, expended Starship)",
+                            "LEO",
+                            "steered",
+                            f"{o.ratio:.2f} sent",
+                            f"${seed_ship_price():,.0f}-{seed_ship_price(True):,.0f} per kg sent",
+                            "0",
+                            "0",
+                        ]
+                    )
+                    continue
                 rows.append(
                     [
                         book.earth_stage,
@@ -1644,15 +1763,15 @@ def _cells(ledger: Ledger, law: PushLaw, k: float, rates: Sequence[float]) -> Li
     return out
 
 
-def ledger_report() -> str:
+def ledger_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Items 2-3: the two ledgers, k solved, four cells, both counts."""
     out = []
     rows = []
     for ledger in LEDGERS:
         for column in ("compact", "shaped"):
             law = PushLaw(column)
-            k, v = best_k(ledger, law)
-            c = build_cycle(ledger, k, law)
+            k, v = best_k(ledger, law, book=book)
+            c = build_cycle(ledger, k, law, book=book)
             loan = value_cycle(c, 0.04)
             pipe = value_cycle(c, 0.10, pipelined=True)
             pipe_loan = value_cycle(c, 0.04, pipelined=True)
@@ -1692,8 +1811,8 @@ def ledger_report() -> str:
         )
     )
     for ledger in LEDGERS:
-        k, v = best_k(ledger)
-        c = build_cycle(ledger, k)
+        k, v = best_k(ledger, book=book)
+        c = build_cycle(ledger, k, book=book)
         lines = ", ".join(
             f"{key} {value:.2f}"
             for key, value in sorted(v.steady_lines.items(), key=lambda kv: -kv[1])
@@ -1714,7 +1833,7 @@ def ledger_report() -> str:
     return "\n\n".join(out)
 
 
-def k_report() -> str:
+def k_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """k on the whole ledger, and the miss-rate rows for k <= 4."""
     rows = []
     for column in ("compact", "shaped"):
@@ -1724,7 +1843,7 @@ def k_report() -> str:
                 if miss != 0.05 and k > 4.0:
                     continue
                 law = PushLaw(column, miss=miss)
-                c = build_cycle(LEDGER_A, k, law)
+                c = build_cycle(LEDGER_A, k, law, book=book)
                 v = value_cycle(c)
                 rows.append(
                     [
@@ -1741,13 +1860,13 @@ def k_report() -> str:
     )
 
 
-def rate_report() -> str:
+def rate_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Item 6 for the water stage at Iapetus: growth rate, both counts."""
     rows = []
     for ledger in LEDGERS:
         for column in ("compact", "shaped"):
-            k, _ = best_k(ledger, PushLaw(column))
-            c = build_cycle(ledger, k, PushLaw(column))
+            k, _ = best_k(ledger, PushLaw(column), book=book)
+            c = build_cycle(ledger, k, PushLaw(column), book=book)
             for frozen in (False, True):
                 cf = replace(c, law=replace(c.law, frozen=frozen))
                 g = cf.growth()
@@ -1815,11 +1934,11 @@ def parent_check_report() -> str:
     )
 
 
-def comparison_report() -> str:
+def comparison_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Item 4: this cycle against the solar dive, at the eccentric orbit and L1."""
     rows = []
     for ledger in LEDGERS:
-        k, v = best_k(ledger)
+        k, v = best_k(ledger, book=book)
         rows.append(
             [
                 f"Iapetus water NTR, ledger {ledger.label[0]}, compact plug",
@@ -1847,14 +1966,14 @@ def comparison_report() -> str:
     )
 
 
-def target_report(target: float = 2.0) -> str:
+def target_report(target: float = 2.0, book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Item 5's target: what must fall to reach ~$1-2/kg (Ledger A, the loan).
 
     The pushed mass itself rides the lob, so the lob sets a floor under any
     Saturn-side saving: ``lob x (pushed + plug) / cargo``.
     """
-    k, v = best_k(LEDGER_A, rate=0.04)
-    c = build_cycle(LEDGER_A, k)
+    k, v = best_k(LEDGER_A, rate=0.04, book=book)
+    c = build_cycle(LEDGER_A, k, book=book)
     lines = v.steady_lines
     lofted = ("lob", "plug", "bullets")
     lob_lines = sum(lines.get(key, 0.0) for key in lofted)
@@ -1877,12 +1996,12 @@ def target_report(target: float = 2.0) -> str:
     )
 
 
-def residual_loss_report() -> str:
+def residual_loss_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """The residual plate-loss row: per pulse p x q, a plate and its ship lost."""
     rows = []
     for ledger in LEDGERS:
-        k, v = best_k(ledger)
-        c = build_cycle(ledger, k)
+        k, v = best_k(ledger, book=book)
+        c = build_cycle(ledger, k, book=book)
         cargo_per_push = c.law.pushed_per_push(k) * v.cargo_share
         ship = (
             c.law.pushed_per_push(k)
@@ -1941,13 +2060,13 @@ def plate_check_report() -> str:
     )
 
 
-def saturn_tank_report() -> str:
+def saturn_tank_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Tank walls made at Saturn by a 40 kWe fission surface power unit."""
     stage = return_stage(12.0)
     tonnes_a_year = 40.0e3 * _YEAR / 75.0e6 / 1e3
     per_round = tonnes_a_year * ROUND_YEARS
     stages = per_round * 1e3 / stage.tank
-    c = build_cycle(LEDGER_A, 4.0)
+    c = build_cycle(LEDGER_A, 4.0, book=book)
     landed = (sum(c.push_lines(1.0).values()) / c.useful) * c.out.ratio
     shipped = (ESTIMATE.water_tank + landed) * stage.tank
     unit_mass = 6.0e3
@@ -1960,7 +2079,7 @@ def saturn_tank_report() -> str:
     )
 
 
-def power_report() -> str:
+def power_report(book: OutboundBook = OUTBOUND_BOOK) -> str:
     """Reactor power per engine: U-235 fixed, everything else per MW.
 
     The most power the core reaches at the 1400 K wall is not derived here;
@@ -1969,7 +2088,7 @@ def power_report() -> str:
     rows = []
     for mw in (280.0, 560.0, 840.0, 1120.0):
         engine = WATER_1300K.at_power(mw * 1e6)
-        c = build_cycle(LEDGER_A, 4.0, engine=engine)
+        c = build_cycle(LEDGER_A, 4.0, engine=engine, book=book)
         v = value_cycle(c)
         rows.append(
             [
@@ -2048,18 +2167,19 @@ SENSITIVITIES = (
         {"prices": replace(ESTIMATE, graphite=1000.0)},
     ),
     Sensitivity("liner 18 t a push", {"prices": replace(ESTIMATE, liner=18.0e3)}),
-    Sensitivity("methalox Earth departure", {"book": METHALOX_DEPARTURE}),
 )
 
 
-def sensitivity_report(rows_in: Sequence[Sensitivity] = SENSITIVITIES) -> str:
+def sensitivity_report(
+    rows_in: Sequence[Sensitivity] = SENSITIVITIES, book: OutboundBook = OUTBOUND_BOOK
+) -> str:
     """Item 7: one line moved at a time, k re-solved on each."""
     rows = []
     for sens in rows_in:
         law = sens.kwargs.get("law", PushLaw())
         kwargs = {key: value for key, value in sens.kwargs.items() if key != "law"}
-        k, v = best_k(LEDGER_A, law, **kwargs)  # type: ignore[arg-type]
-        c = build_cycle(LEDGER_A, k, law, **kwargs)  # type: ignore[arg-type]
+        k, v = best_k(LEDGER_A, law, **kwargs, book=book)  # type: ignore[arg-type]
+        c = build_cycle(LEDGER_A, k, law, **kwargs, book=book)  # type: ignore[arg-type]
         loan = value_cycle(c, 0.04)
         rows.append(
             [
@@ -2088,28 +2208,97 @@ def sensitivity_report(rows_in: Sequence[Sensitivity] = SENSITIVITIES) -> str:
     )
 
 
+#: The two Earth-departure scenarios every table is printed under: the
+#: parent's hydrogen NTP, and chemical only near Earth (no reactor run inside
+#: the magnetosphere; Seth, 2026-10-21: an accident after startup scatters
+#: fission products, a cold core does not).
+SCENARIOS: Tuple[Tuple[str, OutboundBook], ...] = (
+    ("hydrogen NTP Earth departure (the parent's)", OUTBOUND_BOOK),
+    (
+        "no nuclear near Earth: methalox Earth departure, seed on the expended Starship",
+        METHALOX_DEPARTURE,
+    ),
+)
+
+
+def scenario_summary() -> str:
+    """The headline cells under both Earth-departure scenarios."""
+    rows = []
+    for name, book in SCENARIOS:
+        for ledger in LEDGERS:
+            k, v = best_k(ledger, book=book)
+            c = build_cycle(ledger, k, book=book)
+            loan = value_cycle(c, 0.04)
+            pipe = value_cycle(c, pipelined=True)
+            rows.append(
+                [
+                    book.earth_stage,
+                    ledger.label[0],
+                    f"{c.out.ratio:.1f}",
+                    f"{c.growth():.2f}",
+                    _m(v.steady_cost),
+                    _m(v.break_even),
+                    _m(loan.break_even),
+                    _m(pipe.break_even),
+                    f"${v.seed / 1e9:.1f}B",
+                ]
+            )
+    return (
+        "Both scenarios, water NTR at Iapetus, compact k 4, $/kg at the eccentric orbit:\n"
+        + tabulate(
+            rows,
+            headers=[
+                "Earth departure",
+                "ledger",
+                "outbound",
+                "G",
+                "steady",
+                "rNPV 10%",
+                "loan 4%",
+                "rNPV pipelined",
+                "seed (10 engines)",
+            ],
+        )
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Print the S51 report."""
+    """Print the S51 report under both Earth-departure scenarios."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--scenario",
+        choices=("both", "hydrogen", "chemical"),
+        default="both",
+        help="which Earth-departure scenario's full tables to print",
+    )
+    args = parser.parse_args(argv)
     for section in (
         stage_report(),
         recession_report(),
         outbound_report(),
         parent_check_report(),
-        ledger_report(),
-        k_report(),
-        rate_report(),
-        comparison_report(),
-        target_report(),
-        residual_loss_report(),
         plate_check_report(),
-        saturn_tank_report(),
-        power_report(),
-        sensitivity_report(),
+        scenario_summary(),
     ):
         print(section)
         print()
+    for (name, book), key in zip(SCENARIOS, ("hydrogen", "chemical")):
+        if args.scenario not in ("both", key):
+            continue
+        print("=" * 100 + f"\nScenario: {name}\n" + "=" * 100)
+        for section in (
+            ledger_report(book),
+            k_report(book),
+            rate_report(book),
+            comparison_report(book),
+            target_report(book=book),
+            residual_loss_report(book),
+            saturn_tank_report(book),
+            power_report(book),
+            sensitivity_report(book=book),
+        ):
+            print(section)
+            print()
 
 
 if __name__ == "__main__":

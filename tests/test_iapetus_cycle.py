@@ -213,3 +213,27 @@ def test_the_valuation_is_scale_free_and_the_loan_is_cheaper() -> None:
     assert tenth.break_even is not None and loan.break_even is not None
     assert loan.break_even < tenth.break_even
     assert tenth.steady_cost < tenth.break_even
+
+
+def test_the_chemical_seed_is_one_burn_on_the_seed_ship() -> None:
+    """No nuclear near Earth: the LEO seed carries no Earth stage of its own."""
+    seed = outbound_at(True, METHALOX_DEPARTURE)
+    assert seed.earth_stage == "seed ship"
+    assert seed.earth_propellant == 0.0 and seed.ntp_engines == 0.0
+    assert seed.ratio == pytest.approx(1.0 + seed.methalox + seed.methalox_dry)
+
+
+def test_the_recurring_chemical_departure_is_one_perigee_burn() -> None:
+    """From the eccentric orbit: one methalox stage through 4.90 km/s (+2%)."""
+    o = outbound_at(False, METHALOX_DEPARTURE)
+    assert o.earth_stage == "methalox"
+    assert o.ratio == pytest.approx(28.93, abs=0.05)
+
+
+@pytest.mark.slow
+def test_the_seed_ship_prices_match_seed_cost() -> None:
+    """The repository's expended Starship at Saturn's 11.36 km/s excess."""
+    from src.iapetus_cycle import seed_ship_price
+
+    assert seed_ship_price() == pytest.approx(1785.0, rel=0.01)
+    assert seed_ship_price(True) > seed_ship_price()

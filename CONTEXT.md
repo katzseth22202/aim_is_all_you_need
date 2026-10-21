@@ -2003,6 +2003,28 @@ with thrust. On Ledger A it costs $90/kg steady and $309 on the gated rNPV ($131
 alone. The cycle has two nuclear engines: the outbound **hydrogen NTP** (Earth departure,
 900 s) and the **water NTR** (Saturn return, 200 s). Neither is chemical.
 
+**No nuclear near Earth** (scenario):
+Every Earth departure is chemical: the seed leaves LEO in one burn on the expended
+Starship, and each recurring ship is pushed to the eccentric orbit and burns methalox at
+perigee. Reactors cross the magnetosphere cold, as cargo, and first start at Saturn
+(author, 2026-10-21: approval, and an accident after startup scatters fission products).
+It is printed beside the **hydrogen NTP** scenario in every table (ADR 0079). It costs
+the water NTR 1.7x on the rNPV.
+
+**Kept reactor plus methalox** (Saturn side):
+A plant (ceria, or electric with electrolysis) stays at the moon and makes methalox from
+ice and carbon for single-use chemical stages (`src/saturn_methalox.py`, ADR 0079). The
+plant rarely limits growth; Earth mass per kg of PuffSat does. At Phoebe, with carbon
+feed and tanks made at Saturn, it ties the water NTR with hydrogen NTP ($308 / $309) and
+beats it without ($338 / $532). _Avoid_: "the uranium is the expensive line". The water
+engine is ~$8 of ~$90/kg.
+
+**Carbon feed**:
+Carbon as elemental or organic carbon, gasified with steam (0.163 kg per kg of methalox,
+1.2x the energy), or as CO2 ice (0.60 kg). The grade is by mass of that feed. Below about
+0.1% carbon, or 0.3% CO2, the kit stops paying. _Avoid_: assuming CO2; the dark material's
+hypothesis is carbon.
+
 **Ship-carried plug mass**:
 The ice the Earth ship lofts for the bags to strike, `k` kg per kg of incoming bag,
 charged at the lob price. Low `k` wins on the whole ledger (4 on the compact plug).
