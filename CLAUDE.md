@@ -94,6 +94,7 @@ make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no 
 make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit; hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min)
 make saturn-legs    # Saturn-side legs on the real arcs and the moons' real planes (ADR 0079; ~20 s)
 make saturn-methalox # a reactor plus methalox stages at Iapetus and Phoebe against the water NTR, both scenarios (ADR 0079; ~3 min)
+make saturn-aerocapture # recurring ships aerocapture at Saturn, rings cleared, against the capture burn, both scenarios (ADR 0080; ~5 min)
 make plate-disposal  # the left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076; ~10 min); ARGS="--drift": the ship's own parking orbit, ~10 s (ADR 0077)
 
 # Conda environment
@@ -375,6 +376,13 @@ saturn_methalox.py           ← iapetus_cycle + saturn_moon_legs: a plant (ceri
                                 methalox stages from ice and carbon; plant capacity and
                                 consumables tracked apart, plants shipped a round ahead
                                 (ADR 0079)
+      ↓
+saturn_aerocapture.py        ← saturn_moon_legs (+ iapetus_cycle, saturn_methalox for the
+                                ledger): a 3-DOF pass through Saturn's co-rotating
+                                atmosphere (AMAT's heating, the HEEET fit), the apse line
+                                swept round the asymptote's cone for ring-clear crossings,
+                                a non-tangent methalox leg onto the moon; Outbound.aeroshell,
+                                seed keeps its burn (ADR 0080)
 
 plate_disposal.py            ← leaf (numpy + scipy): the left push plate's apoapsis
                                 nudge flown with the Moon and the Sun's tide, swept

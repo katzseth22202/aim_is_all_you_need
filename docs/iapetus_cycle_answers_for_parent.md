@@ -211,3 +211,55 @@ ADR 0079 addendum; `make saturn-methalox` prints the table (`reuse_report`).
 **Suggested paper text:** the Saturn cycle's handicap is distance, not hardware. Reusing
 the reactor and plates narrows the gap to the solar dive but does not close it, because
 the lofting floor and the 7.7-9.5 year round remain.
+
+## Follow-up (2026-10-21): aerocapture at Saturn
+
+Seth asked for aerocapture at Saturn to be modelled, rings included (ADR 0080,
+`make saturn-aerocapture`, about 5 min). Every recurring ship flies one pass through
+Saturn's upper atmosphere instead of the capture burn. The seed keeps its burn.
+
+- **The rings allow it in every window, 2035-2047, at both moons.**
+  - The trick is to free the apse line round the asymptote's cone, rather than pin it to
+    the moon's plane (ADR 0079's rule, which left only blocked geometries), and to accept
+    a non-tangent match at the moon.
+  - The inbound ring-plane crossing then falls at 61 000-65 000 km, in the gap under the D
+    ring that Cassini's Grand Finale flew. The exit crossing is beyond the G ring.
+- **The pass is mild.**
+  - It sheds about 1.9 km/s about 400 km above 1 bar.
+  - About 30 km/s relative to the atmosphere (prograde), 1.4 g, 172 W/cm^2 peak, 38
+    kJ/cm^2.
+  - The aeroshell is 24% of entry mass (HEEET fit plus 10% structure).
+  - NASA's study (Putnam et al. 2023) reports 1400 W/cm^2 for a deeper pass to Titan's
+    orbit.
+- **It halves the outbound stack.** Water NTR: 16.1 -> 8.7 kg leaving the eccentric orbit
+  per kg landed (H2 NTP), 28.9 -> 15.6 chemical only.
+
+| rNPV 10% (4% loan) | H2 NTP: burn -> aerocapture | chemical only: burn -> aerocapture |
+|---|---|---|
+| water NTR, Iapetus, coplanar | $309 -> **$172** ($100) | $532 -> **$223** ($108) |
+| water NTR, Iapetus, real planes | $475 -> **$198** ($106) | $1,173 -> **$299** ($123) |
+| methalox, Phoebe, real planes | $357 -> $308 | $426 -> $296 |
+| solar dive 9.86 / 4 R_sun | $143 / $86 | |
+
+- **The water NTR at Iapetus becomes the preferred Saturn cell** with H2 NTP. Chemical
+  only, it ties methalox at Phoebe on the real planes.
+- **It still loses to the solar dive.** The round and the lofting are unchanged.
+- **Largest levers:**
+  - the aeroshell price: $5000/kg gives $291 / $419;
+  - letting the seed aerocapture too: Phoebe $269 / $257.
+- **The open gate is the corridor:** 0.17 deg of entry angle, 33 km of periapsis, at L/D
+  0.25; 53 km at 0.4. A factor-two error in Saturn's upper-atmosphere density moves the
+  needed periapsis by about 35 km. Guidance and dispersions are not run.
+
+**Suggested paper text:** if the Saturn cycle stays, its recurring ships aerocapture. The
+rings constrain the geometry but forbid no window. The corridor, which needs better
+knowledge of Saturn's upper atmosphere, is the remaining feasibility question.
+
+**Asked in conversation (not computed):** can one nuclear core serve both a hydrogen and
+a water engine?
+- Not with one coating. The tungsten cermet that suits 2700-3000 K hydrogen oxidizes to
+  volatile hydrated oxides in steam above about 1000 K. The SiC that suits steam, via its
+  silica skin, is attacked by hot hydrogen.
+- A shared core would mean running the hydrogen mode at about 1300-1400 K, about 550-600
+  s, behind SiC, or an oxide topcoat demonstrated in neither gas.
+- It would save at most the water engine's ~$8/kg.

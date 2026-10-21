@@ -173,34 +173,38 @@ def _node_radii(h: Vec, periapsis: Vec, rp: float, ra: float) -> Tuple[float, fl
     return (min(out), max(out))
 
 
-def apse_burn(
+def apse_candidates(
     asymptote: Vec,
     excess: float,
     normal: Vec,
     apoapsis: float,
     after: Tuple[float, float],
     inbound: bool,
-) -> Optional[ApseBurn]:
-    """The cheapest apoapsis burn joining a hyperbola to a moon's plane.
+    rp: float = CAPTURE_PERIAPSIS,
+) -> List[Tuple[Vec, Vec, ApseBurn]]:
+    """Every apoapsis burn joining a hyperbola to a moon's plane (at most two).
 
     Args:
         asymptote: Unit excess direction (arrival: the incoming velocity;
             departure: the outgoing velocity).
         excess: Its speed (km/s).
         normal: The moon's orbit normal.
-        apoapsis: The 150 000 km ellipse's apoapsis (km).
+        apoapsis: The ellipse's apoapsis (km).
         after: ``(semi-major axis, radius)`` of the orbit the burn joins, in the
             moon's plane and sense: the dog-leg's raised ellipse, or the moon.
         inbound: Arrival (True) or departure.
+        rp: The hyperbola's and the ellipse's periapsis (km): 150 000 for a
+            capture burn, the atmosphere for an aerocapture.
 
     Returns:
-        The burn, or None if no apse line lies in the moon's plane.
+        ``(apse direction, orbit normal, burn)`` for each apse line in the
+        moon's plane.
     """
-    angle = asymptote_angle(excess)
+    angle = asymptote_angle(excess, rp)
     axis = -asymptote if inbound else asymptote
-    v_low = _vis_viva(apoapsis, 0.5 * (CAPTURE_PERIAPSIS + apoapsis))
+    v_low = _vis_viva(apoapsis, 0.5 * (rp + apoapsis))
     v_high = _vis_viva(after[1], after[0])
-    best: Optional[ApseBurn] = None
+    out = []
     for apse in apse_options(axis, angle, normal):
         h = _unit(np.cross(asymptote, apse))
         moving = np.cross(h, apse)
@@ -211,11 +215,26 @@ def apse_burn(
             dv=dv,
             coplanar=abs(v_high - v_low),
             turn_deg=math.degrees(math.acos(cos_turn)),
-            node_radii=_node_radii(h, -apse, CAPTURE_PERIAPSIS, apoapsis),
+            node_radii=_node_radii(h, -apse, rp, apoapsis),
         )
-        if best is None or burn.dv < best.dv:
-            best = burn
-    return best
+        out.append((apse, h, burn))
+    return out
+
+
+def apse_burn(
+    asymptote: Vec,
+    excess: float,
+    normal: Vec,
+    apoapsis: float,
+    after: Tuple[float, float],
+    inbound: bool,
+) -> Optional[ApseBurn]:
+    """The cheapest apoapsis burn joining a 150 000 km hyperbola to a moon's plane.
+
+    See :func:`apse_candidates`; None if no apse line lies in the moon's plane.
+    """
+    options = apse_candidates(asymptote, excess, normal, apoapsis, after, inbound)
+    return min((b for _, _, b in options), key=lambda b: b.dv, default=None)
 
 
 # --------------------------------------------------------------------------

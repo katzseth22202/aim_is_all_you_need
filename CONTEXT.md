@@ -2022,6 +2022,19 @@ to the solar dive: Phoebe $206-235 against $143 (ADR 0079 addendum). What stays 
 lofting (the lob and the plug, ~$49 of ~$72 steady) and the round's length (first cargo
 in year 23-24), not hardware.
 
+**Aerocapture** (Saturn side):
+Each recurring ship sheds its arrival excess in one pass through Saturn's upper atmosphere,
+about 400 km above 1 bar, instead of the 150 000 km capture burn. It sheds its aeroshell,
+24% of entry mass, then burns methalox to the moon. The seed keeps the burn
+(`src/saturn_aerocapture.py`, ADR 0080). Every 2035-2047 window has a geometry whose ring
+crossings are **clear**: the inbound one under the D ring (the Grand Finale gap), the exit
+one beyond the G ring. To find it the apse line is freed round the asymptote's cone, and
+the match at the moon need not be tangent. It halves the outbound stack. The water NTR at
+Iapetus falls from $475 to $198 on the real planes (H2 NTP), still above the solar dive's
+$143. _Avoid_: "aerobraking" (many passes); this is one pass. The open gate is the
+**corridor**: 0.17 deg (33 km) at L/D 0.25, against about 35 km for a factor-two density
+error.
+
 **Carbon feed**:
 Carbon as elemental or organic carbon, gasified with steam (0.163 kg per kg of methalox,
 1.2x the energy), or as CO2 ice (0.60 kg). The grade is by mass of that feed. Below about

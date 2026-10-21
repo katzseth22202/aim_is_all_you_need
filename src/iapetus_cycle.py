@@ -96,6 +96,8 @@ DISPOSAL_DV = 2.89
 #: Earth departure from the eccentric orbit's perigee for the 3.0-year
 #: transfer (parent); from LEO the same excess costs 8.03 km/s.
 EARTH_DEPARTURE_DV = 4.90
+#: Per kg of an aerocapture aeroshell (assumption: the mining kit's $1000/kg).
+AEROSHELL_PRICE = 1000.0
 #: Arrival excess at Saturn: the parent's ~2.5 km/s capture implies 10.7.
 SATURN_ARRIVAL_EXCESS = 10.7
 CAPTURE_MARGIN = 0.02
@@ -764,6 +766,8 @@ class Outbound:
         ntp_engines: Hydrogen engines (count, per kg landed).
         ntp_mass: Their mass.
         earth_dv: The impulsive burn from the eccentric orbit it was sized for.
+        aeroshell: Aeroshell shed after an aerocapture at Saturn
+            (:mod:`src.saturn_aerocapture`), zero for a capture burn.
     """
 
     from_leo: bool
@@ -777,6 +781,7 @@ class Outbound:
     ntp_engines: float
     ntp_mass: float
     earth_dv: float = EARTH_DEPARTURE_DV
+    aeroshell: float = 0.0
 
     @property
     def ratio(self) -> float:
@@ -785,6 +790,7 @@ class Outbound:
             1.0
             + self.methalox
             + self.methalox_dry
+            + self.aeroshell
             + self.earth_propellant
             + self.earth_dry
             + self.ntp_mass
@@ -805,11 +811,15 @@ def outbound_at(
     loss: Optional[float] = None,
     saturn_dv: Optional[float] = None,
     earth_dv: float = EARTH_DEPARTURE_DV,
+    aeroshell: float = 0.0,
 ) -> Outbound:
     """The outbound stack per kilogram landed, at one Earth departure loss.
 
     Saturn side: one methalox stage flies the capture (with its 2%), the
     periapsis raise, the match and the landing, and lands with the kit.
+    With ``aeroshell`` (a share of entry mass) the capture is flown through
+    Saturn's atmosphere instead: ``saturn_dv`` is then only the burns after
+    the pass, and the aeroshell rides out on top of the stage.
     Earth side: a hydrogen NTP stage with engines enough to hold ``loss``
     (:func:`earth_departure_acceleration`), or a methalox stage.
     """
@@ -817,7 +827,8 @@ def outbound_at(
         d = dogleg_dvs()
         saturn_dv = d["capture"] + d["raise"] + d["match"] + d["land"]
     methalox, dry = _stage_on(1.0, saturn_dv, book.methalox_isp, book.methalox_dry)
-    stack = 1.0 + methalox + dry
+    stack = (1.0 + methalox + dry) / (1.0 - aeroshell)
+    shell = stack - (1.0 + methalox + dry)
     dv = earth_departure_dv(from_leo, earth_dv)
     if book.earth_stage == "methalox":
         loss = book.methalox_loss if loss is None else loss
@@ -836,6 +847,7 @@ def outbound_at(
                 0.0,
                 0.0,
                 earth_dv,
+                shell,
             )
         # Recurring: the bags push the ship to the eccentric orbit, then one
         # methalox burn at perigee.
@@ -854,6 +866,7 @@ def outbound_at(
             0.0,
             0.0,
             earth_dv,
+            shell,
         )
     if book.earth_stage != "hydrogen NTP":
         raise ValueError(f"unknown Earth stage {book.earth_stage!r}")
@@ -879,6 +892,7 @@ def outbound_at(
         ntp_engines=engines_per_kg * m0,
         ntp_mass=engines_per_kg * m0 * book.ntp_engine,
         earth_dv=earth_dv,
+        aeroshell=shell,
     )
 
 
@@ -891,6 +905,7 @@ def outbound(
     hardware: float = 500.0,
     saturn_dv: Optional[float] = None,
     earth_dv: float = EARTH_DEPARTURE_DV,
+    aeroshell: float = 0.0,
 ) -> Outbound:
     """The outbound stack, its Earth departure loss chosen on price.
 
@@ -900,17 +915,20 @@ def outbound(
     cost there); with ``per_kg`` None the parent's 5% is kept.
     """
     if book.earth_stage != "hydrogen NTP" or per_kg is None:
-        return outbound_at(from_leo, book, saturn_dv=saturn_dv, earth_dv=earth_dv)
+        return outbound_at(
+            from_leo, book, saturn_dv=saturn_dv, earth_dv=earth_dv, aeroshell=aeroshell
+        )
     best: Optional[Tuple[float, Outbound]] = None
     for loss in book.losses:
         try:
-            o = outbound_at(from_leo, book, loss, saturn_dv, earth_dv)
+            o = outbound_at(from_leo, book, loss, saturn_dv, earth_dv, aeroshell)
         except ValueError:
             continue
         dollars = (
             engine * o.ntp_engines
             + hydrogen * o.earth_propellant
             + hardware * o.earth_dry
+            + AEROSHELL_PRICE * o.aeroshell
             + per_kg * o.ratio
         )
         if best is None or dollars < best[0]:
@@ -1088,6 +1106,8 @@ class CyclePrices:
         gun: Per gun, one a plate, flown as the plate is (assumption).
         bullet: Ice bullet (kg).
         dear_seed: Price a chemical seed at the seed ship's dear end.
+        aeroshell: Per kg of aeroshell shed after an aerocapture (assumption:
+            thermal protection, structure and backshell at the kit's price).
     """
 
     lob: float = 25.0
@@ -1109,6 +1129,7 @@ class CyclePrices:
     dear_seed: bool = False
     gun: float = 5.0e6
     bullet: float = 0.1
+    aeroshell: float = AEROSHELL_PRICE
 
     @property
     def lofted(self) -> float:
@@ -1243,6 +1264,7 @@ class Cycle:
             * (o.earth_dry + o.methalox_dry)
             * s.earth_kg,
             "methalox": p.methalox * o.methalox * s.earth_kg,
+            "aeroshell": p.aeroshell * o.aeroshell * s.earth_kg,
         }
         if self.ledger.electronics is None:
             count = s.puffsat / BAG_MASS / p.bags_per_package
@@ -1291,6 +1313,7 @@ def build_cycle(
     book: OutboundBook = OUTBOUND_BOOK,
     loss: Optional[float] = None,
     real_planes: bool = False,
+    aero: Optional[Tuple[float, float]] = None,
 ) -> Cycle:
     """Assemble a cycle; ``k`` defaults to the column's lowest tabled ratio.
 
@@ -1305,6 +1328,10 @@ def build_cycle(
     ``real_planes`` takes the Saturn-side outbound and the return's Saturn
     excess from :mod:`src.saturn_moon_legs`' medians over 2035-2048 (the
     coplanar 10.4 km/s shifted by the same amount at other closing speeds).
+
+    ``aero`` is ``(Saturn-side delta-v after the pass, aeroshell share)``:
+    every recurring ship aerocaptures at Saturn (:mod:`src.saturn_aerocapture`);
+    the seed keeps the capture burn.
     """
     excess = (
         RETURN_EXCESS
@@ -1339,9 +1366,12 @@ def build_cycle(
         saturn_dv,
         earth_dv,
     )
+    shell = 0.0
+    if aero is not None:
+        saturn_dv, shell = aero
     draft = Cycle(
         stage=stage,
-        out=outbound_at(False, book, loss, saturn_dv, earth_dv),
+        out=outbound_at(False, book, loss, saturn_dv, earth_dv, shell),
         out_leo=out_leo,
         law=law,
         k=law.k_range[0] if k is None else k,
@@ -1353,7 +1383,9 @@ def build_cycle(
     best: Optional[Tuple[float, Cycle]] = None
     for trial in book.losses:
         try:
-            c = replace(draft, out=outbound_at(False, book, trial, saturn_dv, earth_dv))
+            c = replace(
+                draft, out=outbound_at(False, book, trial, saturn_dv, earth_dv, shell)
+            )
         except ValueError:
             continue
         if c.growth() <= 1.0:
@@ -1430,6 +1462,7 @@ def _seed_lines(
         lines["stage hardware"] = (
             cycle.prices.stage_hardware * o.methalox_dry * s.earth_kg * engines
         )
+        lines["aeroshell"] = cycle.prices.aeroshell * o.aeroshell * s.earth_kg * engines
         lines["seed ship"] = (
             seed_ship_price(cycle.prices.dear_seed, o.earth_dv)
             * o.ratio
@@ -1451,6 +1484,7 @@ def _seed_lines(
         * s.earth_kg
         * engines
     )
+    lines["aeroshell"] = cycle.prices.aeroshell * o.aeroshell * s.earth_kg * engines
     return lines
 
 

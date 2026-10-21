@@ -124,6 +124,12 @@ class Site:
         leg_years: The Saturn-side leg each way.
         ice_fraction: Ice by mass in mined material.
         anchoring: Note on what holds the kit down (unpriced).
+        aeroshell: Aeroshell per kg of entry mass when recurring ships
+            aerocapture (``outbound_dv`` is then the burns after the pass).
+        seed_outbound_dv: The seed's Saturn-side outbound when it differs
+            (it keeps the capture burn), else ``outbound_dv``.
+        arrival_years: The outbound Saturn-side leg when it differs from the
+            return's ``leg_years``.
     """
 
     name: str
@@ -133,10 +139,18 @@ class Site:
     leg_years: float
     ice_fraction: float
     anchoring: str
+    aeroshell: float = 0.0
+    seed_outbound_dv: Optional[float] = None
+    arrival_years: Optional[float] = None
+
+    @property
+    def arrival_leg(self) -> float:
+        """The outbound Saturn-side leg (years)."""
+        return self.leg_years if self.arrival_years is None else self.arrival_years
 
     def round_years(self, stay: float = STAY_YEARS) -> float:
         """Out, leg, stay, leg, home."""
-        return OUT_YEARS + 2.0 * self.leg_years + stay + RETURN_YEARS
+        return OUT_YEARS + self.arrival_leg + self.leg_years + stay + RETURN_YEARS
 
 
 def _coplanar_sites() -> Tuple[Site, Site]:
@@ -517,6 +531,7 @@ class PlantCycle:
             * earth,
             "stage hardware": p.stage_hardware * (o.earth_dry + o.methalox_dry) * earth,
             "methalox (outbound)": p.methalox * o.methalox * earth,
+            "aeroshell": p.aeroshell * o.aeroshell * earth,
         }
         if self.ledger.electronics is None:
             lines["electronics"] = (
@@ -540,7 +555,8 @@ class PlantCycle:
             "plant": self.plant.price_per_mw * mw,
             "plant outbound": p.engine * o.ntp_engines * earth
             + self.earth_propellant_price(o) * o.earth_propellant * earth
-            + p.stage_hardware * (o.earth_dry + o.methalox_dry) * earth,
+            + p.stage_hardware * (o.earth_dry + o.methalox_dry) * earth
+            + p.aeroshell * o.aeroshell * earth,
         }
 
     def growth(self) -> float:
@@ -572,7 +588,10 @@ def build_plant_cycle(
     seed's LEO departure flies the book's Earth stage (methalox: two stages).
     """
     prices_book = (prices.engine, prices.hydrogen, prices.stage_hardware)
-    out_leo = outbound(True, book, prices.leo, *prices_book, saturn_dv=site.outbound_dv)
+    seed_dv = (
+        site.outbound_dv if site.seed_outbound_dv is None else site.seed_outbound_dv
+    )
+    out_leo = outbound(True, book, prices.leo, *prices_book, saturn_dv=seed_dv)
     losses: Sequence[Optional[float]] = (
         book.losses if book.earth_stage == "hydrogen NTP" else (None,)
     )
@@ -580,7 +599,9 @@ def build_plant_cycle(
     best: Optional[Tuple[float, PlantCycle]] = None
     for loss in losses:
         try:
-            out = outbound_at(False, book, loss, site.outbound_dv)
+            out = outbound_at(
+                False, book, loss, site.outbound_dv, aeroshell=site.aeroshell
+            )
         except ValueError:
             continue
         for wait in waits:
@@ -614,7 +635,7 @@ SEED_WAITS = (0.0, 1.0, 2.0, 4.0, 9.5)
 
 def plant_gates(site: Site, stay: float, wait: float = 0.0) -> Tuple[Gate, ...]:
     """S51's gates with the plant's in place of the water stage's (90%, placeholder)."""
-    capture = OUT_YEARS + site.leg_years
+    capture = OUT_YEARS + site.arrival_leg
     departure = capture + stay + wait
     round_years = site.round_years(stay) + wait
     return (
@@ -671,7 +692,7 @@ def _overlap(born: int, stage: int, c: PlantCycle) -> float:
     late, and every later shipment and departure moves with it.
     """
     T = c.round_years
-    arrive = OUT_YEARS + c.site.leg_years
+    arrive = OUT_YEARS + c.site.arrival_leg
     lands = born * T + arrive + (c.seed_wait if born > 0 else 0.0)
     retires = lands + c.plant.life_rounds * T
     departs = stage * T + arrive + c.stay + c.seed_wait
