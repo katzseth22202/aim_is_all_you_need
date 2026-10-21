@@ -1989,6 +1989,34 @@ The bowl's mean acceleration. It sets the burn's length and so its stream-in-vie
 0.8-2.0 km/s at 0.25 g on 6.3-9.4 km/s burns. It is the plate loop's strongest lever.
 _Avoid_: the fixed-direction loss for a head-on stream; it ignores the routes Earth hides.
 
+### Iapetus water cycle
+
+The parent's nuclear scenario (S51): a single-use water NTR stage at Saturn returns 25 kg
+water bags from Iapetus to an **Earth bag plate**, where they push the next round's ship
+to the **eccentric orbit** (the 10-day orbit, 10.916 km/s at 200 km). It sits beside the
+paper's PuffSat-propelled Iapetus scenario and does not replace it
+(`src/iapetus_cycle.py`, `make iapetus-cycle`, ADR `0078-the-iapetus-water-cycle-priced`).
+One round takes 9.5 years, including the Saturn **dog-leg** (1.17 years each way via a
+20 million km apoapsis). The ledger is kept per 560 MW engine, because every mass scales
+with thrust. On Ledger A it costs $90/kg steady and $309 on the gated rNPV ($131 on the
+4% loan), against the solar dive's $143 / $86 at the same orbit. _Avoid_: "hydrogen stage"
+alone. The cycle has two nuclear engines: the outbound **hydrogen NTP** (Earth departure,
+900 s) and the **water NTR** (Saturn return, 200 s). Neither is chemical.
+
+**Ship-carried plug mass**:
+The ice the Earth ship lofts for the bags to strike, `k` kg per kg of incoming bag,
+charged at the lob price. Low `k` wins on the whole ledger (4 on the compact plug).
+_Avoid_: "Earth charge".
+
+**Tankage** (water stage):
+The walls holding the water, a share of every kilogram burned. It is the cycle's
+knife-edge: 0.2% carries 1,251 t of PuffSat per engine, 1% only 826 t, and growth falls
+from 5.95 to 2.6. _Avoid_: quoting 826 t without its 1% label.
+
+**Ledger A / Ledger B**:
+The author's two whole ledgers. A is reuse at scale: $200K a plate flight, $1/kg
+electronics, a 12 h burn. B is no reuse: $5M plates and a 6 h burn.
+
 ## Relationships
 
 - A **scenario catalog** holds many **PuffSat scenarios**.

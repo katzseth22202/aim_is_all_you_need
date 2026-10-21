@@ -91,6 +91,7 @@ make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ARGS="--gaps" sweeps the gap)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
+make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit (ADR 0078; ~20 s)
 make plate-disposal  # the left push plate's disposal nudge flown with the Moon, by lunar phase (ADR 0076; ~10 min); ARGS="--drift": the ship's own parking orbit, ~10 s (ADR 0077)
 
 # Conda environment
@@ -349,6 +350,16 @@ solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.rol
                                 140 km/s, carbon fabric above; the bowl's charge at 2.5 F
                                 below the 122 deg rim line; the gap carried by the push
                                 route (ADR 0072-0077)
+
+iapetus_cycle.py             ← conic_kernel + learning_curve + solar_dive_growth (gates,
+                                attrition): the parent's S51. A single-use water NTR at
+                                Saturn returns bags from Iapetus to the Earth bag plate;
+                                finite burns on point masses (Saturn periapsis, Iapetus
+                                spiral, Earth departure), the outbound hydrogen NTP's
+                                engine count chosen on the break-even, Result 20's push
+                                through the overtake law, ledgers A/B, gated rNPV and the
+                                4% loan to the eccentric orbit, whole rounds and pipelined
+                                (ADR 0078)
 
 plate_disposal.py            ← leaf (numpy + scipy): the left push plate's apoapsis
                                 nudge flown with the Moon and the Sun's tide, swept

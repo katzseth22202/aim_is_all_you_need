@@ -791,6 +791,28 @@ def l1_transfer_speed() -> float:
     return math.sqrt(2.0 * _MU_EARTH * (1.0 / r_p - 1.0 / (r_p + L1_DISTANCE)))
 
 
+#: The eccentric orbit's period: the parent's 10.916 km/s at 200 km is a
+#: 10.0-day orbit, the same as the parking orbit (S51, ADR 0078).
+ECCENTRIC_DAYS = 10.0
+
+
+def delivery_speed(target: str) -> Tuple[float, float]:
+    """The delivery push's speed at 400 km and the cargo kept after insertion.
+
+    Args:
+        target: ``l1`` (the L1 transfer, then the halo insertion on methalox)
+            or ``eccentric`` (the 10-day orbit, nothing after the push).
+
+    Returns:
+        ``(speed km/s, cargo fraction kept)``.
+    """
+    if target == "l1":
+        return l1_transfer_speed(), math.exp(-HALO_INSERTION / VE_METHALOX)
+    if target == "eccentric":
+        return periapsis_speed(ECCENTRIC_DAYS, PUSH_ALTITUDE), 1.0
+    raise ValueError(f"unknown delivery target {target!r}")
+
+
 @dataclass(frozen=True)
 class CarrierBurn:
     """The disks' perijove burn onto the mirror-image retrograde dive.
@@ -1104,6 +1126,10 @@ class Design:
         shield_exponent: The shade's mass scales as sunlight at perihelion to
             this power, from Parker's 9.86 solar radii (0 headline: unsolved
             below Parker, the parent's E-items).
+        delivery_target: Where the harvest push leaves its cargo: ``l1``
+            (headline: the L1 transfer, then a halo insertion) or
+            ``eccentric``, the 10-day orbit at the push's 400 km perigee, the
+            orbit the Iapetus cycle prices to (S51, ADR 0078).
     """
 
     k_push: float = 10.0
@@ -1130,6 +1156,7 @@ class Design:
     carrier_perijove: float = CARRIER_PERIJOVE
     bonds: str = "carbon atomic"
     shield_exponent: float = 0.0
+    delivery_target: str = "l1"
 
 
 @dataclass(frozen=True)
@@ -1874,7 +1901,7 @@ class DeliveryUnit:
 
     Attributes:
         sheets: Sheets the push spends.
-        cargo: Mass left at L1.
+        cargo: Mass left at the target (L1 by default).
         charge: Polyethylene burned.
         plate: The delivery plate on the spring law.
         bag: Its gas spring's bags.
@@ -1917,9 +1944,9 @@ def delivery_unit(
     w = wave_speed(stream_excess, PUSH_ALTITUDE)
     k = design.k_delivery
     ve = laws.push_ve(k, w, sheet_material(w, design.kapton_limit), design.push_law)
-    mr = math.exp(l1_transfer_speed() / ve)
+    speed, halo = delivery_speed(design.delivery_target)
+    mr = math.exp(speed / ve)
     pushed = LAUNCH_UNIT / mr
-    halo = math.exp(-HALO_INSERTION / VE_METHALOX)
     charge = LAUNCH_UNIT - pushed
     g, rate = (
         (PUSH_G, PUSH_RATE)
@@ -1938,7 +1965,7 @@ def delivery_unit(
         stroke=spring.stroke,
         peak_g=spring.peak_g,
         start_g=spring.peak_g * pushed / LAUNCH_UNIT,
-        climb=lob_climb_factor(push_climb(g, l1_transfer_speed())),
+        climb=lob_climb_factor(push_climb(g, speed)),
     )
 
 
@@ -2766,6 +2793,47 @@ def child_report() -> str:
     )
 
 
+def eccentric_report(days: float = PARKING_DAYS) -> str:
+    """The headlines re-optimised to deliver to the eccentric orbit, against L1.
+
+    The Iapetus cycle (S51, ADR 0078) prices mass to the 10-day eccentric
+    orbit; the solar dive's headline is at L1.  Each closure is re-optimised
+    with ``Design.delivery_target = "eccentric"`` from its recorded start.
+    """
+    rows = []
+    for key in HEADLINES:
+        departure = departure_route(*key)
+        push = push_route(*key, days)
+        assert departure is not None and push is not None
+        for target in ("l1", "eccentric"):
+            start = replace(HEADLINE_STARTS[key], delivery_target=target)
+            found = optimize_design(departure, push, start)
+            v = found.valuation
+            rows.append(
+                [
+                    f"{key[0]:g} R_sun, X {key[1]:g}",
+                    target,
+                    f"{v.growth:.2f}",
+                    f"{found.design.k_delivery:.2f}",
+                    f"{v.steady_cost:.1f}",
+                    _money(v.break_even),
+                    _money(found.dear_break_even),
+                ]
+            )
+    return tabulate(
+        rows,
+        headers=[
+            "closure",
+            "delivery",
+            "growth",
+            "k_L",
+            "steady $/kg",
+            "cheap seed",
+            "dear seed",
+        ],
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the solar-dive re-evaluation (D1-D7).
 
@@ -2790,8 +2858,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="sweep the gap over 3 / 5 / 10 days at the headlines (~5 min)",
     )
+    parser.add_argument(
+        "--eccentric",
+        action="store_true",
+        help="only the headlines delivering to the 10-day eccentric orbit, against L1 (S51, ~2 min)",
+    )
     args = parser.parse_args(argv)
     days = args.parking_days
+    if args.eccentric:
+        print(eccentric_report(days))
+        return
     print(
         "Inputs the simulation copied, checked (G1, G4, G10)\n" + corrections_report()
     )
