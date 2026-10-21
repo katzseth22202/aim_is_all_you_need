@@ -2809,6 +2809,14 @@ def eccentric_report(days: float = PARKING_DAYS) -> str:
             start = replace(HEADLINE_STARTS[key], delivery_target=target)
             found = optimize_design(departure, push, start)
             v = found.valuation
+            # The Iapetus ledgers also print a 4% loan; the same design, dear seed.
+            loan = value_design(
+                departure,
+                push,
+                found.design,
+                seed_price=seed_price(departure, True),
+                rate=0.04,
+            )
             rows.append(
                 [
                     f"{key[0]:g} R_sun, X {key[1]:g}",
@@ -2818,6 +2826,7 @@ def eccentric_report(days: float = PARKING_DAYS) -> str:
                     f"{v.steady_cost:.1f}",
                     _money(v.break_even),
                     _money(found.dear_break_even),
+                    _money(loan.break_even),
                 ]
             )
     return tabulate(
@@ -2830,6 +2839,7 @@ def eccentric_report(days: float = PARKING_DAYS) -> str:
             "steady $/kg",
             "cheap seed",
             "dear seed",
+            "dear seed, 4% loan",
         ],
     )
 

@@ -16,6 +16,52 @@ All figures are $/kg to the eccentric orbit (the 10-day orbit, 10.916 km/s at 20
 They use Ledger A, the compact plug at k = 4, the gated rNPV at 10% and the 4% loan in
 whole rounds, unless noted.
 
+## Headline for the paper (Seth, 2026-10-21; ADR 0081)
+
+**On the paper's headline metric, the gated rNPV at 10%, the solar dive beats every Saturn
+scenario computed, and it needs no nuclear approvals.** Every Saturn cycle needs a fission
+reactor: a water NTR, an outbound hydrogen NTP, or a methalox plant at Saturn. That holds
+even with no nuclear near Earth, where the reactors are launched cold as cargo. The solar
+dive is PuffSats and methalox only.
+
+All $/kg are to the eccentric orbit (the 10-day orbit), Ledger A, k = 4, rNPV 10% / 4%
+loan, dear seed for the solar dive.
+
+| scenario | best Saturn cell | rNPV 10% | 4% loan | steady |
+|---|---|---|---|---|
+| ADR 0078-0079 base, H2 NTP | methalox at Phoebe (coplanar) / water NTR at Iapetus | $308 / $309 | $129 / $131 | $81 / $90 |
+| base, no nuclear near Earth | methalox at Phoebe (coplanar) | $338 | $129 | $84 |
+| reactor and plates reused, H2 NTP | methalox at Phoebe, 0.1 yr stay | $206 | $99 | $72 |
+| reactor and plates reused, no nuclear near Earth | the same | $235 | $103 | $73 |
+| aerocapture, H2 NTP | water NTR at Iapetus (coplanar; real planes $198) | **$172** | $100 | $79 |
+| aerocapture, no nuclear near Earth | water NTR at Iapetus (coplanar; real planes $299) | $223 | $108 | $80 |
+| **solar dive, 9.86 R_sun / 4 R_sun** | | **$143 / $86** | $105 / $76 | $93 / $72 |
+
+- **The 10% rNPV is a clean sweep.** The best Saturn cell ($172) is 1.2x the shallow dive
+  and 2.0x the deep one. The Saturn rows on the real planes are all worse than their
+  coplanar rows.
+- **Say this precisely in the paper.** The deep dive (4 R_sun) wins on every metric. The
+  shallow dive (9.86 R_sun) wins on the 10% rNPV, but on the 4% loan the best Saturn
+  cells tie or edge it ($99-100 against $105), and on steady cost they undercut it ($72-80
+  against $93). Those cells are coplanar or a reuse idealisation. On the real planes,
+  aerocapture gives $106 against $105.
+- **Why Saturn loses: distance, not hardware.** A 7.7-9.5 year round puts first cargo near
+  year 24-30, and every kilogram still rides the same lofting floor (lob plus plug, about
+  $49 of the steady cost). Reuse and aerocapture each cut the Saturn cost a lot and leave
+  both untouched.
+- **Not computed:** the head-on-impactor Saturn cycle Seth has queued (overtake PuffSats to
+  the eccentric orbit, head-on PuffSats onto the Saturn arc about 20 days later,
+  aerocapture for all but the seed). If it is run, the headline should be re-checked.
+  Bounds that zero every price but the lob are not scenarios: they reach $71-95 only by
+  making the single-use nuclear engines free.
+
+**Suggested paper text:** "We priced a Saturn water cycle (S51) in every variant we could
+construct: a nuclear water rocket or a kept reactor making methalox, at Iapetus or Phoebe,
+with or without nuclear propulsion near Earth, with the reactor and plates reused, and with
+aerocapture at Saturn. At a 10% gated rNPV, none beats the solar dive. The Saturn cycle's
+long round and the lofting floor dominate its cost, not its hardware. The solar dive
+also needs no fission reactor, and so no nuclear launch or operating approval."
+
 ## Decisions Seth made during the work (2026-10-21)
 
 - The headline is $/kg to the eccentric orbit, with L1 beside it. Whole rounds is the

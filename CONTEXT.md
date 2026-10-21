@@ -2011,6 +2011,14 @@ perigee. Reactors cross the magnetosphere cold, as cargo, and first start at Sat
 It is printed beside the **hydrogen NTP** scenario in every table (ADR 0079). It costs
 the water NTR 1.7x on the rNPV.
 
+**Saturn verdict** (ADR 0081):
+On the gated rNPV at 10%, the solar dive beats every Saturn scenario priced (water NTR or
+kept reactor, Iapetus or Phoebe, with or without nuclear near Earth, reuse, aerocapture).
+It does so at both dive depths, and needs no fission reactor. The best Saturn cell is $172
+(aerocapture, water NTR, coplanar), against $143 / $86. On the 4% loan and on steady cost
+the best Saturn cells tie the shallow 9.86 R_sun dive, not the 4 R_sun one. _Avoid_: "the
+solar dive wins on every metric" without naming the depth.
+
 **Kept reactor plus methalox** (Saturn side):
 A plant (ceria, or electric with electrolysis) stays at the moon and makes methalox from
 ice and carbon for single-use chemical stages (`src/saturn_methalox.py`, ADR 0079). The
