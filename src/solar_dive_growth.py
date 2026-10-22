@@ -187,6 +187,11 @@ OCCULTATION_HALF_ANGLE = math.degrees(math.asin(6378.137 / (6378.137 + 600.0)))
 # (``Design.slow_delivery``).
 L1_DISTANCE = 1.5e6  # km
 HALO_INSERTION = 0.030  # km/s
+#: The apoapsis turn's stage when it is charged (the parent's S27): one
+#: Raptor 3 and tanks at the growth ledger's methalox tank fraction, dropped
+#: after the burn (growth_ledger.RAPTOR3_MASS, METHALOX_TANK_FRACTION).
+APOAPSIS_ENGINE = 1525.0  # kg
+APOAPSIS_TANK_FRACTION = 0.018  # kg of tank per kg of methalox
 CHILD_DELIVERY_G = 3.26
 CHILD_DELIVERY_RATE = 4.0  # Hz
 
@@ -1130,6 +1135,12 @@ class Design:
             (headline: the L1 transfer, then a halo insertion) or
             ``eccentric``, the 10-day orbit at the push's 400 km perigee, the
             orbit the Iapetus cycle prices to (S51, ADR 0078).
+        apoapsis_stage: Charge the apoapsis turn's engine and tanks
+            (:data:`APOAPSIS_ENGINE`, the parent's S27), dropped after the
+            burn; False (headline) charges its propellant alone.
+        deep_space_reserve: A methalox correction reserve on the departing
+            ship (km/s; the parent's S27 item 3 asks 0.03-0.05), burned before
+            Jupiter; 0 headline.
     """
 
     k_push: float = 10.0
@@ -1157,6 +1168,8 @@ class Design:
     bonds: str = "carbon atomic"
     shield_exponent: float = 0.0
     delivery_target: str = "l1"
+    apoapsis_stage: bool = False
+    deep_space_reserve: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1394,6 +1407,11 @@ def fly_earth(
     kept = pushed - push_plate - disposal
     stack = kept * math.exp(-methalox_dv / VE_METHALOX)
     lines["methalox"] = kept - stack
+    lines["apoapsis_engine"] = APOAPSIS_ENGINE if design.apoapsis_stage else 0.0
+    lines["apoapsis_tanks"] = (
+        APOAPSIS_TANK_FRACTION * lines["methalox"] if design.apoapsis_stage else 0.0
+    )
+    stack -= lines["apoapsis_engine"] + lines["apoapsis_tanks"]
     # 3. The departure on the bowl.  Its mean acceleration sets the burn's
     # length, and that finite burn, its thrust held in one direction (the
     # hole slides as the stream turns), loses Oberth at the periapsis.
@@ -1520,7 +1538,10 @@ def fly_unit(
         lambda burn, seconds: departure_loss(burn, seconds, days),
     )
     lines = dict(earth.lines)
-    departing = earth.departing
+    # The correction reserve is burned on the way to Jupiter, before the
+    # carrier separates; its tankage is not charged.
+    departing = earth.departing * math.exp(-design.deep_space_reserve / VE_METHALOX)
+    lines["deep_space_reserve"] = earth.departing - departing
     ve_push = lines["ve_push"]
     # 4. Jupiter: the carrier takes the disks onto the mirror dive.
     burn = carrier_burn(route, carrier_perijove(route, design.carrier_perijove))
@@ -1704,6 +1725,28 @@ class SolarDivePrices:
         package: The child's steering package curve, per package.
         packages_per_kg: Packages per kilogram of sheet: the child's two per
             60 kg PuffSat, read as a 5% guidance mass (scaled by the bracket).
+        push_plate_uses: Pushes each growth push plate flies before it is
+            scrapped (the parent's S53 item 2).  Only two springs leave a
+            push plate to reuse (``Design.shared_spring`` False); shared, it
+            is the bowl and departs.  Each use buys ``1 / uses`` of a plate on
+            the curve, so reuse also slows the learning.  The plate's
+            recovery (a re-entry from the 10-day orbit, ``plate_disposal``
+            already lowers its perigee to 100 km) is not charged.
+        delivery_plate_uses: The same for the L1 delivery plate and its bags;
+            its trip back from L1 is not charged.
+        raptor: Per apoapsis-stage engine, expended with its unit
+            (growth_cost.ESTIMATE's Raptor 3; charged only when
+            ``Design.apoapsis_stage``).
+        tanks: Per kilogram of expended tank (growth_cost.ESTIMATE).
+        operations: Ground handling and operations per lob, growth or
+            delivery (0 headline: unpriced; the best-case report quotes it
+            per $1M).
+        earth_charge: Per kilogram of the Earth-side charges (push,
+            departure and delivery) if they are not polyethylene: the
+            author's snow foam in a thin polyethylene skin (2026-10-22).  The
+            stage laws stay polyethylene's, so a price here is a bound until
+            the simulation flies the foam.  The Sun charge stays polyethylene
+            (snow would not survive the dive).  None: polyethylene.
     """
 
     lob: float = 25.0
@@ -1723,6 +1766,17 @@ class SolarDivePrices:
     lob_climb: float = 1.0648
     package: LearningCurve = LearningCurve(100.0, 10.0, 0.8, anchor=1.0e5)
     packages_per_kg: float = 2.0 / 60.0
+    push_plate_uses: float = 1.0
+    delivery_plate_uses: float = 1.0
+    raptor: float = 1.0e6
+    tanks: float = 40.0
+    operations: float = 0.0
+    earth_charge: Optional[float] = None
+
+    @property
+    def earth_charge_price(self) -> float:
+        """Per kilogram of push, departure and delivery charge."""
+        return self.polyethylene if self.earth_charge is None else self.earth_charge
 
     def sheet_price(self, stream: float, limit: float = KAPTON_LIMIT) -> float:
         """Per kilogram of sheet body flying in a ``stream`` km/s wave at 400 km."""
@@ -1734,6 +1788,20 @@ class SolarDivePrices:
 
 
 ESTIMATE = SolarDivePrices()
+#: The author's best long-term book (the parent's S53, 2026-10-22): Sun-wave
+#: hardware near $30/kg blended (graphite disks at $10/kg, the carrier as
+#: cheap structure, a small Parker-style shade and the avionics at $100/kg),
+#: and the growth push plate and the delivery plate each flown ten times.  The
+#: departure bowl and the Sun plate stay single-use.  The lob is the
+#: Estimate's; :func:`best_case_report` sweeps it.
+MATURE = SolarDivePrices(
+    disk=10.0,
+    carrier=30.0,
+    shield=100.0,
+    avionics=100.0,
+    push_plate_uses=10.0,
+    delivery_plate_uses=10.0,
+)
 
 
 @dataclass(frozen=True)
@@ -1832,6 +1900,10 @@ class Valuation:
         break_even: The L1 price that repays the seed and growth.
         seed_per_fleet_kg: Seed dollars per kilogram of sheets at the harvest.
         fleet_multiple: Sheets at the harvest per seed sheet.
+        steady_lofted: Kilograms lofted per kilogram at the target in the
+            steady state, by what they are (:func:`delivery_lofted`, plus
+            ``growth_lob``, the reinvested growth units' lobs); empty where
+            not tallied.
     """
 
     growth: float
@@ -1841,6 +1913,7 @@ class Valuation:
     break_even: Optional[float]
     seed_per_fleet_kg: float
     fleet_multiple: float
+    steady_lofted: Dict[str, float] = field(default_factory=dict)
 
 
 def _unit_dollars(
@@ -1863,10 +1936,11 @@ def _unit_dollars(
     count = m["sheets"] * prices.packages_per_kg * guidance / 0.05
     package = prices.package.batch_cost(packages[0], count)
     packages[0] += count
+    built = 1.0 / prices.push_plate_uses
     lines = {
         "lob": lob * m["lob_climb"] * LAUNCH_UNIT,
         "push_plate": (
-            earth_curve.batch_cost(plates["push"], 1.0) * m["push_plate"]
+            earth_curve.batch_cost(plates["push"], built) * m["push_plate"]
             if lob
             else 0.0
         ),
@@ -1874,10 +1948,18 @@ def _unit_dollars(
         "sun_plate": sun_curve.batch_cost(plates["sun"], 1.0)
         * (m["sun_plate"] + m["bore_collar"]),
         "film": prices.film * (m["film_earth"] + m["film_sun"]),
-        "methalox": prices.methalox * m["methalox"],
-        "polyethylene": prices.polyethylene
-        * (
-            m["sun_charge"] + (m["push_charge"] + m["departure_charge"] if lob else 0.0)
+        "methalox": prices.methalox
+        * (m["methalox"] + m.get("deep_space_reserve", 0.0)),
+        "apoapsis_stage": (
+            prices.raptor * (m["apoapsis_engine"] > 0.0)
+            + prices.tanks * m["apoapsis_tanks"]
+        ),
+        "operations": prices.operations if lob else 0.0,
+        "polyethylene": prices.polyethylene * m["sun_charge"]
+        + (
+            prices.earth_charge_price * (m["push_charge"] + m["departure_charge"])
+            if lob
+            else 0.0
         ),
         "mounts": prices.mounts
         * (m["sun_mounts"] + (m["earth_mounts"] if lob else 0.0)),
@@ -1886,10 +1968,11 @@ def _unit_dollars(
         + prices.storable * (m["carrier_propellant"] + m["plate_disposal"]),
         "shield": prices.shield * m["shield"],
         "avionics": prices.avionics * m["avionics"],
-        "sheets": sheet_body * m["sheets"] + package,
+        "sheets": sheet_body * m["sheets"],
+        "packages": package,
     }
     if lob and m["push_plate"] > 0.0:
-        plates["push"] += 1.0
+        plates["push"] += built
     plates["bowl"] += 1.0
     plates["sun"] += 1.0
     return lines
@@ -1969,6 +2052,50 @@ def delivery_unit(
     )
 
 
+def delivery_dollars(
+    delivery: DeliveryUnit,
+    deliveries: float,
+    prices: SolarDivePrices,
+    plates: Dict[str, float],
+    lob: float,
+) -> Dict[str, float]:
+    """Dollars ``deliveries`` L1 pushes cost, by line; advances the plate count.
+
+    The delivery plate shares the push plate's learning count, and each
+    delivery buys ``1 / delivery_plate_uses`` of one.
+    """
+    built = deliveries / prices.delivery_plate_uses
+    lines = {
+        "delivery_lob": lob * delivery.climb * LAUNCH_UNIT * deliveries,
+        "delivery_plate": prices.plate_curve(prices.earth_plate_share).batch_cost(
+            plates["push"], built
+        )
+        * (delivery.plate + delivery.bag),
+        "delivery_charge": prices.earth_charge_price * delivery.charge * deliveries,
+        "delivery_operations": prices.operations * deliveries,
+    }
+    plates["push"] += built
+    return lines
+
+
+def delivery_lofted(delivery: DeliveryUnit) -> Dict[str, float]:
+    """What one delivery unit's 1500 t lob is, per kilogram it leaves at the target.
+
+    The halo methalox is what the insertion burns (the cargo is the pushed
+    stack less its plate and bags, times the insertion's mass ratio).
+    """
+    kept = delivery.cargo
+    return {
+        "delivery_charge": delivery.charge / kept,
+        "delivery_plate_and_bags": (delivery.plate + delivery.bag) / kept,
+        "halo_methalox": (
+            LAUNCH_UNIT - delivery.charge - delivery.plate - delivery.bag - kept
+        )
+        / kept,
+        "cargo": 1.0,
+    }
+
+
 def value_design(
     departure: DiveRoute,
     push: DiveRoute,
@@ -2044,6 +2171,7 @@ def value_design(
     units, cumulative, fleet = 1.0, 0.0, 0.0
     tally: Dict[str, float] = {}
     tally_cargo = 0.0
+    tally_units = 0.0
     n = 1
     while True:
         years = n * cycle_years - gap_years
@@ -2071,18 +2199,14 @@ def value_design(
             ).items():
                 cost[key] = cost.get(key, 0.0) + share * value * new_units
         deliveries = surplus / delivery.sheets
-        cost["delivery_lob"] = lob * delivery.climb * LAUNCH_UNIT * deliveries
-        cost["delivery_plate"] = prices.plate_curve(
-            prices.earth_plate_share
-        ).batch_cost(plates["push"], deliveries) * (delivery.plate + delivery.bag)
-        cost["delivery_charge"] = prices.polyethylene * delivery.charge * deliveries
-        plates["push"] += deliveries
+        cost.update(delivery_dollars(delivery, deliveries, prices, plates, lob))
         cargo = deliveries * delivery.cargo
         factor = schedule.factor(years)
         pv_cost += factor * sum(cost.values())
         pv_cargo += factor * cargo
         if n == harvest + 6:
             tally, tally_cargo = cost, cargo
+            tally_units = new_units
         units = new_units
         n += 1
     lines = (
@@ -2098,6 +2222,14 @@ def value_design(
         break_even=pv_cost / pv_cargo if pv_cargo > 0 else None,
         seed_per_fleet_kg=seed_outlay / fleet if fleet > 0 else math.inf,
         fleet_multiple=fleet / per_unit if per_unit > 0 else 0.0,
+        steady_lofted=(
+            {
+                **delivery_lofted(delivery),
+                "growth_lob": tally_units * LAUNCH_UNIT / tally_cargo,
+            }
+            if tally_cargo
+            else {}
+        ),
     )
 
 
@@ -2844,6 +2976,404 @@ def eccentric_report(days: float = PARKING_DAYS) -> str:
     )
 
 
+# --------------------------------------------------------------------------
+# The best long-term price (the parent's S53, make solar-dive-best)
+# --------------------------------------------------------------------------
+
+#: Lob prices swept on the best-case book, $/kg lofted on ADR 0037's lob.
+BEST_CASE_LOBS = (25.0, 10.0, 5.0, 2.0, 1.0, 0.5)
+#: Use counts on the growth push plate and the delivery plate.
+PLATE_USES = (1.0, 10.0, 100.0)
+#: Every closure the best case is run at: the headlines and ADR 0073's.
+BEST_CASE_CLOSURES = HEADLINES + COMPARISONS
+#: Methalox at the booster, $/kg: the book's $0.20, and a sourced range.
+#: Liquid methane at EIA's 2026 Henry Hub forecast ($3.67/MMBtu, July 2026
+#: STEO; 19.0 kg per MMBtu at methane's 55.5 MJ/kg) plus ~$2.5/MMBtu of
+#: liquefaction is ~$0.32/kg; bulk oxygen is $0.065-0.25/kg (Expert Market
+#: Research's and IMARC's US Q4 2025 indices).  At Raptor's 3.6 O/F that is
+#: $0.12-0.27/kg of methalox.
+METHALOX_SOURCED = (0.12, 0.27)
+#: The lob's rise rates the floor is quoted at (km/s): ADR 0037's priced lob,
+#: the child's, and the 1 g push's own (:func:`push_climb`).
+FLOOR_RISES = (0.75, 1.1, 2.43)
+#: The best-case knobs held below the lob sweep's rows for the cascade.
+#: A steering package at $1 flat.  The Estimate's curve ($100 at 1e5, 80%,
+#: $10 floor) is still near $15 a package at the steady count, so its floor
+#: hardly binds; the slope sets the line.
+STEERING_PACKAGE_BEST = 1.0
+POLYETHYLENE_BEST = 1.2  # $/kg, bulk HDPE resin (the parent's last row)
+S27_RESERVE = 0.04  # km/s, the middle of the parent's 30-50 m/s
+#: The author's snow foam (2026-10-22): snow in a polyethylene skin of
+#: ``SNOW_SKIN`` of the charge's mass, water at municipal ~$2/m^3.  A price
+#: bound only: the stage laws are polyethylene's.
+SNOW_SKIN = 0.05
+WATER_PRICE = 0.002  # $/kg
+SNOW_FOAM = SNOW_SKIN * POLYETHYLENE_BEST + (1.0 - SNOW_SKIN) * WATER_PRICE
+
+
+def lob_propellant(rise: float) -> float:
+    """Booster propellant loaded per kilogram lofted to 400 km climbing at ``rise`` km/s.
+
+    The braked lob of :mod:`src.lob_rise` (ADR 0037's 5000 t vehicle, 250 t
+    dry): the whole load less the payload, brake and landing included.  Above
+    ~2.4 km/s the brake is burned on the way down (:func:`lob_climb_factor`).
+    """
+    from src.lob_rise import DRY_MASS, LIFTOFF_MASS, braked_lob
+
+    lob = braked_lob(rise * 1e3, entry_burn=rise > 2.0)
+    return (LIFTOFF_MASS - DRY_MASS - lob.lofted) / lob.lofted
+
+
+def lob_floor(methalox: float = ESTIMATE.methalox) -> float:
+    """The lob's propellant alone, $/kg on :attr:`SolarDivePrices.lob`'s footing."""
+    return methalox * lob_propellant(FLOOR_RISES[0])
+
+
+def steady_optimum(
+    key: Tuple[float, float],
+    prices: SolarDivePrices,
+    start: Optional[Design] = None,
+    days: float = PARKING_DAYS,
+) -> Optimum:
+    """The steady-$/kg optimum at one closure, over one and two springs.
+
+    Args:
+        key: ``(solar radii, return excess)``.
+        prices: The book.
+        start: The knobs and the stated assumptions to start from; the
+            closure's :data:`HEADLINE_STARTS` by default.
+        days: The growth-to-departure gap.
+
+    Returns:
+        The cheaper of the shared assembly and the two springs.
+    """
+    departure = departure_route(*key)
+    push = push_route(*key, days)
+    assert departure is not None and push is not None
+    base = start or HEADLINE_STARTS.get(key, Design())
+    found = [
+        optimize_design(
+            departure, push, replace(base, shared_spring=shared), "steady", prices
+        )
+        for shared in (True, False)
+    ]
+    return min(found, key=lambda o: o.valuation.steady_cost)
+
+
+def _knobs(d: Design) -> str:
+    return (
+        f"{d.k_push:.1f} / {d.k_earth:.1f} / {d.k_sun:.1f} / {d.arc_hours:.2f} h"
+        f" / {d.k_delivery:.1f}, {'shared' if d.shared_spring else 'two springs'}"
+    )
+
+
+def _closure(key: Tuple[float, float]) -> str:
+    return f"{key[0]:g} R_sun, X {key[1]:g}"
+
+
+def _method_rows(cheap: SolarDivePrices) -> List[List[str]]:
+    """S53 item 1: the parent's post-hoc reuse against the ledger's."""
+    rows = []
+    for key in HEADLINES:
+        departure = departure_route(*key)
+        push = push_route(*key)
+        assert departure is not None and push is not None
+        held = HEADLINE_STARTS[key]
+        once = replace(cheap, push_plate_uses=1.0, delivery_plate_uses=1.0)
+        lines = value_design(departure, push, held, once).steady_lines
+        divided = sum(lines.values()) - 0.9 * (
+            lines["push_plate"] + lines["delivery_plate"]
+        )
+        in_ledger = value_design(departure, push, held, cheap)
+        best = steady_optimum(key, cheap)
+        rows.append(
+            [
+                _closure(key),
+                f"{value_design(departure, push, held).steady_cost:.2f}",
+                f"{lines['push_plate']:.3f}",
+                f"{divided:.2f}",
+                f"{in_ledger.steady_cost:.2f}",
+                f"{best.valuation.steady_cost:.2f}",
+                _knobs(best.design),
+            ]
+        )
+    return rows
+
+
+#: Depths the best case scans (the deep end, where the headlines sit).
+BEST_CASE_RADII = (4.0, 6.0, 8.0, 9.86)
+
+
+def _best_case_point(point: Tuple[float, float, float, float]) -> List[str]:
+    """One scan row: the steady optimum on the mature book at ``lob``."""
+    radii, excess, lob, days = point
+    try:
+        departure = departure_route(radii, excess)
+        push = push_route(radii, excess, days) if departure else None
+        if departure is None or push is None:
+            return [f"{radii:g}", f"{excess:g}", "no closure"]
+        best = steady_optimum((radii, excess), replace(MATURE, lob=lob), None, days)
+    except ValueError as error:
+        return [f"{radii:g}", f"{excess:g}", str(error)]
+    v = best.valuation
+    if v.growth <= 1.0 or not v.steady_lines:
+        return [f"{radii:g}", f"{excess:g}", f"does not grow ({v.growth:.2f})"]
+    lofted = sum(v.steady_lofted.values())
+    return [
+        f"{radii:g}",
+        f"{excess:g}",
+        f"{v.steady_cost:.2f}",
+        f"{lofted:.2f}",
+        f"{v.growth:.2f}",
+        _knobs(best.design),
+    ]
+
+
+def best_case_scan(
+    lob: float = 1.0, workers: int = 4, days: float = PARKING_DAYS
+) -> str:
+    """Every deep closure's steady optimum on the mature book (S53 item 2)."""
+    from multiprocessing import Pool
+
+    points = [(r, x, lob, days) for r in BEST_CASE_RADII for x in RETURN_EXCESSES]
+    with Pool(workers) as pool:
+        rows = pool.map(_best_case_point, points)
+    return tabulate(
+        rows,
+        headers=[
+            "R_sun",
+            "return excess",
+            f"steady $/kg (${lob:g} lob)",
+            "kg lofted per kg",
+            "growth",
+            "k_P / k_E / k_S / arc / k_L",
+        ],
+    )
+
+
+def best_case_report(days: float = PARKING_DAYS) -> str:
+    """The solar dive's best long-term steady $/kg at L1 (the parent's S53).
+
+    Every optimum here is on the **steady** objective, over both spring
+    layouts.  The seed and the gated schedule do not enter the steady cost.
+    """
+    out = []
+    out.append(
+        "S53 item 1: the parent's method (HEADLINE_STARTS held, plate lines / 10"
+        " afterwards) against reuse in the ledger, on the mature book at a $25 lob\n"
+        + tabulate(
+            _method_rows(MATURE),
+            headers=[
+                "closure",
+                "paper book",
+                "push_plate line",
+                "post-hoc /10",
+                "in ledger, held",
+                "in ledger, re-optimized",
+                "knobs k_P / k_E / k_S / arc / k_L",
+            ],
+        )
+    )
+    # Item 2: use counts and the optimum's knobs.
+    rows = []
+    for key in BEST_CASE_CLOSURES:
+        row = [_closure(key)]
+        for uses in PLATE_USES:
+            book = replace(MATURE, push_plate_uses=uses, delivery_plate_uses=uses)
+            row.append(f"{steady_optimum(key, book).valuation.steady_cost:.2f}")
+        rows.append(row)
+    out.append(
+        "S53 item 2: steady $/kg at L1 on the mature book ($25 lob) by plate uses,"
+        " re-optimized\n"
+        + tabulate(rows, headers=["closure"] + [f"{u:g} uses" for u in PLATE_USES])
+    )
+    rows = []
+    for key in BEST_CASE_CLOSURES:
+        for label, book in (
+            ("Estimate", ESTIMATE),
+            ("mature, $25 lob", MATURE),
+            ("mature, $1 lob", replace(MATURE, lob=1.0)),
+        ):
+            best = steady_optimum(key, book)
+            rows.append(
+                [
+                    _closure(key),
+                    label,
+                    f"{best.valuation.steady_cost:.2f}",
+                    _knobs(best.design),
+                ]
+            )
+    out.append(
+        "Where the steady optimum sits (bounds: k_P, k_L 5-40, k_E 5-60,"
+        " k_S 20-100, arc 0.5-12 h)\n"
+        + tabulate(
+            rows,
+            headers=["closure", "book", "steady", "k_P / k_E / k_S / arc / k_L"],
+        )
+    )
+    # Item 3: the lob sweep and its floor.
+    floor = lob_floor()
+    floor_rows = [
+        [
+            f"{rise:g} km/s",
+            f"{lob_propellant(rise):.2f}",
+            f"{ESTIMATE.methalox * lob_propellant(rise):.2f}",
+            f"{METHALOX_SOURCED[0] * lob_propellant(rise):.2f}"
+            f"-{METHALOX_SOURCED[1] * lob_propellant(rise):.2f}",
+        ]
+        for rise in FLOOR_RISES
+    ]
+    out.append(
+        "The lob's propellant floor (lob_rise's braked lob, 5000 t vehicle)\n"
+        + tabulate(
+            floor_rows,
+            headers=[
+                "climb at 400 km",
+                "kg propellant per kg lofted",
+                f"$ at ${ESTIMATE.methalox:.2f}/kg",
+                f"$ at ${METHALOX_SOURCED[0]:.2f}-{METHALOX_SOURCED[1]:.2f}/kg",
+            ],
+        )
+        + f"\n  On the book's lob axis (ADR 0037's 0.75 km/s lob) the floor is"
+        f" ${floor:.2f}/kg; the ledger's climb factors carry it to the 1.1 and"
+        f" 2.43 km/s lobs."
+    )
+    rows = []
+    for lob in BEST_CASE_LOBS + (floor,):
+        book = replace(MATURE, lob=lob)
+        row = [f"{lob:.2f}" + (" (floor)" if lob == floor else "")]
+        for key in BEST_CASE_CLOSURES:
+            plain = steady_optimum(key, book).valuation.steady_cost
+            start = replace(
+                HEADLINE_STARTS[key],
+                apoapsis_stage=True,
+                deep_space_reserve=S27_RESERVE,
+            )
+            charged = steady_optimum(key, book, start).valuation.steady_cost
+            row.append(f"{plain:.2f} / {charged:.2f}")
+        rows.append(row)
+    out.append(
+        "S53 item 3: the lob sweep on the mature book, re-optimized at each step"
+        " (as asked / with the S27 stage and a 40 m/s reserve charged)\n"
+        + tabulate(
+            rows,
+            headers=["lob $/kg"] + [_closure(k) for k in BEST_CASE_CLOSURES],
+        )
+    )
+    # Item 4: what is lofted per kg sold, at a $1 lob.
+    rows = []
+    for key in BEST_CASE_CLOSURES:
+        best = steady_optimum(key, replace(MATURE, lob=1.0))
+        lofted = best.valuation.steady_lofted
+        departure = departure_route(*key)
+        assert departure is not None
+        delivery = delivery_unit(departure.earth_excess, best.design, StageLaws.load())
+        push = push_route(*key, days)
+        assert push is not None
+        growth_climb = fly_unit(departure, push, departure, best.design).lines[
+            "lob_climb"
+        ]
+        own = sum(v for k, v in lofted.items() if k != "growth_lob")
+        rows.append(
+            [
+                _closure(key),
+                f"{lofted['delivery_charge']:.3f}",
+                f"{lofted['delivery_plate_and_bags']:.3f}",
+                f"{lofted['halo_methalox']:.3f}",
+                f"{lofted['growth_lob']:.3f}",
+                f"{own + lofted['growth_lob']:.3f}",
+                f"{own * delivery.climb + lofted['growth_lob'] * growth_climb:.3f}",
+                f"{delivery.cargo / 1e3:.0f}",
+            ]
+        )
+    out.append(
+        "S53 item 4: kg lofted per kg at L1 (cargo is 1), mature book at a $1 lob;"
+        " booster-equivalent kg carry each lob's climb factor over the 1.1 km/s lob\n"
+        + tabulate(
+            rows,
+            headers=[
+                "closure",
+                "delivery charge",
+                "plate + bags",
+                "halo methalox",
+                "growth lob",
+                "lofted",
+                "booster-equivalent",
+                "cargo t per delivery",
+            ],
+        )
+    )
+    # Item 5: every line at $0.10 or more at a $5 lob, the S27 items charged.
+    for key in HEADLINES:
+        start = replace(
+            HEADLINE_STARTS[key], apoapsis_stage=True, deep_space_reserve=S27_RESERVE
+        )
+        best = steady_optimum(key, replace(MATURE, lob=5.0), start)
+        lines = best.valuation.steady_lines
+        lofted = best.valuation.steady_lofted
+        growth_lobs = lofted["growth_lob"] / LAUNCH_UNIT
+        delivery_lobs = (sum(lofted.values()) - lofted["growth_lob"]) / LAUNCH_UNIT
+        per_lob = 1.0e6 * (growth_lobs + delivery_lobs)
+        listed = ", ".join(
+            f"{k} {v:.2f}"
+            for k, v in sorted(lines.items(), key=lambda kv: -kv[1])
+            if v >= 0.10
+        )
+        small = ", ".join(
+            f"{k} {v:.3f}"
+            for k, v in sorted(lines.items(), key=lambda kv: -kv[1])
+            if 0.0 < v < 0.10
+        )
+        out.append(
+            f"S53 item 5 at {_closure(key)}, $5 lob, S27 charged"
+            f" (steady ${best.valuation.steady_cost:.2f}):\n"
+            f"  >= $0.10: {listed}\n  below: {small}\n"
+            f"  operations: ${per_lob:.3f}/kg per $1M a lob"
+            f" ({growth_lobs * 1e6:.2f} growth and {delivery_lobs * 1e6:.2f}"
+            f" delivery lobs per 1000 t at L1)"
+        )
+    # Item 6: the cascade to $3.
+    floor_book = replace(MATURE, lob=floor)
+    cheap_resin = replace(floor_book, polyethylene=POLYETHYLENE_BEST)
+    hundred = replace(cheap_resin, push_plate_uses=100.0, delivery_plate_uses=100.0)
+    packages = replace(hundred, package=LearningCurve.flat(STEERING_PACKAGE_BEST))
+    snow = replace(packages, earth_charge=SNOW_FOAM)
+    steps = (
+        ("mature book, $5 lob, S27 charged", replace(MATURE, lob=5.0), True),
+        ("lob at its propellant floor", floor_book, True),
+        (f"polyethylene ${POLYETHYLENE_BEST:g}/kg", cheap_resin, True),
+        ("plates flown 100 times", hundred, True),
+        (f"steering package ${STEERING_PACKAGE_BEST:g} flat", packages, True),
+        (
+            f"Earth charges as snow foam, ${SNOW_FOAM:.3f}/kg (polyethylene's law)",
+            snow,
+            True,
+        ),
+        (
+            "the child's 4 Hz, 3.26 g delivery from a 1.1 km/s lob (S37 unsolved)",
+            snow,
+            False,
+        ),
+    )
+    rows = []
+    for label, book, slow in steps:
+        row = [label]
+        for key in BEST_CASE_CLOSURES:
+            start = replace(
+                HEADLINE_STARTS[key],
+                apoapsis_stage=True,
+                deep_space_reserve=S27_RESERVE,
+                slow_delivery=slow,
+            )
+            row.append(f"{steady_optimum(key, book, start).valuation.steady_cost:.2f}")
+        rows.append(row)
+    out.append(
+        "S53 item 6: what must fall, cumulative, re-optimized at each step\n"
+        + tabulate(rows, headers=["step"] + [_closure(k) for k in BEST_CASE_CLOSURES])
+    )
+    return "\n\n".join(out)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the solar-dive re-evaluation (D1-D7).
 
@@ -2873,8 +3403,21 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="only the headlines delivering to the 10-day eccentric orbit, against L1 (S51, ~2 min)",
     )
+    parser.add_argument(
+        "--best-case",
+        action="store_true",
+        help="only the best long-term steady price: the mature book, reuse, the lob sweep (S53, ~10 min)",
+    )
     args = parser.parse_args(argv)
     days = args.parking_days
+    if args.best_case:
+        print(best_case_report(days))
+        if args.sweep:
+            print(
+                "\nThe deep closures' steady optima on the mature book at a $1 lob\n"
+                + best_case_scan(days=days)
+            )
+        return
     if args.eccentric:
         print(eccentric_report(days))
         return

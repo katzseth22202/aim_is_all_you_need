@@ -70,6 +70,7 @@ from src.solar_dive_growth import (
     _money,
     _unit_dollars,
     balance,
+    delivery_dollars,
     delivery_unit,
     fly_earth,
     miss_fraction,
@@ -484,12 +485,7 @@ def value_chain(
                 cost[key] = cost.get(key, 0.0) + part * value * new
         delivery = delivery_unit(windows[now].stream_excess, design, laws)
         deliveries = surplus / delivery.sheets
-        cost["delivery_lob"] = lob * delivery.climb * 1500.0e3 * deliveries
-        cost["delivery_plate"] = prices.plate_curve(
-            prices.earth_plate_share
-        ).batch_cost(plates["push"], deliveries) * (delivery.plate + delivery.bag)
-        cost["delivery_charge"] = prices.polyethylene * delivery.charge * deliveries
-        plates["push"] += deliveries
+        cost.update(delivery_dollars(delivery, deliveries, prices, plates, lob))
         cargo = deliveries * delivery.cargo
         factor = schedule.factor(when)
         pv_cost += factor * sum(cost.values())

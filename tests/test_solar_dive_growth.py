@@ -383,3 +383,115 @@ def test_one_shared_spring_leaves_nothing_in_the_parking_orbit() -> None:
     assert 3.0 < shared["bowl_stroke"] < 8.0  # the departure needs less stroke
     assert two["push_plate"] > 63.4e3 and two["bowl_stroke"] == pytest.approx(8.0)
     assert two["bowl_floor"] < two["bowl"] < shared["bowl"]
+
+
+def test_a_reused_delivery_plate_buys_a_tenth_of_a_plate_a_flight() -> None:
+    """S53 item 2: each use buys 1 / uses of a plate, on the shared learning count."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import ESTIMATE, DeliveryUnit, delivery_dollars
+
+    delivery = DeliveryUnit(
+        sheets=8.0e4,
+        cargo=1.0e6,
+        charge=4.0e5,
+        plate=6.3e4,
+        bag=5.0e3,
+        pulse=7.4e6,
+        stroke=8.0,
+        peak_g=1.7,
+        start_g=1.2,
+        climb=1.49,
+    )
+    once, plates = {"push": 50.0}, {"push": 50.0}
+    single = delivery_dollars(delivery, 3.0, ESTIMATE, once, 25.0)
+    reused = replace(ESTIMATE, delivery_plate_uses=10.0)
+    tenth = delivery_dollars(delivery, 3.0, reused, plates, 25.0)
+    assert once["push"] == 53.0 and plates["push"] == pytest.approx(50.3)
+    assert tenth["delivery_lob"] == single["delivery_lob"]
+    assert tenth["delivery_charge"] == single["delivery_charge"]
+    # Fewer plates built means less learning, so a use costs a little over a tenth.
+    assert 0.1 < tenth["delivery_plate"] / single["delivery_plate"] < 0.11
+
+
+@pytest.mark.slow
+def test_the_booster_burns_about_half_a_dollar_of_methalox_per_kg_lofted() -> None:
+    """S53 item 3: 2.46 kg of propellant a kg on ADR 0037's lob, 4.3 at 2.43 km/s."""
+    from src.solar_dive_growth import lob_floor, lob_propellant
+
+    assert lob_propellant(0.75) == pytest.approx(2.46, abs=0.01)
+    assert lob_propellant(1.1) == pytest.approx(2.69, abs=0.01)
+    assert lob_propellant(2.43) == pytest.approx(4.31, abs=0.01)
+    assert lob_floor() == pytest.approx(0.49, abs=0.01)
+
+
+@pytest.mark.slow
+def test_the_mature_book_in_the_ledger_matches_the_parents_scratch() -> None:
+    """S53 item 1: the paper's book reproduces; reuse in the ledger is the parent's /10."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import ESTIMATE, HEADLINE_STARTS, MATURE
+
+    expected = {(9.86, 60.0): (94.15, 85.29), (4.0, 90.0): (73.52, 67.81)}
+    for key, (paper, scratch) in expected.items():
+        departure = departure_route(*key)
+        push = push_route(*key)
+        assert departure is not None and push is not None
+        held = HEADLINE_STARTS[key]
+        estimate = value_design(departure, push, held, ESTIMATE)
+        assert estimate.steady_cost == pytest.approx(paper, abs=0.01)
+        mature = value_design(departure, push, held, MATURE)
+        assert mature.steady_cost == pytest.approx(scratch, abs=0.1)
+        # Shared, the push plate is the bowl: there is no push plate to reuse.
+        assert mature.steady_lines["push_plate"] == 0.0
+        once = replace(MATURE, push_plate_uses=1.0, delivery_plate_uses=1.0)
+        two = replace(held, shared_spring=False)
+        flown_once = value_design(departure, push, two, once).steady_lines
+        flown_ten = value_design(departure, push, two, MATURE).steady_lines
+        # Over a tenth: both plates share one learning count, now ten times slower.
+        assert 0.1 < flown_ten["push_plate"] / flown_once["push_plate"] < 0.15
+        # A delivery lofts 1500 t for its cargo; the growth lobs come on top.
+        lofted = mature.steady_lofted
+        own = sum(v for k, v in lofted.items() if k != "growth_lob")
+        assert lofted["cargo"] == 1.0 and 1.3 < own < 1.5
+        assert 0.2 < lofted["growth_lob"] < 0.6
+
+
+@pytest.mark.slow
+def test_the_apoapsis_stage_and_reserve_are_dropped_mass() -> None:
+    """S27, off by default: one Raptor and its tanks, and a reserve before Jupiter."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import APOAPSIS_ENGINE, fly_unit
+
+    departure = departure_route(4.0, 90.0)
+    push = push_route(4.0, 90.0)
+    assert departure is not None and push is not None
+    plain = fly_unit(departure, push, departure, Design())
+    staged = fly_unit(
+        departure,
+        push,
+        departure,
+        replace(Design(), apoapsis_stage=True, deep_space_reserve=0.04),
+    )
+    assert plain.lines["apoapsis_engine"] == plain.lines["deep_space_reserve"] == 0.0
+    assert staged.lines["apoapsis_engine"] == APOAPSIS_ENGINE
+    assert staged.lines["apoapsis_tanks"] == pytest.approx(
+        0.018 * staged.lines["methalox"]
+    )
+    assert staged.lines["deep_space_reserve"] == pytest.approx(
+        plain.lines["departing"] * 0.0111, rel=0.05
+    )
+    assert 0.98 < staged.returned / plain.returned < 0.99
+
+
+def test_snow_foam_prices_the_earth_charges_and_not_the_suns() -> None:
+    """The author's snow foam replaces polyethylene only where snow survives."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import ESTIMATE, SNOW_FOAM
+
+    assert ESTIMATE.earth_charge_price == ESTIMATE.polyethylene
+    foam = replace(ESTIMATE, earth_charge=SNOW_FOAM)
+    assert foam.earth_charge_price == pytest.approx(0.0619, abs=1e-4)
+    assert foam.polyethylene == ESTIMATE.polyethylene

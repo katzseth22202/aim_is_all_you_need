@@ -1963,6 +1963,25 @@ ship on the symmetry line, just past perihelion. It exceeds the **dive-placement
 because the ship leaves Jupiter falling inward (15.07 against 14.78 km/s at 9.86 solar
 radii). _Avoid_: pricing the split at the floor.
 
+**Mature book**:
+The author's best long-term price book for the charge pusher (`MATURE`, ADR 0082): Sun-wave
+hardware near $30/kg blended (disks $10, carrier $30, shade and avionics $100), the growth
+push plate and the delivery plate each flown 10 times (**plate use count**), the bowl and
+Sun plate single-use. Its steady price is quoted against the **lob propellant floor**,
+re-optimized on the steady objective. Reuse needs two springs: shared, the push plate is
+the bowl and departs.
+_Avoid_: dividing plate lines after the fact; the headline's push-plate line is zero.
+
+**Lob propellant floor**:
+The booster's methalox alone per kilogram lofted: 2.46 kg ($0.49 at $0.20/kg) on ADR
+0037's 0.75 km/s lob, 4.31 kg on the 1 g push's 2.43 km/s climb (`lob_floor`, ADR 0082).
+No hardware, refurbishment or operations. $3/kg at L1 sits at it, not above it.
+
+**Snow foam**:
+The author's Earth-side charge: snow in a thin polyethylene skin, a light foam
+(`SolarDivePrices.earth_charge`, $0.062/kg). Priced on polyethylene's stage law, so a bound
+until the simulation flies it. The Sun charge stays polyethylene.
+
 **Gated rNPV**:
 The valuation this cycle and its comparison rows are quoted on: time at 10% a year,
 and each flow weighted by the odds of every milestone (**gate**) before it, as drug

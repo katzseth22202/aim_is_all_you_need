@@ -90,6 +90,7 @@ make slush-hydrogen # the hydrogen charge as 50% slush: smaller tank, no hold bo
 make wall-cushion  # a chamber wall tile on a gas cushion, the Orion trick (ADR 0054)
 make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-10-04)
 make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ARGS="--gaps" sweeps the gap)
+make solar-dive-best # the solar dive's best long-term steady price: mature book, plate reuse, lob sweep to its propellant floor, snow foam, what must fall to $3 (ADR 0082; ~8 min, ARGS="--sweep" adds the deep-closure scan)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
 make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit; hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min)
 make saturn-legs    # Saturn-side legs on the real arcs and the moons' real planes (ADR 0079; ~20 s)
