@@ -92,6 +92,7 @@ make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-1
 make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ARGS="--gaps" sweeps the gap)
 make solar-dive-best # the solar dive's best long-term steady price: mature book, plate reuse, lob sweep to its propellant floor, snow foam, what must fall to $3 (ADR 0082; ~8 min, ARGS="--sweep" adds the deep-closure scan)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
+make ceres-dive     # the solar dive grown at Ceres: water push, depot rings, steady $/kg at L1, the $1 line (ADR 0083; ~5 min)
 make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit; hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min)
 make saturn-legs    # Saturn-side legs on the real arcs and the moons' real planes (ADR 0079; ~20 s)
 make saturn-methalox # a reactor plus methalox stages at Iapetus and Phoebe against the water NTR, both scenarios (ADR 0079; ~3 min)
@@ -354,6 +355,16 @@ solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.rol
                                 140 km/s, carbon fabric above; the bowl's charge at 2.5 F
                                 below the 122 deg rim line; the gap carried by the push
                                 route (ADR 0072-0077)
+
+ceres_dive.py                ← solar_dive_growth (stage laws, gas spring, fly_earth,
+                                delivery_unit, MATURE) + conic_kernel: the parent's S56.
+                                Ceres ISRU removes the growth lob: Ceres pellets push
+                                water charges in the departure bowl (the hole surface's
+                                bonds-returned rows, water's frozen toll), ships dive
+                                prograde and disks retrograde to the Sun, streams return
+                                to a ring of 3 co-orbital depots (one depot cannot close)
+                                or to Earth as Ceres-film sheets for the L1 delivery;
+                                c_C, c_E and freight solved as one linear system (ADR 0083)
 
 iapetus_cycle.py             ← conic_kernel + learning_curve + solar_dive_growth (gates,
                                 attrition): the parent's S51. A single-use water NTR at

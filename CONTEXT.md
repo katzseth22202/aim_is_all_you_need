@@ -2008,6 +2008,27 @@ The bowl's mean acceleration. It sets the burn's length and so its stream-in-vie
 0.8-2.0 km/s at 0.25 g on 6.3-9.4 km/s burns. It is the plate loop's strongest lever.
 _Avoid_: the fixed-direction loss for a head-on stream; it ignores the routes Earth hides.
 
+### Ceres-grown solar dive
+
+The parent's ISRU variant of the charge pusher (S56; `src/ceres_dive.py`, `make ceres-dive`,
+ADR `0083-the-solar-dive-grown-at-ceres`). Ceres supplies water ($0.02/kg), graphite, structure
+and the Earth sheets' film; only plates, bowls and avionics fly from Earth. There is no
+**growth lob**: what is lofted is the payload, its Earth charges and the Earth plates. The steady
+price is $1.46/kg at L1 at 4 R_sun and $1.70 at 9.86 R_sun, against the solar dive's $2.81 best
+case. The **delivery lob** alone is $1.01 of it, so $1 needs the child's 4 Hz delivery (S37).
+
+**Ceres stream**:
+Compact ice pellets returning from the Sun to Ceres' orbit at the Ceres-bound excess `X_C`. They
+push the next ships' water charges in the departure bowl, about 80 deg off the thrust axis. Its
+price `c_C` and the Earth stream's `c_E` are fixed points of the loop, solved together with the
+freight as one linear system. _Avoid_: calling it a wave; it is continuous.
+
+**Depot ring**:
+`N` co-orbital water depots spaced `360/N` on Ceres' orbit, each one's stream landing `j` depots
+on (`miss = -360 j / N`). A single depot does not close: its ships' stream lands `miss` further on,
+and its ships send the stream on again. Three depots close within 0.2 km/s of the direct dive.
+Depots off Ceres are fed by a water steam tug. _Avoid_: "the depot" as one place.
+
 ### Iapetus water cycle
 
 The parent's nuclear scenario (S51): a single-use water NTR stage at Saturn returns 25 kg
