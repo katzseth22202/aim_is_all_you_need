@@ -93,6 +93,7 @@ make solar-dive     # the solar-dive charge-pusher cycle charged and priced, aga
 make solar-dive-best # the solar dive's best long-term steady price: mature book, plate reuse, lob sweep to its propellant floor, snow foam, what must fall to $3 (ADR 0082; ~8 min, ARGS="--sweep" adds the deep-closure scan)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
 make ceres-dive     # the solar dive grown at Ceres: water push, depot rings, steady $/kg at L1, the $1 line (ADR 0083; ~5 min)
+make ceres-energy   # the Ceres loop as Straw Way electricity: ice impactors, Ceres plates, $/MWh_e over arrival speed (ADR 0084; ~20 min)
 make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit; hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min)
 make saturn-legs    # Saturn-side legs on the real arcs and the moons' real planes (ADR 0079; ~20 s)
 make saturn-methalox # a reactor plus methalox stages at Iapetus and Phoebe against the water NTR, both scenarios (ADR 0079; ~3 min)
@@ -365,6 +366,15 @@ ceres_dive.py                ← solar_dive_growth (stage laws, gas spring, fly_
                                 to a ring of 3 co-orbital depots (one depot cannot close)
                                 or to Earth as Ceres-film sheets for the L1 delivery;
                                 c_C, c_E and freight solved as one linear system (ADR 0083)
+      ↓
+ceres_energy.py              ← ceres_dive + cruise_thermal: the parent's S58. The Ceres
+                                loop priced as Straw Way electricity: Earth-bound ships
+                                carry guided ice impactors (one 1.5 kg package each,
+                                freighted), S57's Ceres-made plates ($10, 1% imported,
+                                CeresPrices.ceres_plate), the freight re-solved with a
+                                film-sheet share for its Earth leg; c_C, c_I, c_S and the
+                                freight as one linear system, $/MWh_e at 50% MHD over
+                                arrival speed; capped pellets kept shaded to 0.3 AU (ADR 0084)
 
 iapetus_cycle.py             ← conic_kernel + learning_curve + solar_dive_growth (gates,
                                 attrition): the parent's S51. A single-use water NTR at

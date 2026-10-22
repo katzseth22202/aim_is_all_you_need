@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best ceres-dive plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best ceres-dive ceres-energy plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -70,6 +70,9 @@ solar-dive-best:  ## The solar dive's best long-term steady $/kg at L1: the matu
 
 ceres-dive:  ## The solar dive grown at Ceres: water push law, depot rings, the steady ledger with both stream prices as fixed points, the $1 line (ADR 0083; ~15 min)
 	python -m src.ceres_dive $(ARGS)
+
+ceres-energy:  ## The Ceres loop as Straw Way electricity: ice impactors, Ceres plates, freight re-solved, $/MWh_e over arrival speed (ADR 0084; ~20 min)
+	python -m src.ceres_energy $(ARGS)
 
 iapetus-cycle:  ## The Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, against the solar dive, hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min, ARGS="--scenario chemical")
 	python -m src.iapetus_cycle $(ARGS)

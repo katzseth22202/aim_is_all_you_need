@@ -912,6 +912,15 @@ class CeresPrices:
         ceres_plate_uses: Pushes per recovered Ceres plate.
         misses: Stream that misses its bowl (the solar dive's floor).
         tug_years: The depot tug's lead time.
+        ceres_plate: S57's Ceres-made plates, disk plates, Sun bowl, bore
+            collar and their bags, per kilogram; None keeps S56's Earth-made
+            ones at ``earth_hardware`` plus freight (ADR 0083's headline).
+        plate_import: The Earth-made share of a Ceres-made plate, priced at
+            ``earth_hardware`` plus freight (S57).
+        package_mass: Each steering package's Earth-made mass (kg), which
+            flies to Ceres as freight; 0 leaves it massless (ADR 0083).
+        earth_packages_per_kg: Packages per kilogram of the Earth-bound
+            stream; None is ``packages_per_kg`` (the sheets' rate).
     """
 
     water: float = 0.02
@@ -933,11 +942,28 @@ class CeresPrices:
     ceres_plate_uses: float = 100.0
     misses: float = MISS_FLOOR
     tug_years: float = 20.0
+    ceres_plate: Optional[float] = None
+    plate_import: float = 0.01
+    package_mass: float = 0.0
+    earth_packages_per_kg: Optional[float] = None
 
     @property
     def lob_price(self) -> float:
         """Per kilogram lofted on the book's lob axis."""
         return lob_floor() if self.lob is None else self.lob
+
+    def plate_price(self, hardware: float) -> float:
+        """Per kilogram of plate, bowl, collar or bag, given Earth hardware landed at Ceres."""
+        if self.ceres_plate is None:
+            return hardware
+        return (
+            1.0 - self.plate_import
+        ) * self.ceres_plate + self.plate_import * hardware
+
+    @property
+    def plate_earth_share(self) -> float:
+        """The share of a plate's mass that is Earth-made and pays freight."""
+        return 1.0 if self.ceres_plate is None else self.plate_import
 
 
 CERES_BOOK = CeresPrices()
@@ -976,6 +1002,7 @@ class CeresDesign:
         child_delivery: Fly the L1 delivery at the child's 4 Hz and 3.26 g
             from its 1.1 km/s lob (the solar dive's ``slow_delivery`` False;
             the sheets' survival there is the simulation's open S37).
+        avionics: Avionics and attitude control, of the ship at the Sun.
         spring: Every plate's gas-spring knobs (the solar dive's).
     """
 
@@ -1000,6 +1027,7 @@ class CeresDesign:
     k_cap: float = K_CAP
     stream_guidance: bool = True
     child_delivery: bool = False
+    avionics: float = AVIONICS_FRACTION
     spring: Design = field(default_factory=Design)
 
 
@@ -1162,6 +1190,7 @@ def fly_ship(
     bound: str,
     freight: float,
     reference_ve: float,
+    cargo_price: Optional[float] = None,
 ) -> ShipLedger:
     """One ship of ``design.ship_mass`` from its depot to its stream.
 
@@ -1173,6 +1202,8 @@ def fly_ship(
         freight: Earth to Ceres, per kilogram of Earth hardware.
         reference_ve: The Earth push's exhaust speed, against which the Sun
             plate's film is scaled (the solar dive's convention).
+        cargo_price: Per kilogram of released stream; None is water for the
+            Ceres stream and Ceres film for the Earth sheets.
 
     Returns:
         The ledger.
@@ -1234,7 +1265,7 @@ def fly_ship(
         "sun_plate": sun_plate + sun_bags,
         "bore_collar": BORE_COLLAR,
         "shield": SHIELD_FRACTION * ship,
-        "avionics": AVIONICS_FRACTION * ship,
+        "avionics": design.avionics * ship,
         "sun_mounts": CHARGE_MOUNT_FRACTION * sun_charge,
         "reserve": design.reserve * ship_mass,
     }
@@ -1258,9 +1289,13 @@ def fly_ship(
     film_ceres += FILM_PER_IMPULSE * d_water * disk_push.ve * 1e3
     # --- The plates after the push: recovered, expended, or the Sun bowl.
     hardware_price = prices.earth_hardware + freight
+    plate_price = prices.plate_price(hardware_price)
     plate_dollars = 0.0
     back_water = back_stream = 0.0
-    earth_kg = dead["sun_plate"] + dead["bore_collar"] + dead["avionics"]
+    earth_kg = (
+        prices.plate_earth_share * (dead["sun_plate"] + dead["bore_collar"])
+        + dead["avionics"]
+    )
     if design.plate == "recover":
         back = _return_push(route, flown.ship, design)
         d_back = _return_push(disk_route_, flown.ship, design)
@@ -1276,8 +1311,8 @@ def fly_ship(
         spent = carried + d_carried
     else:
         raise ValueError(f"unknown plate policy {design.plate!r}")
-    plate_dollars = spent * hardware_price
-    earth_kg += spent
+    plate_dollars = spent * plate_price
+    earth_kg += prices.plate_earth_share * spent
     charges = water + d_water + back_water
     mounts = CHARGE_MOUNT_FRACTION * charges
     ceres_made = (
@@ -1293,11 +1328,14 @@ def fly_ship(
         + dead["reserve"]
     )
     tug = tug_per_kg(flown.ring, prices)
-    packages = (
-        cargo * prices.packages_per_kg * prices.package
-        if (bound == "earth" or design.stream_guidance)
-        else 0.0
-    )
+    per_kg = prices.packages_per_kg
+    if bound == "earth" and prices.earth_packages_per_kg is not None:
+        per_kg = prices.earth_packages_per_kg
+    count = cargo * per_kg if (bound == "earth" or design.stream_guidance) else 0.0
+    package_kg = count * prices.package_mass
+    earth_kg += package_kg
+    if cargo_price is None:
+        cargo_price = prices.water if bound == "ceres" else prices.film
     dollars = {
         "water_charges": prices.water * charges,
         "charge_mounts": prices.structure * mounts,
@@ -1306,14 +1344,14 @@ def fly_ship(
         "disks": prices.disk * disks,
         "carrier": prices.structure * carrier,
         "sun_charges": prices.polyethylene * sun_charge,
-        "sun_bowl": hardware_price * (dead["sun_plate"] + dead["bore_collar"]),
+        "sun_bowl": plate_price * (dead["sun_plate"] + dead["bore_collar"]),
         "shield": prices.structure * dead["shield"],
         "avionics": hardware_price * dead["avionics"],
         "sun_mounts": prices.structure * dead["sun_mounts"],
         "sun_film": prices.film * film_per * ship,
         "reserve": prices.structure * dead["reserve"],
-        "cargo": (prices.water if bound == "ceres" else prices.film) * cargo,
-        "packages": packages,
+        "cargo": cargo_price * (cargo - package_kg),
+        "packages": count * prices.package + package_kg * freight,
         "depot_tug": prices.water * tug * ceres_made,
     }
     m.update(dead)
@@ -1463,7 +1501,7 @@ def freight_leg(design: CeresDesign, prices: CeresPrices) -> Freight:
     plate, bags, collar = _ceres_plate(1.0e6, capture, design)
     capture_dollars = (
         prices.water + CHARGE_MOUNT_FRACTION * prices.structure
-    ) * capture.water + prices.earth_hardware * (
+    ) * capture.water + prices.plate_price(prices.earth_hardware) * (
         plate + bags + collar
     ) / 1.0e6 / prices.ceres_plate_uses
     return Freight(

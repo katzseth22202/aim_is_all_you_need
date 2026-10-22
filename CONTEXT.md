@@ -2029,6 +2029,21 @@ on (`miss = -360 j / N`). A single depot does not close: its ships' stream lands
 and its ships send the stream on again. Three depots close within 0.2 km/s of the direct dive.
 Depots off Ceres are fed by a water steam tug. _Avoid_: "the depot" as one place.
 
+**Straw Way energy** (S58; `src/ceres_energy.py`, `make ceres-energy`, ADR
+`0084-straw-way-energy-from-the-ceres-loop`):
+The Ceres loop priced as electricity, not launch. Its Earth-bound ships carry guided ice
+**impactors** (10 kg, one 1.5 kg steering package each) down the Straw Way, a vacuum tube to
+an MHD converter at 50%. No L1 delivery, so no delivery lob. Plates and Sun bowls are Ceres-made
+(S57's $10/kg, 1% imported). A small **freight-sheet share** of the Earth-bound ships still
+flies film sheets on ADR 0083's Earth stream, to push the Earth hardware's freight leg. Priced
+in **$/MWh_e** per caught kilogram; the straw, the plant and the Ceres industry are not charged.
+_Avoid_: quoting the parent's $0.22/MWh raw; it left the Sun's propellant, bowl and avionics out.
+
+**Capped pellet**:
+An ice pellet or impactor with its own sunward multilayer cap, held by its package, after the
+ship lets it go beyond 0.3 AU. Bare ice released anywhere inside 1 AU does not survive: at
+0.8 AU half of a 10 kg sphere sublimates before Earth. Applies to the Ceres stream as well.
+
 ### Iapetus water cycle
 
 The parent's nuclear scenario (S51): a single-use water NTR stage at Saturn returns 25 kg
