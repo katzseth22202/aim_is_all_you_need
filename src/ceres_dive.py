@@ -65,6 +65,7 @@ from src.solar_dive_growth import (
     EarthLeg,
     StageLaws,
     _plate_for,
+    arc_on_floor,
     delivery_unit,
     fly_earth,
     gas_spring,
@@ -1234,6 +1235,10 @@ def fly_ship(
     final = ship / mr_sun
     pulses = SUN_PULSE_RATE * design.arc_hours * _HOUR
     pulse_disk = disks / pulses
+    # One disk a pulse, each spending its cold gas before it strikes (the
+    # solar dive's ``Design.disk_gas``, ADR 0085): pushed from Ceres with the
+    # disks and turned by their carrier, never struck.
+    gas = design.spring.disk_gas * pulses
     sun_spring = gas_spring(
         pulse_disk * design.k_sun * ve_sun * 1e3 * SUN_PULSE_RATE,
         SUN_PULSE_RATE,
@@ -1277,13 +1282,13 @@ def fly_ship(
     film_ceres = FILM_PER_IMPULSE * water * push.ve * 1e3
     # --- The disks: their own stack and plate, onto the mirror dive.
     disk_push = _push(disk_route_, flown.ship, design, design.k_disk)
-    carrier = CARRIER_DRY_FRACTION * disks
+    carrier = CARRIER_DRY_FRACTION * (disks + gas)
     d_plate, d_bags, d_collar = 0.0, 0.0, 0.0
     for _ in range(6):
-        d_pushed = disks + carrier + d_plate + d_bags + d_collar
+        d_pushed = disks + gas + carrier + d_plate + d_bags + d_collar
         d_plate, d_bags, d_collar = _ceres_plate(d_pushed, disk_push, design)
     d_carried = d_plate + d_bags + d_collar
-    d_pushed = disks + carrier + d_carried
+    d_pushed = disks + gas + carrier + d_carried
     d_water = disk_push.water * d_pushed
     d_stream = disk_push.stream * d_pushed
     film_ceres += FILM_PER_IMPULSE * d_water * disk_push.ve * 1e3
@@ -1322,6 +1327,7 @@ def fly_ship(
         + cargo
         + sun_charge
         + disks
+        + gas
         + carrier
         + dead["shield"]
         + dead["sun_mounts"]
@@ -1342,6 +1348,7 @@ def fly_ship(
         "ceres_film": prices.film * film_ceres,
         "ceres_plates": plate_dollars,
         "disks": prices.disk * disks,
+        "disk_gas": prices.water * gas,
         "carrier": prices.structure * carrier,
         "sun_charges": prices.polyethylene * sun_charge,
         "sun_bowl": plate_price * (dead["sun_plate"] + dead["bore_collar"]),
@@ -1368,6 +1375,8 @@ def fly_ship(
         disk_stream=d_stream,
         back_stream=back_stream,
         disks=disks,
+        disk_gas=gas,
+        pulse_disk=pulse_disk,
         carrier=carrier,
         sun_charge=sun_charge,
         film_ceres=film_ceres,
@@ -1553,6 +1562,58 @@ class SteadyLoop:
         return float(sum(self.lines.values()))
 
 
+def _earth_design(design: CeresDesign) -> Design:
+    """The solar dive's knobs the Earth-side delivery flies."""
+    return replace(
+        design.spring,
+        k_delivery=design.k_delivery,
+        slow_delivery=not design.child_delivery,
+    )
+
+
+def film_reference(design: CeresDesign) -> float:
+    """The Earth delivery's exhaust speed, the Sun film's reference (km/s)."""
+    _, w_e = earth_stream(routes_for(design).earth)
+    return StageLaws.load().push_ve(
+        design.k_delivery, w_e, sheet_material(w_e), _earth_design(design).push_law
+    )
+
+
+def pulse_disks(design: CeresDesign) -> float:
+    """The lighter of the two ships' disk mass per Sun pulse (kg).
+
+    The masses do not depend on the prices or the freight.
+    """
+    reference_ve = film_reference(design)
+    return min(
+        fly_ship(design, CERES_BOOK, bound, 0.0, reference_ve).mass["pulse_disk"]
+        for bound in ("ceres", "earth")
+    )
+
+
+def on_floor(design: CeresDesign) -> Tuple[CeresDesign, float]:
+    """The design with its arc held to the disk floor, and how far it was over.
+
+    The solar dive's constraint (``Design.disk_floor``, ADR 0085): an arc
+    longer than every ship's floor allows is cut to it, and the cut's log is
+    returned for the optimizer's penalty.
+
+    Raises:
+        ValueError: If even the shortest arc cannot carry the floor.
+    """
+    floor = design.spring.disk_floor
+    if floor <= 0.0 or pulse_disks(design) >= floor:
+        return design, 0.0
+    cap = arc_on_floor(
+        lambda arc: pulse_disks(replace(design, arc_hours=arc)),
+        floor,
+        design.arc_hours,
+    )
+    if cap < CERES_BOUNDS["arc_hours"][0]:
+        raise ValueError(f"no arc carries {floor:g} kg a pulse")
+    return replace(design, arc_hours=cap), math.log(design.arc_hours / cap)
+
+
 def steady_loop(design: CeresDesign, prices: CeresPrices = CERES_BOOK) -> SteadyLoop:
     """Solve both stream prices as fixed points and price a kilogram at L1.
 
@@ -1574,15 +1635,9 @@ def steady_loop(design: CeresDesign, prices: CeresPrices = CERES_BOOK) -> Steady
     flown = routes_for(design)
     laws = StageLaws.load()
     v_inf, w_e = earth_stream(flown.earth)
-    earth_design = replace(
-        design.spring,
-        k_delivery=design.k_delivery,
-        slow_delivery=not design.child_delivery,
-    )
+    earth_design = _earth_design(design)
     delivery = delivery_unit(v_inf, earth_design, laws)
-    reference_ve = laws.push_ve(
-        design.k_delivery, w_e, sheet_material(w_e), earth_design.push_law
-    )
+    reference_ve = film_reference(design)
     leg = freight_leg(design, prices) if prices.freight is None else None
     caught = 1.0 - prices.misses
     # The masses do not depend on the prices, and each ship's dollars are
@@ -1682,7 +1737,8 @@ def optimize_loop(
 
     Powell's method on the box :data:`CERES_BOUNDS`, from the best point of
     a coarse grid (:data:`SUN_GRID` x :data:`ARC_GRID`).  The Ceres pushes fly
-    their fewest-pellet ``k``.
+    their fewest-pellet ``k``.  The arc is held to the disk floor
+    (:func:`on_floor`) and penalised past it.
 
     Args:
         design: The knobs to start from and every stated assumption.
@@ -1699,9 +1755,9 @@ def optimize_loop(
     best: List[Tuple[float, CeresDesign]] = []
 
     def price(x: Sequence[float]) -> float:
-        trial = build(x)
         try:
-            value = steady_loop(trial, prices).price
+            trial, over = on_floor(build(x))
+            value = steady_loop(trial, prices).price * (1.0 + over)
         except (ValueError, ZeroDivisionError):
             return 1e6
         if not best or value < best[0][0]:
@@ -1916,22 +1972,25 @@ def earth_window_days(depth: float, excess: float, budget: float) -> float:
 # --------------------------------------------------------------------------
 
 #: Where the reports start each depth's optimizer: the optima of the run
-#: recorded in ADR 0083 (so the headline reproduces; bounds CERES_BOUNDS).
+#: recorded in ADR 0085, under the solar dive's 1 kg disk floor and its gas
+#: (so the headline reproduces; bounds CERES_BOUNDS).  Both sit on the
+#: floor.  ADR 0083's unfloored optima were k_sun 29.907, arc 3.14 h,
+#: k_delivery 5.62 at 4 R_sun and 27.8, 7.38 h, 5.0 at 9.86.
 HEADLINE = {
     4.0: CeresDesign(
         depth=4.0,
         ceres_excess=110.0,
         earth_stream=137.0,
-        k_sun=29.907,
-        arc_hours=3.14,
-        k_delivery=5.62,
+        k_sun=26.58,
+        arc_hours=1.999,
+        k_delivery=5.71,
     ),
     9.86: CeresDesign(
         depth=9.86,
         ceres_excess=90.0,
         earth_stream=99.0,
-        k_sun=27.8,
-        arc_hours=7.38,
+        k_sun=21.36,
+        arc_hours=3.0,
         k_delivery=5.0,
     ),
 }

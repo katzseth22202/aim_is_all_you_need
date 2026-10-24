@@ -162,6 +162,18 @@ BAG_TEMPERATURE = 293.0  # K
 BLADDER_PER_PV = 1.3e3 / 259.6e6  # kg/J
 CELL_BLADDER_PER_PV = 0.13e3 / 259.6e6  # kg/J
 PAPER_BAG_FITTINGS = 5.0e3 / 1.7e8  # kg per J of PV: the paper's 5 t on 1.7e8 J
+#: The Sun-wave disk's floor (the author, 2026-10-24; the parent's S59): each
+#: disk carries 85-130 g of guidance hardware, a one-way laser beacon, Sun
+#: sensor, star camera, gyro, valves, radio and cell in a brow-shaded pod at
+#: its centre (the parent's sec:sun_wave_ranging), and below 1 kg that is
+#: implausible miniaturization.  One disk strikes a pulse, so the floor is on
+#: the disk mass each pulse carries.  The hardware strikes the charge and is
+#: impactor mass, not dead mass (ADR 0085).
+DISK_FLOOR = 1.0  # kg struck per pulse
+#: The cold gas each disk spends steering, on top of the struck kilogram: it
+#: is launched, carried to Jupiter and turned onto the mirror dive by the
+#: carrier, but never strikes (the parent's 25 g on its 1 kg disk).
+DISK_GAS = 0.025  # kg per disk
 #: Film per unit impulse: the spray cup's vapor-shielded 4-6 kg per 12 MN s
 #: pulse (growth_ledger.SPRAY_CUP_FILM_PER_PULSE), on both Earth plates.  The Sun plate's is scaled
 #: by its gas's energy per unit impulse (~v_e) over the Earth push's, to the
@@ -1141,6 +1153,15 @@ class Design:
         deep_space_reserve: A methalox correction reserve on the departing
             ship (km/s; the parent's S27 item 3 asks 0.03-0.05), burned before
             Jupiter; 0 headline.
+        disk_floor: The least disk mass a Sun pulse may strike (kg); the
+            optimizer holds every ship type above it (:data:`DISK_FLOOR`, the
+            parent's S59; 0 for ADR 0077's unfloored ledger).
+        disk_gas: Cold gas each disk spends before it strikes (kg), carried
+            by the carrier and priced as storable propellant.
+        sun_stack: Launch units whose disks one Sun ship carries (the
+            parent's S59 item 5, a comparison: docking is not designed).
+            Their pulses share one plate, collar and spring, so the pulse is
+            ``sun_stack`` times the unit's.
     """
 
     k_push: float = 10.0
@@ -1170,6 +1191,9 @@ class Design:
     delivery_target: str = "l1"
     apoapsis_stage: bool = False
     deep_space_reserve: float = 0.0
+    disk_floor: float = DISK_FLOOR
+    disk_gas: float = DISK_GAS
+    sun_stack: int = 1
 
 
 @dataclass(frozen=True)
@@ -1558,24 +1582,31 @@ def fly_unit(
     disks_per_ship = (1.0 - 1.0 / mr_sun) / design.k_sun
     film_rate = FILM_PER_IMPULSE * (ve_sun / ve_push) ** design.film_exponent
     film_per_ship = film_rate * (1.0 - 1.0 / mr_sun) * ve_sun * 1e3
-    ship = departing / (1.0 + carrier_per_disk * disks_per_ship + film_per_ship)
+    # One disk a pulse; a stacked Sun ship's pulses are shared among its
+    # units, so each unit carries ``1 / sun_stack`` of them, and their gas.
+    stack = design.sun_stack
+    pulses = SUN_PULSE_RATE * design.arc_hours * 3600.0
+    gas = design.disk_gas * pulses / stack
+    ship = (departing - carrier_per_disk * gas) / (
+        1.0 + carrier_per_disk * disks_per_ship + film_per_ship
+    )
     disks = disks_per_ship * ship
     sun_charge = ship * (1.0 - 1.0 / mr_sun)
     final = ship / mr_sun
-    pulses = SUN_PULSE_RATE * design.arc_hours * 3600.0
-    pulse_disk = disks / pulses
+    pulse_disk = stack * disks / pulses
+    survival = _plate_for(
+        pulse_disk, SUN_PLATE_PULSE, SUN_PLATE_AREA, w_sun / SUN_PLATE_SPEED
+    )
     sun_spring = gas_spring(
         pulse_disk * design.k_sun * ve_sun * 1e3 * SUN_PULSE_RATE,
         SUN_PULSE_RATE,
-        final,
+        stack * final,
         design,
-        _plate_for(
-            pulse_disk, SUN_PLATE_PULSE, SUN_PLATE_AREA, w_sun / SUN_PLATE_SPEED
-        ),
+        survival,
     )
     dead = {
-        "sun_plate": sun_spring.plate + sun_spring.bag,
-        "bore_collar": BORE_COLLAR,
+        "sun_plate": (sun_spring.plate + sun_spring.bag) / stack,
+        "bore_collar": BORE_COLLAR / stack,
         "shield": SHIELD_FRACTION
         * ship
         * (PARKER_SOLAR_RADII / route.dive_solar_radii)
@@ -1587,8 +1618,11 @@ def fly_unit(
     lines.update(dead)
     lines.update(
         disks=disks,
-        carrier_dry=CARRIER_DRY_FRACTION * disks,
-        carrier_propellant=disks * (carrier_per_disk - 1.0 - CARRIER_DRY_FRACTION),
+        disk_gas=gas,
+        pulse_disk=pulse_disk,
+        carrier_dry=CARRIER_DRY_FRACTION * (disks + gas),
+        carrier_propellant=(disks + gas)
+        * (carrier_per_disk - 1.0 - CARRIER_DRY_FRACTION),
         sun_charge=sun_charge,
         film_sun=film_per_ship * ship,
         sheets=max(returned, 0.0),
@@ -1596,8 +1630,11 @@ def fly_unit(
         mr_sun=mr_sun,
         ve_sun=ve_sun,
         carrier_burn=burn.burn,
-        sun_bag=sun_spring.bag,
+        sun_bag=sun_spring.bag / stack,
         sun_stroke=sun_spring.stroke,
+        sun_survival=survival,
+        sun_peak_g=sun_spring.peak_g,
+        sun_plates=1.0 / stack,
     )
     return UnitLedger(
         earth.push_sheets, earth.departure_sheets, max(returned, 0.0), disks, lines
@@ -1931,6 +1968,9 @@ def _unit_dollars(
     stream they will fly in (:meth:`SolarDivePrices.sheet_price`).
     """
     m = unit.lines
+    # One Sun plate a unit and no disk gas, for ledgers without them (the
+    # Jupiter-only plate loop flies no disks).
+    shared = m.get("sun_plates", 1.0)
     earth_curve = prices.plate_curve(prices.earth_plate_share)
     sun_curve = prices.plate_curve(prices.sun_plate_share)
     count = m["sheets"] * prices.packages_per_kg * guidance / 0.05
@@ -1945,7 +1985,10 @@ def _unit_dollars(
             else 0.0
         ),
         "bowl": earth_curve.batch_cost(plates["bowl"], 1.0) * m["bowl"],
-        "sun_plate": sun_curve.batch_cost(plates["sun"], 1.0)
+        # A stacked Sun ship's plate is shared: each unit buys its share of
+        # one plate at the curve's price over that share.
+        "sun_plate": sun_curve.batch_cost(plates["sun"], shared)
+        / shared
         * (m["sun_plate"] + m["bore_collar"]),
         "film": prices.film * (m["film_earth"] + m["film_sun"]),
         "methalox": prices.methalox
@@ -1965,7 +2008,8 @@ def _unit_dollars(
         * (m["sun_mounts"] + (m["earth_mounts"] if lob else 0.0)),
         "disks": prices.disk * m["disks"],
         "carrier": prices.carrier * m["carrier_dry"]
-        + prices.storable * (m["carrier_propellant"] + m["plate_disposal"]),
+        + prices.storable
+        * (m["carrier_propellant"] + m["plate_disposal"] + m.get("disk_gas", 0.0)),
         "shield": prices.shield * m["shield"],
         "avionics": prices.avionics * m["avionics"],
         "sheets": sheet_body * m["sheets"],
@@ -1974,7 +2018,7 @@ def _unit_dollars(
     if lob and m["push_plate"] > 0.0:
         plates["push"] += built
     plates["bowl"] += 1.0
-    plates["sun"] += 1.0
+    plates["sun"] += shared
     return lines
 
 
@@ -2258,6 +2302,76 @@ _BOUNDS = {
 }
 
 
+def pulse_disks(departure: DiveRoute, push: DiveRoute, design: Design) -> float:
+    """The lighter of the two ship types' disk mass per Sun pulse (kg).
+
+    The departure-wave ship carries the lighter pulse at every closure
+    printed, since it departs less of itself; the floor binds on it.
+    """
+    return min(
+        fly_unit(route, push, departure, design).lines["pulse_disk"]
+        for route in (push, departure)
+    )
+
+
+def arc_on_floor(
+    pulse_at: Callable[[float], float], floor: float, arc: float, rtol: float = 1e-7
+) -> float:
+    """The Sun arc at which ``pulse_at(arc)``, the lightest pulse, is ``floor``.
+
+    A pulse carries the ship's disks over its pulse count, so it falls almost
+    as the arc's inverse; the arc's loss (:func:`arc_loss`) adds a little.
+    Solved by the secant in log space from ``arc``.  Shared with the Ceres
+    loop (:mod:`src.ceres_dive`).
+
+    Args:
+        pulse_at: The lightest ship's disk mass per pulse at an arc (kg).
+        floor: The disk floor (kg).
+        arc: The first guess (hours).
+        rtol: Relative tolerance on the arc.
+
+    Returns:
+        The arc (hours).
+    """
+
+    def gap(log_arc: float) -> float:
+        return math.log(pulse_at(math.exp(log_arc)) / floor)
+
+    x0 = math.log(arc)
+    f0 = gap(x0)
+    x1 = x0 + f0  # the pulse goes almost as 1 / arc
+    for _ in range(12):
+        f1 = gap(x1)
+        if abs(x1 - x0) < rtol or f1 == f0:
+            break
+        x0, x1, f0 = x1, x1 - f1 * (x1 - x0) / (f1 - f0), f1
+    return math.exp(x1)
+
+
+def floor_arc(departure: DiveRoute, push: DiveRoute, design: Design) -> float:
+    """The longest Sun arc at which every ship's pulse carries ``disk_floor``.
+
+    Args:
+        departure: The departure-wave route.
+        push: The push-wave route.
+        design: The knobs; its ``arc_hours`` is the first guess.
+
+    Returns:
+        The arc (hours); ``inf`` with no floor.
+    """
+    if design.disk_floor <= 0.0:
+        return math.inf
+    return arc_on_floor(
+        lambda arc: pulse_disks(departure, push, replace(design, arc_hours=arc)),
+        design.disk_floor,
+        design.arc_hours,
+    )
+
+
+#: Nelder-Mead restarts at most (each from the last answer).
+_RESTARTS = 4
+
+
 @dataclass(frozen=True)
 class Optimum:
     """The cheapest design at one closure.
@@ -2299,19 +2413,32 @@ def optimize_design(
     (``break_even``), or the steady $/kg (``steady``) or the doubling time
     (``doubling``) for comparison.  Nelder-Mead in log space inside the
     recorded bounds (``_BOUNDS``), which are the simulated ranges.
+
+    The disk floor (``Design.disk_floor``, the parent's S59) is a constraint:
+    an arc longer than :func:`floor_arc` is projected onto it and penalised
+    as a bound is, so every design scored, and the optimum, holds each ship's
+    pulse at or above the floor.  A floor the shortest arc cannot reach
+    raises ``ValueError``.
     """
     cheap = seed_price(departure, dear)
     lows = np.log([_BOUNDS[k][0] for k in _KNOBS])
     highs = np.log([_BOUNDS[k][1] for k in _KNOBS])
 
-    def design_at(x: np.ndarray) -> Design:
+    def design_at(x: np.ndarray) -> Tuple[Design, float]:
         clipped = np.exp(np.clip(x, lows, highs))
-        return replace(start, **dict(zip(_KNOBS, (float(v) for v in clipped))))  # type: ignore[arg-type]
+        d = replace(start, **dict(zip(_KNOBS, (float(v) for v in clipped))))  # type: ignore[arg-type]
+        if d.disk_floor <= 0.0 or pulse_disks(departure, push, d) >= d.disk_floor:
+            return d, 0.0
+        cap = floor_arc(departure, push, d)
+        if cap < _BOUNDS["arc_hours"][0]:
+            raise ValueError(f"no arc carries {d.disk_floor:g} kg a pulse")
+        return replace(d, arc_hours=cap), math.log(d.arc_hours / cap)
 
     def score(x: np.ndarray) -> float:
         penalty = float(np.sum(np.maximum(x - highs, 0.0) + np.maximum(lows - x, 0.0)))
         try:
-            d = design_at(x)
+            d, over = design_at(x)
+            penalty += over
             if objective == "doubling":
                 g = cycle_growth(departure, push, d, 1.0 - MISS_FLOOR)
                 return doubling_years(g.growth, departure.cycle_years) + 100.0 * penalty
@@ -2323,14 +2450,24 @@ def optimize_design(
         value = v.steady_cost if objective == "steady" else (v.break_even or 1e5)
         return value * (1.0 + penalty)
 
-    x0 = np.log([getattr(start, k) for k in _KNOBS])
-    result = minimize(
-        score,
-        x0,
-        method="Nelder-Mead",
-        options={"xatol": 1e-3, "fatol": 1e-3, "maxiter": 600},
-    )
-    best = design_at(result.x)
+    # Start on the floor, and restart from each answer until it stops moving:
+    # one simplex can stall on a knob it has stopped varying (k_delivery at
+    # its bound, after the floor moved the arc).
+    first, _ = design_at(np.log([getattr(start, k) for k in _KNOBS]))
+    x = np.log([getattr(first, k) for k in _KNOBS])
+    value = score(x)
+    for _ in range(_RESTARTS):
+        result = minimize(
+            score,
+            x,
+            method="Nelder-Mead",
+            options={"xatol": 1e-3, "fatol": 1e-3, "maxiter": 600},
+        )
+        moved = value - float(result.fun)
+        x, value = result.x, float(result.fun)
+        if moved < 1e-3:
+            break
+    best, _ = design_at(x)
     schedule = (rate, gates, growth_synodic)
     valuation = value_design(
         departure, push, best, prices, seed_price(departure), guidance, *schedule
@@ -2439,21 +2576,33 @@ COMPARISONS = ((9.86, 90.0), (4.0, 150.0))
 #: The growth-to-departure gaps swept (the parent's S39 item 8).
 GAPS = (3.0, 5.0, 10.0)
 #: Where the optimizer starts each closure: the optima of the run recorded
-#: in ADR 0077 (so the headline reproduces; bounds ``_BOUNDS``).  Starting
-#: from ``_SWEEP_START`` instead lands within $0.1 at three closures; at
-#: 9.86 R_sun, X 90 it stops in a local optimum $8 dearer.
+#: in ADR 0085, under the 1 kg disk floor and its gas (so the headline
+#: reproduces; bounds ``_BOUNDS``).  Three of the four sit on the floor;
+#: 4 R_sun, X 150 clears it.  Starting from ``_SWEEP_START`` instead lands
+#: within $0.1 at three closures in ADR 0077's run; at 9.86 R_sun, X 90 it
+#: stopped in a local optimum $8 dearer.
 HEADLINE_STARTS = {
+    (9.86, 60.0): Design(
+        k_push=6.42, k_earth=12.43, k_sun=20.0, arc_hours=0.986, k_delivery=5.0
+    ),
+    (4.0, 90.0): Design(
+        k_push=7.37, k_earth=12.20, k_sun=20.03, arc_hours=1.171, k_delivery=5.0
+    ),
+    (9.86, 90.0): Design(
+        k_push=11.14, k_earth=13.46, k_sun=20.0, arc_hours=1.831, k_delivery=7.26
+    ),
+    (4.0, 150.0): Design(
+        k_push=25.92, k_earth=13.05, k_sun=20.0, arc_hours=2.39, k_delivery=12.54
+    ),
+}
+#: ADR 0077's optima, unfloored: where :func:`disk_floor_report` starts its
+#: "no floor" rows, so they reproduce ADR 0077's headline.
+UNFLOORED_STARTS = {
     (9.86, 60.0): Design(
         k_push=6.50, k_earth=12.50, k_sun=20.0, arc_hours=4.97, k_delivery=5.0
     ),
     (4.0, 90.0): Design(
         k_push=7.55, k_earth=12.25, k_sun=20.0, arc_hours=2.19, k_delivery=5.0
-    ),
-    (9.86, 90.0): Design(
-        k_push=12.94, k_earth=13.65, k_sun=20.0, arc_hours=5.26, k_delivery=6.67
-    ),
-    (4.0, 150.0): Design(
-        k_push=25.91, k_earth=13.04, k_sun=20.0, arc_hours=2.39, k_delivery=12.53
     ),
 }
 SWEEP_RADII = (4.0, 6.0, 8.0, 9.86, 12.0, 15.0, 20.0)
@@ -2977,6 +3126,158 @@ def eccentric_report(days: float = PARKING_DAYS) -> str:
 
 
 # --------------------------------------------------------------------------
+# The disk floor (the parent's S59, make sun-disk-floor)
+# --------------------------------------------------------------------------
+
+#: The floors swept beside the headline's 1 kg.
+DISK_FLOORS = (0.5, 2.0)
+#: Launch units stacked into one Sun ship for the comparison (S59 item 5).
+SUN_STACK = 5
+#: Arcs the fixed-design sweep holds (hours), as the parent's scratch did.
+FLOOR_ARCS = (4.97, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5)
+
+
+def unfloored(design: Design) -> Design:
+    """ADR 0077's unfloored ledger: no disk floor and no cold gas."""
+    return replace(design, disk_floor=0.0, disk_gas=0.0)
+
+
+def _floor_row(label: str, found: Optimum) -> List[str]:
+    """One S59 row: the Sun pulse, its plate and the program."""
+    departure, push, d, v = found.departure, found.push, found.design, found.valuation
+    unit = fly_unit(departure, push, departure, d).lines
+    pushed = fly_unit(push, push, departure, d).lines
+    energy = unit["pulse_disk"] * (departure.sun_closing / SUN_PLATE_SPEED) ** 2
+    return [
+        label,
+        f"{d.arc_hours:.3f}",
+        f"{d.k_sun:.2f}",
+        f"{unit['pulse_disk']:.3f} / {pushed['pulse_disk']:.3f}",
+        f"{energy / SUN_PLATE_PULSE:.2f}",
+        f"{(unit['sun_plate'] + unit['bore_collar']) / 1e3:.2f}",
+        f"{unit['sun_stroke']:.2f}",
+        f"{unit['sun_peak_g']:.2f}",
+        f"{v.growth:.3f}",
+        f"{v.doubling:.3f}",
+        f"{v.steady_cost:.1f}",
+        f"{_money(v.break_even)} / {_money(found.dear_break_even)}",
+    ]
+
+
+def disk_floor_report(days: float = PARKING_DAYS) -> str:
+    """The 1 kg Sun-disk floor at both headlines (the parent's S59).
+
+    Every row is re-optimized for the dear-seed break-even from the closure's
+    :data:`HEADLINE_STARTS`, except the stacked row held at ADR 0077's design,
+    which is the parent's "ledger-neutral to first order" check as asked.
+    """
+    out = []
+    for key in HEADLINES:
+        departure = departure_route(*key)
+        push = push_route(*key, days)
+        assert departure is not None and push is not None
+        start = HEADLINE_STARTS[key]
+        free = optimize_design(departure, push, unfloored(UNFLOORED_STARTS[key]))
+        cases: List[Tuple[str, Optional[Optimum]]] = [
+            ("no floor, no gas (ADR 0077)", free),
+            (
+                "1 kg floor, no gas",
+                optimize_design(departure, push, replace(start, disk_gas=0.0)),
+            ),
+            (
+                f"1 kg floor + {DISK_GAS * 1e3:g} g gas (headline)",
+                optimize_design(departure, push, start),
+            ),
+        ]
+        for floor in DISK_FLOORS:
+            try:
+                found: Optional[Optimum] = optimize_design(
+                    departure, push, replace(start, disk_floor=floor)
+                )
+            except ValueError:
+                found = None  # even the shortest arc cannot carry it
+            cases.append((f"{floor:g} kg floor + gas", found))
+        held = replace(free.design, sun_stack=SUN_STACK, disk_gas=DISK_GAS)
+        cases.append(
+            (
+                f"{SUN_STACK} units a Sun ship, ADR 0077's design held",
+                replace(
+                    free,
+                    design=held,
+                    valuation=value_design(
+                        departure, push, held, seed_price=seed_price(departure)
+                    ),
+                    dear_break_even=value_design(
+                        departure, push, held, seed_price=seed_price(departure, True)
+                    ).break_even,
+                ),
+            )
+        )
+        cases.append(
+            (
+                f"{SUN_STACK} units a Sun ship, re-optimized",
+                optimize_design(
+                    departure,
+                    push,
+                    replace(free.design, sun_stack=SUN_STACK, disk_gas=DISK_GAS),
+                ),
+            )
+        )
+        out.append(
+            f"{_closure(key)}, {days:g}-day gap (Sun closing"
+            f" {departure.sun_closing:.1f} km/s)\n"
+            + tabulate(
+                [
+                    (
+                        _floor_row(label, found)
+                        if found
+                        else [label, f"no arc >= {ARC_HOURS[0]:g} h reaches it"]
+                    )
+                    for label, found in cases
+                ],
+                headers=[
+                    "case",
+                    "arc (h)",
+                    "k_S",
+                    "kg/pulse dep / push ship",
+                    "pulse energy / plate rating",
+                    "Sun plate+bags+collar (t/unit)",
+                    "stroke (m)",
+                    "ship peak g",
+                    "growth",
+                    "doubling (y)",
+                    "steady $/kg",
+                    "BE cheap / dear",
+                ],
+            )
+        )
+    # The parent's fixed-design arc sweep, at the headline's other knobs.
+    key = HEADLINES[0]
+    departure = departure_route(*key)
+    push = push_route(*key, days)
+    assert departure is not None and push is not None
+    base = unfloored(UNFLOORED_STARTS[key])
+    rows = []
+    for arc in FLOOR_ARCS:
+        d = replace(base, arc_hours=arc)
+        v = value_design(departure, push, d, seed_price=seed_price(departure, True))
+        rows.append(
+            [
+                f"{arc:g}",
+                f"{pulse_disks(departure, push, d):.3f}",
+                f"{v.growth:.3f}",
+                _money(v.break_even),
+            ]
+        )
+    out.append(
+        f"Fixed design at {_closure(key)} (ADR 0077's knobs, no floor or"
+        " gas), dear seed, the arc held\n"
+        + tabulate(rows, headers=["arc (h)", "kg/pulse", "growth", "BE dear"])
+    )
+    return "\n\n".join(out)
+
+
+# --------------------------------------------------------------------------
 # The best long-term price (the parent's S53, make solar-dive-best)
 # --------------------------------------------------------------------------
 
@@ -3408,8 +3709,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="only the best long-term steady price: the mature book, reuse, the lob sweep (S53, ~10 min)",
     )
+    parser.add_argument(
+        "--disk-floor",
+        action="store_true",
+        help="only the 1 kg Sun-disk floor at the headlines, its gas and stacking (S59, ~3 min)",
+    )
     args = parser.parse_args(argv)
     days = args.parking_days
+    if args.disk_floor:
+        print(disk_floor_report(days))
+        return
     if args.best_case:
         print(best_case_report(days))
         if args.sweep:

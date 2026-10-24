@@ -1982,6 +1982,22 @@ The author's Earth-side charge: snow in a thin polyethylene skin, a light foam
 (`SolarDivePrices.earth_charge`, $0.062/kg). Priced on polyethylene's stage law, so a bound
 until the simulation flies it. The Sun charge stays polyethylene.
 
+**Disk floor**:
+The least disk mass a Sun pulse may strike: 1 kg (`DISK_FLOOR`, the author 2026-10-24, the
+parent's S59; ADR 0085). Each disk carries 85-130 g of guidance hardware, which strikes as
+impactor mass, plus 25 g of cold gas (`DISK_GAS`), which is carried but never struck. The
+floor binds the departure-wave ship. It is met by the **harder boost**: the Sun arc shortened
+to ~1 h (0.99 h at 9.86 R_sun, 1.17 h at 4 R_sun), which costs $12 dear at 9.86 R_sun ($158)
+and $1.5 at 4 R_sun ($89). The Ceres loop flies it too ($1.488 and $1.741). A 1 kg pulse is the
+Sun plate's own rating at 9.86 R_sun.
+_Avoid_: capping the arc by hand; the optimizer holds the floor as a constraint.
+
+**Stacked Sun ship**:
+Several launch units' disks on one Sun ship (`Design.sun_stack`; S59 item 5, a comparison).
+It is not ledger-neutral: the plate's survival floor goes as the pulse to the 2/3 and the 1 t
+collar is shared, so five units save $15 dear against the harder boost at 9.86 R_sun. Not
+adopted: docking is not designed.
+
 **Gated rNPV**:
 The valuation this cycle and its comparison rows are quoted on: time at 10% a year,
 and each flow weighted by the odds of every milestone (**gate**) before it, as drug
@@ -2015,7 +2031,7 @@ ADR `0083-the-solar-dive-grown-at-ceres`). Ceres supplies water ($0.02/kg), grap
 and the Earth sheets' film; only plates, bowls and avionics fly from Earth. There is no
 **growth lob**: what is lofted is the payload, its Earth charges and the Earth plates. The steady
 price is $1.46/kg at L1 at 4 R_sun and $1.70 at 9.86 R_sun, against the solar dive's $2.81 best
-case. The **delivery lob** alone is $1.01 of it, so $1 needs the child's 4 Hz delivery (S37).
+case; under the **disk floor** (ADR 0085) $1.488 and $1.741. The **delivery lob** alone is $1.01 of it, so $1 needs the child's 4 Hz delivery (S37).
 
 **Ceres stream**:
 Compact ice pellets returning from the Sun to Ceres' orbit at the Ceres-bound excess `X_C`. They

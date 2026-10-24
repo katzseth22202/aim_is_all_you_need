@@ -430,14 +430,14 @@ def test_the_mature_book_in_the_ledger_matches_the_parents_scratch() -> None:
     """S53 item 1: the paper's book reproduces; reuse in the ledger is the parent's /10."""
     from dataclasses import replace
 
-    from src.solar_dive_growth import ESTIMATE, HEADLINE_STARTS, MATURE
+    from src.solar_dive_growth import ESTIMATE, MATURE, UNFLOORED_STARTS, unfloored
 
     expected = {(9.86, 60.0): (94.15, 85.29), (4.0, 90.0): (73.52, 67.81)}
     for key, (paper, scratch) in expected.items():
         departure = departure_route(*key)
         push = push_route(*key)
         assert departure is not None and push is not None
-        held = HEADLINE_STARTS[key]
+        held = unfloored(UNFLOORED_STARTS[key])  # ADR 0082 predates the floor
         estimate = value_design(departure, push, held, ESTIMATE)
         assert estimate.steady_cost == pytest.approx(paper, abs=0.01)
         mature = value_design(departure, push, held, MATURE)
@@ -495,3 +495,82 @@ def test_snow_foam_prices_the_earth_charges_and_not_the_suns() -> None:
     foam = replace(ESTIMATE, earth_charge=SNOW_FOAM)
     assert foam.earth_charge_price == pytest.approx(0.0619, abs=1e-4)
     assert foam.polyethylene == ESTIMATE.polyethylene
+
+
+def test_the_floor_arc_solves_a_pulse_that_falls_as_the_arc() -> None:
+    """S59: the secant finds the arc at which the lightest pulse is the floor."""
+    from src.solar_dive_growth import arc_on_floor
+
+    def pulse(arc: float) -> float:  # 0.2 kg at 4.97 h, a little arc loss
+        return 0.2 * 4.97 / arc * (1.0 + 0.01 * (arc / 4.97) ** 2)
+
+    arc = arc_on_floor(pulse, 1.0, 4.97)
+    assert pulse(arc) == pytest.approx(1.0, rel=1e-6)
+    assert 0.98 < arc < 1.0
+
+
+@pytest.mark.slow
+def test_the_disk_floor_holds_every_ship_and_unfloored_is_adr_0077() -> None:
+    """S59 items 1 and 4: the floor binds the departure-wave ship at 9.86 R_sun."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import (
+        HEADLINE_STARTS,
+        UNFLOORED_STARTS,
+        fly_unit,
+        optimize_design,
+        pulse_disks,
+        unfloored,
+    )
+
+    key = (9.86, 60.0)
+    departure = departure_route(*key)
+    push = push_route(*key)
+    assert departure is not None and push is not None
+    free = optimize_design(departure, push, unfloored(UNFLOORED_STARTS[key]))
+    assert free.dear_break_even == pytest.approx(145.66, abs=0.05)
+    assert pulse_disks(departure, push, free.design) == pytest.approx(0.200, abs=1e-3)
+    floored = optimize_design(departure, push, HEADLINE_STARTS[key])
+    d = floored.design
+    assert pulse_disks(departure, push, d) == pytest.approx(1.0, abs=1e-4)
+    assert d.arc_hours == pytest.approx(0.99, abs=0.01)
+    assert floored.dear_break_even == pytest.approx(158.2, abs=0.2)
+    unit = fly_unit(departure, push, departure, d).lines
+    pushed = fly_unit(push, push, departure, d).lines
+    assert unit["pulse_disk"] < pushed["pulse_disk"]  # the departure ship binds
+    # 25 g of gas a pulse, carried and turned by the carrier, never struck.
+    pulses = 2.0 * d.arc_hours * 3600.0
+    assert unit["disk_gas"] == pytest.approx(0.025 * pulses)
+    no_gas = fly_unit(departure, push, departure, replace(d, disk_gas=0.0)).lines
+    assert unit["carrier_dry"] == pytest.approx(
+        no_gas["carrier_dry"] * (1 + unit["disk_gas"] / unit["disks"]), rel=0.01
+    )
+    # The Sun plate at a 1 kg pulse sits at its 1 kg, 400 km/s rating.
+    assert unit["sun_survival"] == pytest.approx(
+        30.0 * 533.041 * (departure.sun_closing / 400.0) ** (4.0 / 3.0), rel=1e-3
+    )
+
+
+@pytest.mark.slow
+def test_a_stacked_sun_ship_shares_one_plate_and_collar() -> None:
+    """S59 item 5: five units' pulses on one plate, a fifth of it each."""
+    from dataclasses import replace
+
+    from src.solar_dive_growth import UNFLOORED_STARTS, fly_unit
+
+    key = (9.86, 60.0)
+    departure = departure_route(*key)
+    push = push_route(*key)
+    assert departure is not None and push is not None
+    one = UNFLOORED_STARTS[key]
+    five = replace(one, sun_stack=5)
+    single = fly_unit(departure, push, departure, one).lines
+    stacked = fly_unit(departure, push, departure, five).lines
+    assert stacked["pulse_disk"] == pytest.approx(5.0 * single["pulse_disk"], rel=0.01)
+    assert stacked["bore_collar"] == pytest.approx(200.0)
+    # The survival floor goes as the pulse to the 2/3: each unit carries less.
+    assert stacked["sun_survival"] == pytest.approx(
+        single["sun_survival"] * 5.0 ** (2.0 / 3.0), rel=0.02
+    )
+    assert stacked["sun_plate"] < 0.62 * single["sun_plate"]
+    assert stacked["disk_gas"] == pytest.approx(single["disk_gas"] / 5.0)

@@ -16,12 +16,14 @@ from src.ceres_dive import (
     closures,
     earth_excess_for,
     law_one_ve,
+    pulse_disks,
     rings,
     steady_loop,
     sun_route,
     tug_dv,
     water_chemistry,
 )
+from src.solar_dive_growth import Design, unfloored
 
 
 def test_law_one_reproduces_the_parents_departure_check():
@@ -84,8 +86,20 @@ def test_the_fewest_pellet_push_beats_its_neighbours():
 @pytest.mark.slow
 def test_the_headline_reproduces_and_the_delivery_lob_is_its_floor():
     loop = steady_loop(HEADLINE[4.0])
-    assert loop.price == pytest.approx(1.463, abs=0.005)
+    assert pulse_disks(HEADLINE[4.0]) >= 1.0  # the solar dive's floor (ADR 0085)
+    assert loop.price == pytest.approx(1.488, abs=0.002)
     assert loop.lines["delivery_lob"] == pytest.approx(1.006, abs=0.005)
+    adr_0083 = CeresDesign(
+        **{
+            **HEADLINE[4.0].__dict__,
+            "k_sun": 29.907,
+            "arc_hours": 3.14,
+            "k_delivery": 5.62,
+            "spring": unfloored(Design()),
+        }
+    )
+    assert steady_loop(adr_0083).price == pytest.approx(1.463, abs=0.002)
+    assert pulse_disks(adr_0083) == pytest.approx(0.60, abs=0.01)
     assert loop.growth > 1.0
     child = steady_loop(
         CeresDesign(**{**HEADLINE[4.0].__dict__, "child_delivery": True})

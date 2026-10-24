@@ -311,7 +311,8 @@ def optimize_energy(
     """The cheapest $/MWh_e over the Sun's ``k`` and arc, the rest held.
 
     The same search as :func:`src.ceres_dive.optimize_loop`: the best node of
-    :data:`SUN_GRID` x :data:`ARC_GRID`, then Powell on :data:`CERES_BOUNDS`.
+    :data:`SUN_GRID` x :data:`ARC_GRID`, then Powell on :data:`CERES_BOUNDS`,
+    the arc held to the disk floor (:func:`src.ceres_dive.on_floor`).
 
     Returns:
         The best design and its loop, or None if nothing near the grid flies.
@@ -321,7 +322,9 @@ def optimize_energy(
     def price(x: Sequence[float]) -> float:
         trial = replace(design, **dict(zip(SUN_NAMES, (float(v) for v in x))))  # type: ignore[arg-type]
         try:
+            trial, over = cd.on_floor(trial)
             value = energy_loop(trial, prices, l1_freight=l1_freight).price
+            value *= 1.0 + over
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError):
             return 1e6
         if not best or value < best[0][0]:

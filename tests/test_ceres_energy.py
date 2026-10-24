@@ -15,8 +15,10 @@ from src.ceres_energy import (
     ground_speed,
     sublimated_share,
 )
+from src.solar_dive_growth import Design, unfloored
 
-#: The parent's fixed design for its line items and sensitivities.
+#: The parent's fixed design for its line items and sensitivities, flown
+#: as ADR 0084 flew it: before the disk floor and its gas (ADR 0085).
 PARENT_DESIGN = CeresDesign(
     depth=4.0,
     ceres_excess=110.0,
@@ -24,6 +26,7 @@ PARENT_DESIGN = CeresDesign(
     k_sun=29.907,
     arc_hours=2.4,
     k_delivery=5.0,
+    spring=unfloored(Design()),
 )
 
 
@@ -85,6 +88,7 @@ def test_the_energy_headline_reproduces():
         k_sun=29.907,
         arc_hours=2.421,
         k_delivery=5.0,
+        spring=unfloored(Design()),
     )
     loop = energy_loop(design)
     assert loop.price == pytest.approx(5.03, abs=0.01)
