@@ -93,6 +93,7 @@ make solar-dive     # the solar-dive charge-pusher cycle charged and priced, aga
 make solar-dive-best # the solar dive's best long-term steady price: mature book, plate reuse, lob sweep to its propellant floor, snow foam, what must fall to $3 (ADR 0082; ~8 min, ARGS="--sweep" adds the deep-closure scan)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
 make sun-disk-floor # the 1 kg Sun-disk floor: the harder boost, the disk's gas, a 0.5/2 kg floor, stacking as a comparison (ADR 0085; ~1 min)
+make disk-train-aim # aiming the Sun-wave disk train: centimetre tolerance, the ship's track hold, CME drift, disk thrusters; the 1 Hz 2.5 kg train priced and rejected (ADR 0086; ~1 min)
 make ceres-dive     # the solar dive grown at Ceres: water push, depot rings, steady $/kg at L1, the $1 line (ADR 0083; ~5 min)
 make ceres-energy   # the Ceres loop as Straw Way electricity: ice impactors, Ceres plates, $/MWh_e over arrival speed (ADR 0084; ~20 min)
 make iapetus-cycle  # the Iapetus water cycle: single-use water NTR, ledgers A/B, gated rNPV and loan, vs the solar dive at the eccentric orbit; hydrogen NTP and chemical-only Earth departures (ADR 0078, 0079; ~1 min)
@@ -359,6 +360,14 @@ solar_dive_growth.py         ← jovian_solar_dive_cycle + chamber_departure.rol
                                 route (ADR 0072-0077). Every Sun pulse strikes at least
                                 the 1 kg disk floor, held as a constraint on the arc,
                                 and each disk's 25 g of gas is carried (ADR 0085)
+
+disk_train_aim.py            ← solar_dive_growth: the Sun-wave disk train's aim against
+                                the simulation's Result 23. Centimetre tolerance at the
+                                bore, the unseen-kick miss and its loop gain, the ship's
+                                track hold (Design.sun_hold), kick knowledge, CME and
+                                sunlight drift on each disk's geometry, disk thrusters;
+                                the 1 Hz 2.5 kg train and the 1.3x charge priced through
+                                the ledger (Design.sun_rate, sun_coupling) (ADR 0086)
 
 ceres_dive.py                ← solar_dive_growth (stage laws, gas spring, fly_earth,
                                 delivery_unit, MATURE) + conic_kernel: the parent's S56.

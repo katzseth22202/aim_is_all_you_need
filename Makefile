@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best sun-disk-floor ceres-dive ceres-energy plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best sun-disk-floor disk-train-aim ceres-dive ceres-energy plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -70,6 +70,9 @@ solar-dive-best:  ## The solar dive's best long-term steady $/kg at L1: the matu
 
 sun-disk-floor:  ## The 1 kg Sun-disk floor at both headlines: the harder boost, the disk's cold gas, a 0.5/2 kg floor, five units a Sun ship (ADR 0085; ~1 min)
 	python -m src.solar_dive_growth --disk-floor $(ARGS)
+
+disk-train-aim:  ## Aiming the Sun-wave disk train: centimetre tolerance, ship track hold, CME drift, disk thrusters, the 1 Hz 2.5 kg train priced (ADR 0086; ~1 min, ARGS="--no-price" ~25 s)
+	python -m src.disk_train_aim $(ARGS)
 
 ceres-dive:  ## The solar dive grown at Ceres: water push law, depot rings, the steady ledger with both stream prices as fixed points, the $1 line (ADR 0083; ~15 min)
 	python -m src.ceres_dive $(ARGS)

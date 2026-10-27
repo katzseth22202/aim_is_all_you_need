@@ -1162,6 +1162,15 @@ class Design:
             parent's S59 item 5, a comparison: docking is not designed).
             Their pulses share one plate, collar and spring, so the pulse is
             ``sun_stack`` times the unit's.
+        sun_rate: Sun pulses a second (:data:`SUN_PULSE_RATE` headline; the
+            thick-disk train flies 1, ADR 0086).
+        sun_coupling: The Sun bowl's exhaust speed over the vendored stage
+            law's, for a disk and charge the law was not fitted to (the
+            simulation's Result 23: 0.94-1.11 at k = 20, ADR 0086).
+        sun_hold: Storable propellant the Sun ship burns to hold its track
+            and attitude against each pulse's off-centre side impulse and
+            torque, as a fraction of its Sun boost
+            (:func:`src.disk_train_aim.hold_fraction`; 0 headline).
     """
 
     k_push: float = 10.0
@@ -1194,6 +1203,9 @@ class Design:
     disk_floor: float = DISK_FLOOR
     disk_gas: float = DISK_GAS
     sun_stack: int = 1
+    sun_rate: float = SUN_PULSE_RATE
+    sun_coupling: float = 1.0
+    sun_hold: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1576,7 +1588,7 @@ def fly_unit(
     )
     # 5. The Sun: boost on the arc, disks per kg of ship, paraboloid, film.
     w_sun = route.sun_closing
-    ve_sun = law.sun_ve(design.k_sun, w_sun)
+    ve_sun = law.sun_ve(design.k_sun, w_sun) * design.sun_coupling
     boost = route.periapsis_boost / (1.0 - arc_loss(design.arc_hours, route))
     mr_sun = math.exp(boost / ve_sun)
     disks_per_ship = (1.0 - 1.0 / mr_sun) / design.k_sun
@@ -1585,7 +1597,7 @@ def fly_unit(
     # One disk a pulse; a stacked Sun ship's pulses are shared among its
     # units, so each unit carries ``1 / sun_stack`` of them, and their gas.
     stack = design.sun_stack
-    pulses = SUN_PULSE_RATE * design.arc_hours * 3600.0
+    pulses = design.sun_rate * design.arc_hours * 3600.0
     gas = design.disk_gas * pulses / stack
     ship = (departing - carrier_per_disk * gas) / (
         1.0 + carrier_per_disk * disks_per_ship + film_per_ship
@@ -1598,8 +1610,8 @@ def fly_unit(
         pulse_disk, SUN_PLATE_PULSE, SUN_PLATE_AREA, w_sun / SUN_PLATE_SPEED
     )
     sun_spring = gas_spring(
-        pulse_disk * design.k_sun * ve_sun * 1e3 * SUN_PULSE_RATE,
-        SUN_PULSE_RATE,
+        pulse_disk * design.k_sun * ve_sun * 1e3 * design.sun_rate,
+        design.sun_rate,
         stack * final,
         design,
         survival,
@@ -1613,6 +1625,10 @@ def fly_unit(
         ** (2.0 * design.shield_exponent),
         "avionics": AVIONICS_FRACTION * ship,
         "sun_mounts": CHARGE_MOUNT_FRACTION * sun_charge,
+        # Burned over the arc to hold track and attitude; charged as if
+        # carried to its end, which slightly overstates it.
+        "sun_hold": ship
+        * (1.0 - math.exp(-design.sun_hold * boost / (STORABLE_ISP * _G0))),
     }
     returned = final - sum(dead.values())
     lines.update(dead)
@@ -2009,7 +2025,12 @@ def _unit_dollars(
         "disks": prices.disk * m["disks"],
         "carrier": prices.carrier * m["carrier_dry"]
         + prices.storable
-        * (m["carrier_propellant"] + m["plate_disposal"] + m.get("disk_gas", 0.0)),
+        * (
+            m["carrier_propellant"]
+            + m["plate_disposal"]
+            + m.get("disk_gas", 0.0)
+            + m.get("sun_hold", 0.0)
+        ),
         "shield": prices.shield * m["shield"],
         "avionics": prices.avionics * m["avionics"],
         "sheets": sheet_body * m["sheets"],

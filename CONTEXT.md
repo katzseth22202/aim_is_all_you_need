@@ -1992,6 +1992,25 @@ and $1.5 at 4 R_sun ($89). The Ceres loop flies it too ($1.488 and $1.741). A 1 
 Sun plate's own rating at 9.86 R_sun.
 _Avoid_: capping the arc by hand; the optimizer holds the floor as a constraint.
 
+**Disk-train tolerance**:
+How far off centre a Sun-wave disk may arrive: centimetres, set by the bowl's 0.25 m bore, not
+the "meters" `sec:sun_wave_ranging` assumed (the simulation's Result 23, ADR 0086). With one
+clip in a thousand, each axis may carry 1.35 cm (1 kg disk) or 1.61 cm (2.5 kg on the 1.3x
+charge), and the network's 1.3 cm fills most of it. A charge as wide as its disk also loses
+the unstruck lens `2d/(pi R)`, 5.4% at the required dispersion; a 1.3x charge catches the disk
+whole to the bore (`src/disk_train_aim.py`).
+_Avoid_: quoting a metre-scale aim requirement; letting the disk's last correction fall a
+minute out while the ship's kicks go unseen (`loop_gain` 35-134: unstable).
+
+**Track hold**:
+The Sun ship cancelling each pulse's off-centre side impulse and torque with its own storable
+rockets before the next pulse, so disks need only follow the network (`Design.sun_hold`,
+`hold_fraction`, ADR 0086). It costs `sigma sqrt(pi/2) (g + 1/lever)` of the Sun boost whatever
+the pulse size or cadence: 25-42 m/s on the departure-wave ship. The ship must also know each
+kick to ~5e-5 of itself, the open requirement.
+_Avoid_: charging the request's 1-5% impulse error (123-614 m/s); the simulation's side
+impulse at the required dispersion is 0.1-0.35%.
+
 **Stacked Sun ship**:
 Several launch units' disks on one Sun ship (`Design.sun_stack`; S59 item 5, a comparison).
 It is not ledger-neutral: the plate's survival floor goes as the pulse to the 2/3 and the 1 t
