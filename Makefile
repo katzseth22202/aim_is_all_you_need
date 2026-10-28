@@ -71,7 +71,7 @@ solar-dive-best:  ## The solar dive's best long-term steady $/kg at L1: the matu
 sun-disk-floor:  ## The 1 kg Sun-disk floor at both headlines: the harder boost, the disk's cold gas, a 0.5/2 kg floor, five units a Sun ship (ADR 0085; ~1 min)
 	python -m src.solar_dive_growth --disk-floor $(ARGS)
 
-disk-train-aim:  ## Aiming the Sun-wave disk train: centimetre tolerance, ship track hold, CME drift, disk thrusters, the 1 Hz 2.5 kg train priced (ADR 0086; ~1 min, ARGS="--no-price" ~25 s)
+disk-train-aim:  ## Aiming the Sun-wave disk train: centimetre tolerance, ship track hold, CME drift, disk thrusters, the 1 Hz 2.5 kg train priced; the 1 kg disk on the 1.2x charge at 9.86 and 4 R_sun (ADR 0086, 0087; ~70 s, ARGS="--no-price" or "--no-deep")
 	python -m src.disk_train_aim $(ARGS)
 
 ceres-dive:  ## The solar dive grown at Ceres: water push law, depot rings, the steady ledger with both stream prices as fixed points, the $1 line (ADR 0083; ~15 min)

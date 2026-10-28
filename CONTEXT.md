@@ -1997,10 +1997,13 @@ How far off centre a Sun-wave disk may arrive: centimetres, set by the bowl's 0.
 the "meters" `sec:sun_wave_ranging` assumed (the simulation's Result 23, ADR 0086). With one
 clip in a thousand, each axis may carry 1.35 cm (1 kg disk) or 1.61 cm (2.5 kg on the 1.3x
 charge), and the network's 1.3 cm fills most of it. A charge as wide as its disk also loses
-the unstruck lens `2d/(pi R)`, 5.4% at the required dispersion; a 1.3x charge catches the disk
-whole to the bore (`src/disk_train_aim.py`).
+the unstruck lens `2d/(pi R)`, 5.4% at the required dispersion. The 1 kg disk flies on a 1.2x
+charge (Result 24, ADR 0087): 1.074x coupling through the same bore, whole to 4.0 cm, the
+overhang beyond charged (`struck_share`); $129.5 / $156.1 here and $85.6 / $89.1 at 4 R_sun
+(`src/disk_train_aim.py`).
 _Avoid_: quoting a metre-scale aim requirement; letting the disk's last correction fall a
-minute out while the ship's kicks go unseen (`loop_gain` 35-134: unstable).
+minute out while the ship's kicks go unseen (`loop_gain` 35-134: unstable); quoting a charge
+width the grid did not resolve (Result 23's "x1.3, 1.08x" ran at x1.25).
 
 **Track hold**:
 The Sun ship cancelling each pulse's off-centre side impulse and torque with its own storable

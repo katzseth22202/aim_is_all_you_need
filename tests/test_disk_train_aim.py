@@ -9,10 +9,14 @@ from src import solar_dive_growth as sdg
 from src.disk_train_aim import (
     CME_DENSEST_N,
     CME_TILTS,
+    DEEP_CLOSURE,
     HEADLINE,
+    HEADLINE_X12,
     PROPOSAL,
     THICK_X13,
     THIN_MATCHED,
+    THIN_X12,
+    THIN_X13,
     Disk,
     blind_miss,
     cme_drift,
@@ -26,6 +30,7 @@ from src.disk_train_aim import (
     price,
     short_loop_window,
     simulate_blind_miss,
+    struck_share,
     sunlight_pressure,
 )
 
@@ -75,6 +80,23 @@ def test_matched_charge_loses_its_lens() -> None:
     sigma = d / math.sqrt(math.pi / 2.0)
     loss = mean_coupling_loss(replace(THIN_MATCHED, lens_radius=0.19), sigma)
     assert loss == pytest.approx(0.050, abs=0.001)
+
+
+def test_overhang_reproduces_result_24s_lone_lens() -> None:
+    # thin_disk_side.csv, x1.20: caught whole at 4 cm, 0.98489 struck at 5 cm.
+    r, c = THIN_X12.disk_radius, THIN_X12.charge_radius
+    assert struck_share(0.04, r, c) == pytest.approx(0.99998, abs=2e-5)
+    assert struck_share(0.05, r, c) == pytest.approx(0.98489, rel=1e-4)
+    assert struck_share(0.0, r, c) == 1.0
+
+
+def test_the_x12_charge_keeps_its_coupling_at_the_required_dispersion() -> None:
+    # Whole to 4.0 cm against a 1.36 cm sigma: the overhang costs under 0.01%.
+    sigma = dispersion_requirement(THIN_X12)
+    assert sigma == pytest.approx(0.0136, abs=1e-4)
+    assert 0.0 < mean_coupling_loss(THIN_X12, sigma) < 1e-4
+    assert mean_coupling_loss(THIN_X13, 0.02) == 0.0
+    assert THIN_X12.coupling > THIN_X13.coupling
 
 
 def test_hold_fraction_sums_side_and_torque() -> None:
@@ -154,3 +176,14 @@ def test_the_proposal_is_priced() -> None:
     )
     assert proposal.lines[0]["pulse_disk"] == pytest.approx(2.5, rel=1e-3)
     assert proposal.optimum.dear_break_even > headline.optimum.dear_break_even
+
+
+@pytest.mark.slow
+def test_result_24s_x12_charge_is_priced_at_both_depths() -> None:
+    hold = hold_fraction(HEADLINE_X12, dispersion_requirement(THIN_X12))
+    wide = price(HEADLINE_X12, hold)
+    assert wide.optimum.dear_break_even == pytest.approx(156.1, abs=0.3)
+    deep_headline = price(HEADLINE, 0.0, offset_loss=False, closure=DEEP_CLOSURE)
+    assert deep_headline.optimum.dear_break_even == pytest.approx(88.7, abs=0.3)
+    deep = price(HEADLINE_X12, hold, closure=DEEP_CLOSURE)
+    assert deep.optimum.dear_break_even == pytest.approx(89.1, abs=0.3)

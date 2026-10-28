@@ -7,6 +7,8 @@ on the impact simulation's Result 23 (`puffsat_impact_simulation` @ `3581fbd`,
 `docs/thick_disk_answers.md`, ADR-0074 there). Reproduce with `make disk-train-aim` (~1 min,
 `ARGS="--no-price"` ~25 s). The proposed new headline, the 1 kg disk on the wider charge with
 its track hold charged, is left to the author. `HEADLINE_STARTS` is unchanged.
+**Amended by ADR 0087:** Result 24 measured the thin disk's charges; x1.3 couples 1.047x, not
+1.08x, and the best width is x1.2 at $129.5 / $156.1, not the $155 proposed here.
 
 ## Context
 

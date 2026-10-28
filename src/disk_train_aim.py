@@ -3,6 +3,9 @@
 Answers the child's thick-disk request (ADR 0086): a 2.5 kg, 1 cm, 38 cm
 graphite disk at one pulse a second, against the headline's 1 kg, 3.6 mm,
 40 cm disk at two, at the 9.86 R_sun baseline (head-on closing ~392 km/s).
+The thin disk's charges are the simulation's Result 24 (@ 1eb4115, the
+parent's S62; ADR 0087): its best charge is 1.2x its radius, and the thin
+trains are priced again at 4 R_sun, where no coupling ratio changes.
 
 The impact simulation's Result 23 (``puffsat_impact_simulation`` @ 3581fbd,
 ``docs/thick_disk_answers.md``) sets the tolerance.  A disk is caught whole
@@ -56,8 +59,12 @@ _C = 2.99792458e8  # m/s
 
 #: The closure every row flies: Parker's depth, the slowest return.
 CLOSURE = (9.86, 60.0)
-#: The simulation's 392 km/s runs were for this depth only.
+#: The CME cases below are the simulation's at this depth only.
 DIVE_SOLAR_RADII = CLOSURE[0]
+#: ADR 0085's deep closure ($85 / $89).  Result 24: the 2-D gas has no speed
+#: scale, so every coupling ratio, clearance and side slope carries to 616.6
+#: km/s unchanged.
+DEEP_CLOSURE = (4.0, 90.0)
 
 #: The Sun plate's radius, from its area: the attitude thrusters' lever arm.
 PLATE_RADIUS = math.sqrt(sdg.SUN_PLATE_AREA / math.pi)
@@ -87,7 +94,7 @@ INBOUND_ANOMALY = math.pi
 
 @dataclass(frozen=True)
 class Charge:
-    """A Sun bowl charge under a disk (the simulation's Result 23).
+    """A Sun bowl charge under a disk (the simulation's Results 23 and 24).
 
     Attributes:
         name: Label.
@@ -97,6 +104,11 @@ class Charge:
         lens_radius: The charge's radius when it is matched to the disk, so
             that an offset disk loses the lens ``2 d / (pi R)`` of itself
             (the low bracket); 0 when the disk is caught whole to the bore.
+        charge_radius: A wide charge's radius when the bore is wider still,
+            so the disk is caught whole only to ``charge_radius -
+            disk_radius`` and loses its overhang beyond (Result 24's x1.2,
+            the lone-lens bound); 0 when caught whole to the bore.
+        disk_radius: The disk's radius, with ``charge_radius``.
     """
 
     name: str
@@ -104,6 +116,8 @@ class Charge:
     clearance: float
     side_slope: float
     lens_radius: float = 0.0
+    charge_radius: float = 0.0
+    disk_radius: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -139,17 +153,40 @@ class Disk:
 
 # Result 23's side impulses are 0.4% at 6.0 cm on the matched charge, 0.8% at
 # 6.0 cm on x1.3 and 1.3% at 9.5 cm on x1.5 (thick_disk_offset.csv): odd in
-# the offset, so linear near the axis.  The thin disk's bowl is the same, so
-# its slopes are taken from the thick disk's (an assumption: Result 23 traced
-# the thick disk only).
+# the offset, so linear near the axis.
 _MATCHED_SLOPE = 0.004185855026520384 / 0.05981173018445443
 _X13_SLOPE = 0.008054976293215412 / 0.05981173018445443
 _X15_SLOPE = 0.01316158239279586 / 0.09509413490777277
 
 #: Result 23's 2.5 kg disk at 22 kg/m^2.
 _THICK_RADIUS = 0.19018826981554557
-THIN_MATCHED = Charge("matched", 1.0, BORE - 0.20, _MATCHED_SLOPE, 0.20)
-THIN_X13 = Charge("x1.3", 1.08, BORE - 0.20, _X13_SLOPE)
+#: Result 24's 1 kg disk at 8 kg/m^2.
+_THIN_RADIUS = 0.19947114020071635
+# Result 24 (thin_disk_side.csv, 0.0125 m grid): the side impulse is linear
+# in offset to 3% from 3 cm out, 0.136 per metre on any wide charge (the
+# bowl's, for both disks) and half that on the matched charge, where the
+# burst sits at the struck lens's centroid.
+_THIN_MATCHED_SLOPE = 0.07169657941112233
+_THIN_WIDE_SLOPE = 0.13574341283697652
+# Its couplings over the thin disk's matched charge, at the widths the
+# finest grid resolved (thin_disk_width.csv): x1.19 and x1.31.
+THIN_MATCHED = Charge(
+    "matched", 1.0, BORE - _THIN_RADIUS, _THIN_MATCHED_SLOPE, _THIN_RADIUS
+)
+THIN_X12 = Charge(
+    "x1.2",
+    1.0741317672617798,
+    BORE - _THIN_RADIUS,
+    _THIN_WIDE_SLOPE,
+    charge_radius=0.2393653682408596,
+    disk_radius=_THIN_RADIUS,
+)
+THIN_X13 = Charge(
+    "x1.3", 1.0466250631108969, 0.2593124822609313 - _THIN_RADIUS, _THIN_WIDE_SLOPE
+)
+#: ADR 0086's assumed x1.3: Result 23's 1.08 (a x1.25 charge, Result 24 found),
+#: a 5 cm clearance and the thick disk's slope.  Kept to show the change.
+ASSUMED_X13 = Charge("x1.3 (ADR 0086, assumed)", 1.08, BORE - 0.20, _X13_SLOPE)
 THICK_MATCHED = Charge(
     "matched", 0.94, BORE - _THICK_RADIUS, _MATCHED_SLOPE, _THICK_RADIUS
 )
@@ -157,13 +194,27 @@ THICK_X13 = Charge("x1.3", 1.11, BORE - _THICK_RADIUS, _X13_SLOPE)
 THICK_X15 = Charge("x1.5", 1.05, 0.28528240472331834 - _THICK_RADIUS, _X15_SLOPE)
 
 HEADLINE = Disk("1 kg, 2 Hz (headline)", 1.0, 2.0, 0.40, 3.6e-3, THIN_MATCHED)
+HEADLINE_X12 = replace(HEADLINE, name="1 kg, 2 Hz, x1.2 charge", charge=THIN_X12)
 HEADLINE_X13 = replace(HEADLINE, name="1 kg, 2 Hz, x1.3 charge", charge=THIN_X13)
+HEADLINE_ASSUMED = replace(
+    HEADLINE, name="1 kg, 2 Hz, x1.3 assumed (ADR 0086)", charge=ASSUMED_X13
+)
 THICK = Disk(
     "2.5 kg, 1 Hz, matched charge", 2.5, 1.0, 2.0 * _THICK_RADIUS, 0.01, THICK_MATCHED
 )
 PROPOSAL = replace(THICK, name="2.5 kg, 1 Hz, x1.3 charge (proposal)", charge=THICK_X13)
 THICK_WIDE = replace(THICK, name="2.5 kg, 1 Hz, x1.5 charge", charge=THICK_X15)
-DISKS = (HEADLINE, HEADLINE_X13, THICK, PROPOSAL, THICK_WIDE)
+DISKS = (
+    HEADLINE,
+    HEADLINE_X12,
+    HEADLINE_X13,
+    HEADLINE_ASSUMED,
+    THICK,
+    PROPOSAL,
+    THICK_WIDE,
+)
+#: The trains priced again at :data:`DEEP_CLOSURE`: the 1 kg disk's.
+DEEP_DISKS = (HEADLINE, HEADLINE_X12, HEADLINE_X13)
 
 
 # --- 1. Re-aim -------------------------------------------------------------
@@ -319,17 +370,49 @@ def dispersion_requirement(charge: Charge, clip_odds: float = CLIP_ODDS) -> floa
     return charge.clearance / math.sqrt(2.0 * math.log(1.0 / clip_odds))
 
 
-def mean_coupling_loss(charge: Charge, sigma: float) -> float:
+def struck_share(offset: float, disk_radius: float, charge_radius: float) -> float:
+    """The share of a disk's face over the charge at an offset (circle overlap).
+
+    The simulation's lone-lens bound (``thick_disk.lens_share``): the
+    overhang goes unstruck.
+    """
+    r, c, d = disk_radius, charge_radius, offset
+    if d <= c - r:
+        return 1.0
+    if d >= c + r:
+        return 0.0
+    area = (
+        r * r * math.acos((d * d + r * r - c * c) / (2.0 * d * r))
+        + c * c * math.acos((d * d + c * c - r * r) / (2.0 * d * c))
+        - 0.5 * math.sqrt((-d + r + c) * (d + r - c) * (d - r + c) * (d + r + c))
+    )
+    return area / (math.pi * r * r)
+
+
+def mean_coupling_loss(charge: Charge, sigma: float, n: int = 400) -> float:
     """Mean coupling lost to offset at a dispersion.
 
     An offset ``d`` on a matched charge leaves the lens ``2 d / (pi R)`` of
     the disk unstruck (Result 23's low bracket, the struck lens alone), and
-    ``E d = sigma sqrt(pi/2)``.  Zero on a wider charge, which catches the
+    ``E d = sigma sqrt(pi/2)``.  A wide charge inside a wider bore catches
+    the disk whole to ``charge_radius - disk_radius`` and loses the overhang
+    beyond, averaged over the 2-D Gaussian out to the bore (past it the disk
+    clips, counted in :data:`CLIP_ODDS`).  Zero on a charge that catches the
     disk whole to the bore.
     """
-    if charge.lens_radius <= 0.0:
+    if charge.lens_radius > 0.0:
+        return 2.0 * sigma * math.sqrt(math.pi / 2.0) / (math.pi * charge.lens_radius)
+    if charge.charge_radius <= 0.0:
         return 0.0
-    return 2.0 * sigma * math.sqrt(math.pi / 2.0) / (math.pi * charge.lens_radius)
+    whole = charge.charge_radius - charge.disk_radius
+    if whole >= charge.clearance:
+        return 0.0
+    r = np.linspace(whole, charge.clearance, n)
+    lost = np.array(
+        [1.0 - struck_share(x, charge.disk_radius, charge.charge_radius) for x in r]
+    )
+    pdf = r / sigma**2 * np.exp(-(r**2) / (2.0 * sigma**2))
+    return float(np.trapezoid(lost * pdf, r))
 
 
 @dataclass(frozen=True)
@@ -624,27 +707,33 @@ def flown_coupling(disk: Disk) -> float:
 
 
 def ledger_design(
-    disk: Disk, hold: float = 0.0, offset_loss: bool = True
+    disk: Disk,
+    hold: float = 0.0,
+    offset_loss: bool = True,
+    closure: Tuple[float, float] = CLOSURE,
 ) -> sdg.Design:
     """The headline design re-dialled for this disk (the optimizer's start).
 
-    ``offset_loss`` charges the matched charge's lens loss at the required
+    ``offset_loss`` charges the charge's offset loss at the required
     dispersion; False is ADR 0085's ledger, which centres every disk.
     """
+    start = sdg.HEADLINE_STARTS[closure]
     return replace(
-        sdg.HEADLINE_STARTS[CLOSURE],
+        start,
         disk_floor=disk.mass,
         sun_rate=disk.rate,
         sun_coupling=flown_coupling(disk) if offset_loss else disk.charge.coupling,
         sun_hold=hold,
-        arc_hours=sdg.HEADLINE_STARTS[CLOSURE].arc_hours / disk.mass / disk.rate * 2.0,
+        arc_hours=start.arc_hours / disk.mass / disk.rate * 2.0,
     )
 
 
-def fly_train(disk: Disk, design: sdg.Design) -> Train:
+def fly_train(
+    disk: Disk, design: sdg.Design, closure: Tuple[float, float] = CLOSURE
+) -> Train:
     """The departure-wave ship's train at a design."""
-    departure = sdg.departure_route(*CLOSURE)
-    push = sdg.push_route(*CLOSURE, sdg.PARKING_DAYS)
+    departure = sdg.departure_route(*closure)
+    push = sdg.push_route(*closure, sdg.PARKING_DAYS)
     assert departure is not None and push is not None
     lines = sdg.fly_unit(departure, push, departure, design).lines
     ve = lines["ve_sun"] * 1e3
@@ -675,25 +764,34 @@ class Priced:
         hold: ``Design.sun_hold``.
         optimum: The optimizer's answer.
         lines: Departure-wave and push-wave ships' ledgers.
+        closure: (perihelion R_sun, return excess km/s).
     """
 
     disk: Disk
     hold: float
     optimum: sdg.Optimum
     lines: Tuple[Dict[str, float], Dict[str, float]]
+    closure: Tuple[float, float] = CLOSURE
 
 
-def price(disk: Disk, hold: float, offset_loss: bool = True) -> Priced:
+def price(
+    disk: Disk,
+    hold: float,
+    offset_loss: bool = True,
+    closure: Tuple[float, float] = CLOSURE,
+) -> Priced:
     """Re-optimize the dear-seed break-even with this disk and hold."""
-    departure = sdg.departure_route(*CLOSURE)
-    push = sdg.push_route(*CLOSURE, sdg.PARKING_DAYS)
+    departure = sdg.departure_route(*closure)
+    push = sdg.push_route(*closure, sdg.PARKING_DAYS)
     assert departure is not None and push is not None
-    best = sdg.optimize_design(departure, push, ledger_design(disk, hold, offset_loss))
+    best = sdg.optimize_design(
+        departure, push, ledger_design(disk, hold, offset_loss, closure)
+    )
     lines = tuple(
         sdg.fly_unit(route, push, departure, best.design).lines
         for route in (departure, push)
     )
-    return Priced(disk, hold, best, (lines[0], lines[1]))
+    return Priced(disk, hold, best, (lines[0], lines[1]), closure)
 
 
 def headline_hold(disk: Disk) -> float:
@@ -701,11 +799,17 @@ def headline_hold(disk: Disk) -> float:
     return hold_fraction(disk, dispersion_requirement(disk.charge))
 
 
-def priced_trains() -> List[Priced]:
+def priced_trains(
+    closure: Tuple[float, float] = CLOSURE, disks: Sequence[Disk] = DISKS
+) -> List[Priced]:
     """ADR 0085's headline, then every disk with its hold charged."""
-    out = [price(HEADLINE, 0.0, offset_loss=False)]
-    out += [price(disk, headline_hold(disk)) for disk in DISKS]
+    out = [price(HEADLINE, 0.0, offset_loss=False, closure=closure)]
+    out += [price(disk, headline_hold(disk), closure=closure) for disk in disks]
     return out
+
+
+def _closure_label(closure: Tuple[float, float]) -> str:
+    return f"{closure[0]:g} R_sun, X {closure[1]:g}"
 
 
 # --- Report ------------------------------------------------------------------
@@ -715,8 +819,12 @@ def _cm(x: float) -> str:
     return f"{100.0 * x:.2f}"
 
 
-def aim_report(trains: Sequence[Train]) -> str:
-    """Items 1-4 for each train, without the optimizer."""
+def aim_report(trains: Sequence[Train], closure: Tuple[float, float] = CLOSURE) -> str:
+    """Items 1-4 for each train, without the optimizer.
+
+    Drift, the budget against a CME and the thrusters use the simulation's
+    CME cases at 9.86 R_sun, so they print at :data:`CLOSURE` only.
+    """
     out: List[str] = []
     rows = []
     for t in trains:
@@ -731,7 +839,7 @@ def aim_report(trains: Sequence[Train]) -> str:
                 f"{t.sweep_deg:.1f}",
             ]
         )
-    out.append("The trains (departure-wave ship, 9.86 R_sun, X 60)")
+    out.append(f"The trains (departure-wave ship, {_closure_label(closure)})")
     out.append(
         tabulate(
             rows,
@@ -814,6 +922,9 @@ def aim_report(trains: Sequence[Train]) -> str:
             ],
         )
     )
+
+    if closure != CLOSURE:
+        return "\n".join(out)
 
     out.append("\n3. Drift at 9.86 R_sun over a 2.5 h passage (dv m/s / drift m)")
     rows = []
@@ -946,7 +1057,8 @@ def price_report(priced: Sequence[Priced]) -> str:
                 f"{p.optimum.valuation.break_even:.1f} / {p.optimum.dear_break_even:.1f}",
             ]
         )
-    return "Priced (9.86 R_sun, X 60, re-optimized for the dear seed)\n" + tabulate(
+    label = _closure_label(priced[0].closure) if priced else ""
+    return f"Priced ({label}, re-optimized for the dear seed)\n" + tabulate(
         rows,
         [
             "disk",
@@ -965,19 +1077,27 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """Print the report; ``--no-price`` skips the optimizer (~25 s of ~1 min)."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--no-price", action="store_true")
+    parser.add_argument(
+        "--no-deep", action="store_true", help="skip the 4 R_sun restatement"
+    )
     args = parser.parse_args(argv)
-    trains = []
-    for disk in DISKS:
-        design = ledger_design(disk)
-        departure = sdg.departure_route(*CLOSURE)
-        push = sdg.push_route(*CLOSURE, sdg.PARKING_DAYS)
+    runs: List[Tuple[Tuple[float, float], Sequence[Disk]]] = [(CLOSURE, DISKS)]
+    if not args.no_deep:
+        runs.append((DEEP_CLOSURE, DEEP_DISKS))
+    for closure, disks in runs:
+        departure = sdg.departure_route(*closure)
+        push = sdg.push_route(*closure, sdg.PARKING_DAYS)
         assert departure is not None and push is not None
-        design = replace(design, arc_hours=sdg.floor_arc(departure, push, design))
-        trains.append(fly_train(disk, design))
-    print(aim_report(trains))
-    if not args.no_price:
+        trains = []
+        for disk in disks:
+            design = ledger_design(disk, closure=closure)
+            design = replace(design, arc_hours=sdg.floor_arc(departure, push, design))
+            trains.append(fly_train(disk, design, closure))
+        print(aim_report(trains, closure))
+        if not args.no_price:
+            print()
+            print(price_report(priced_trains(closure, disks)))
         print()
-        print(price_report(priced_trains()))
 
 
 if __name__ == "__main__":
