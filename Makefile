@@ -1,4 +1,4 @@
-.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best sun-disk-floor disk-train-aim ceres-dive ceres-energy plate-disposal plate-jupiter-loop iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
+.PHONY: help install clean test test-changed test-slow test-all mypy format check-format run nozzle resonance resonance-impulse orbit-turn fly-park jovian-dive dive-depth split-dive opposing-stream shallow-dive sep-split sep-split-10d dsm-bound two-wave two-leg bag-state nozzle-geom cruise-thermal plume-state bag-converge chamber-departure growth-ledger seed-cost seed-sep-tug seed-loop seed-battery-tug light-plate-push departure-levers departure-levers-centred departure-visibility split-by-role impact-angle powered-resonance seed-harvest growth-cost hardware-recovery slush-hydrogen wall-cushion plate-slug plate-designs plate-designs-cost plate-grid plate-cost plate-seed plate-film lob-brake survivable-chamber survivable-ledger survivable-cost survivable-paper-grid carbon-equilibrium solar-dive solar-dive-best sun-disk-floor disk-train-aim ceres-dive ceres-energy plate-disposal plate-jupiter-loop methalox-loop small-seed iapetus-cycle saturn-legs saturn-methalox saturn-aerocapture all export-env
 
 help:  ## Show this help message
 	@echo "Available commands:"
@@ -97,6 +97,12 @@ plate-disposal:  ## The left push plate's disposal nudge flown with the Moon, by
 
 plate-jupiter-loop:  ## The Jupiter-only chain on the solar dive's plates, no Sun dive (ADR 0075; ~10 min, ARGS="--family" adds the return family)
 	python -m src.plate_jupiter_loop $(ARGS)
+
+methalox-loop:  ## Milestone 1: the Jupiter-only plate loop leaving Earth on Raptor 3s, and slower departures (ADR 0088; ~1 min, ARGS="--no-slow" skips the sweep)
+	python -m src.methalox_jupiter_loop $(ARGS)
+
+small-seed:  ## The headline seed's tonnage and a 1- or 2-Starship seed at both closures (ADR 0088; ~1 min)
+	python -m src.small_seed $(ARGS)
 
 carbon-equilibrium:  ## B' of graphite in hot hydrogen: the carbon a pitch coat loses to the gas (companion reply 2026-10-04)
 	python -m src.carbon_hydrogen_equilibrium

@@ -782,6 +782,43 @@ def methalox_departure(
     )
 
 
+def best_methalox_departure(
+    stack: u.Quantity, burn: u.Quantity, loss_model: LossModel = steered_loss
+) -> MethaloxDeparture:
+    """:func:`methalox_departure` at the engine count that delivers the most.
+
+    Counts whose burn runs past the loss table are skipped; the search stops
+    two counts past the best.
+
+    Args:
+        stack: Stack at ignition.
+        burn: Impulsive burn needed.
+        loss_model: Finite-burn loss.
+
+    Returns:
+        The departure.
+
+    Raises:
+        RuntimeError: If no engine count converges.
+    """
+    best: Optional[MethaloxDeparture] = None
+    falls = 0
+    for engines in range(1, _MAX_ENGINES + 1):
+        try:
+            flown = methalox_departure(stack, burn, engines, loss_model)
+        except ValueError:
+            continue
+        if best is None or flown.delivered_net > best.delivered_net:
+            best, falls = flown, 0
+        else:
+            falls += 1
+            if falls == 2:
+                break
+    if best is None:
+        raise RuntimeError("no engine count converged")
+    return best
+
+
 @dataclass(frozen=True)
 class MethaloxCycle:
     """One launch unit through a cycle with the methalox incumbent departing.
@@ -851,21 +888,7 @@ def price_methalox_cycle(
         cycle.onward_burn * u.km / u.s, DEPARTURE_ALTITUDE, parking_period(cycle)
     )
     model = loss_model or _orbit_loss(steered_loss, parking_period(cycle))
-    best: Optional[MethaloxDeparture] = None
-    falls = 0
-    for engines in range(1, _MAX_ENGINES + 1):
-        try:
-            flown = methalox_departure(stack, burn.burn, engines, model)
-        except ValueError:
-            continue
-        if best is None or flown.delivered_net > best.delivered_net:
-            best, falls = flown, 0
-        else:
-            falls += 1
-            if falls == 2:
-                break
-    if best is None:
-        raise RuntimeError("no engine count converged")
+    best = best_methalox_departure(stack, burn.burn, model)
     puffsats = (push.puffsat_fraction * LAUNCH_UNIT).to(u.t)
     batch = puffsats / float(np.exp(-cycle.nozzle_wave_dsm / VE_METHALOX))
     growth = best.delivered_net * float((stack / batch).to_value(u.one))

@@ -1171,6 +1171,11 @@ class Design:
             and attitude against each pulse's off-centre side impulse and
             torque, as a fraction of its Sun boost
             (:func:`src.disk_train_aim.hold_fraction`; 0 headline).
+        unit_mass: Kilograms the booster lofts per unit (:data:`LAUNCH_UNIT`
+            headline).  A smaller unit is a seed's first generations below
+            one launch unit (the parent's S29, :mod:`src.small_seed`): its
+            push, plates and disks are sized from it, while the fixed masses
+            (collars, engines) and the disk floor are not.
     """
 
     k_push: float = 10.0
@@ -1206,6 +1211,7 @@ class Design:
     sun_rate: float = SUN_PULSE_RATE
     sun_coupling: float = 1.0
     sun_hold: float = 0.0
+    unit_mass: float = LAUNCH_UNIT
 
 
 @dataclass(frozen=True)
@@ -1372,6 +1378,131 @@ class EarthLeg:
 BurnLoss = Callable[[float, float], float]
 
 
+@dataclass(frozen=True)
+class PushLeg:
+    """A launch unit pushed at 400 km and turned at apoapsis, kilograms.
+
+    Attributes:
+        stack: The stack at the departure's ignition.
+        pushed: The unit left on the parking orbit by the push.
+        charge: Push charge burned.
+        sheets: Growth-wave sheets the push spends.
+        impulse: The push's impulse (N s).
+        force: Its thrust (N).
+        push_spring: The push plate's gas spring.
+        lines: The push's and the turn's mass lines and speeds.
+    """
+
+    stack: float
+    pushed: float
+    charge: float
+    sheets: float
+    impulse: float
+    force: float
+    push_spring: "GasSpring"
+    lines: Dict[str, float]
+
+
+def push_and_turn(
+    push_stream: float,
+    push_axis_deg: float,
+    thrust_axis_deg: float,
+    days: float,
+    design: Design,
+    law: StageLaws,
+) -> PushLeg:
+    """The 400 km push and the apoapsis turn onto ``thrust_axis_deg``.
+
+    The first half of :func:`fly_earth`, shared with the methalox departure
+    of :mod:`src.methalox_jupiter_loop`.  As one shared assembly the push
+    plate rides on (``push_plate`` is 0 here); as two it is nudged down and
+    left at apoapsis.
+
+    Args:
+        push_stream: The growth wave's speed at 400 km (km/s).
+        push_axis_deg: The direction it travels, in the departure's plane.
+        thrust_axis_deg: The departure's periapsis thrust direction (deg).
+        days: The parking orbit's period: the growth-to-departure gap.
+        design: The knobs.
+        law: The stage laws.
+
+    Returns:
+        The leg.
+    """
+    lines: Dict[str, float] = {}
+    # 1. The overtake push at 400 km, from rest to the parking orbit, on the
+    # skirted 9.5 m plate.  Its thrust is set on the unit at the start; the
+    # lob climbs fast enough to keep the unit above 400 km until it is
+    # orbital (push_climb), charged as the booster's lost lofted mass.
+    ve_push = (
+        law.push_ve(
+            design.k_push,
+            push_stream,
+            sheet_material(push_stream, design.kapton_limit),
+            design.push_law,
+        )
+        * PUSH_SKIRT_SHARE
+    )
+    push_dv = periapsis_speed(days, PUSH_ALTITUDE)
+    mr_push = math.exp(push_dv / ve_push)
+    lofted = design.unit_mass
+    pushed = lofted / mr_push
+    push_charge = lofted - pushed
+    push_sheets = push_charge / design.k_push
+    push_impulse = push_charge * ve_push * 1e3
+    push_force = design.push_g * 9.80665 * lofted
+    push_pulse = push_force / design.push_rate
+    push_spring = gas_spring(push_force, design.push_rate, pushed, design)
+    # Two springs: the push plate and its bags are left behind.  One shared
+    # assembly: they ride on through the departure as the bowl (below).
+    push_plate = 0.0 if design.shared_spring else push_spring.plate + push_spring.bag
+    rise = push_climb(design.push_g, push_dv) if design.charge_lob_climb else 1.1
+    # 2. Apoapsis: nudge the push plate's perigee down and leave it (the
+    # parent's S39 item 5), raise periapsis and turn the orbit onto the
+    # departure's thrust axis (methalox).
+    disposal_dv = plate_disposal_dv(days)
+    disposal = push_plate * (math.exp(disposal_dv / (STORABLE_ISP * _G0)) - 1.0)
+    rotation = abs(math.degrees(wrap_pi(math.radians(push_axis_deg - thrust_axis_deg))))
+    methalox_dv = apoapsis_methalox(rotation, days)
+    kept = pushed - push_plate - disposal
+    stack = kept * math.exp(-methalox_dv / VE_METHALOX)
+    lines["methalox"] = kept - stack
+    lines["apoapsis_engine"] = APOAPSIS_ENGINE if design.apoapsis_stage else 0.0
+    lines["apoapsis_tanks"] = (
+        APOAPSIS_TANK_FRACTION * lines["methalox"] if design.apoapsis_stage else 0.0
+    )
+    stack -= lines["apoapsis_engine"] + lines["apoapsis_tanks"]
+    lines.update(
+        lofted=lofted,
+        push_plate=push_plate,
+        push_bag=push_spring.bag,
+        push_stroke=push_spring.stroke,
+        push_swing=push_spring.swing_speed,
+        spring_peak=push_spring.peak_ratio,
+        push_peak_g=push_spring.peak_g,
+        plate_disposal=disposal,
+        plate_disposal_dv=disposal_dv,
+        push_charge=push_charge,
+        push_pulse=push_pulse,
+        push_stream=push_stream,
+        lob_rise=rise,
+        lob_climb=lob_climb_factor(rise),
+        mr_push=mr_push,
+        ve_push=ve_push,
+        methalox_dv=methalox_dv,
+    )
+    return PushLeg(
+        stack,
+        pushed,
+        push_charge,
+        push_sheets,
+        push_impulse,
+        push_force,
+        push_spring,
+        lines,
+    )
+
+
 def fly_earth(
     push_stream: float,
     push_axis_deg: float,
@@ -1404,50 +1535,13 @@ def fly_earth(
     Returns:
         The leg.
     """
-    lines: Dict[str, float] = {}
-    # 1. The overtake push at 400 km, from rest to the parking orbit, on the
-    # skirted 9.5 m plate.  Its thrust is set on the unit at the start; the
-    # lob climbs fast enough to keep the unit above 400 km until it is
-    # orbital (push_climb), charged as the booster's lost lofted mass.
-    ve_push = (
-        law.push_ve(
-            design.k_push,
-            push_stream,
-            sheet_material(push_stream, design.kapton_limit),
-            design.push_law,
-        )
-        * PUSH_SKIRT_SHARE
+    leg = push_and_turn(
+        push_stream, push_axis_deg, geometry.thrust_axis_deg, days, design, law
     )
-    push_dv = periapsis_speed(days, PUSH_ALTITUDE)
-    mr_push = math.exp(push_dv / ve_push)
-    pushed = LAUNCH_UNIT / mr_push
-    push_charge = LAUNCH_UNIT - pushed
-    push_sheets = push_charge / design.k_push
-    push_impulse = push_charge * ve_push * 1e3
-    push_force = design.push_g * 9.80665 * LAUNCH_UNIT
-    push_pulse = push_force / design.push_rate
-    push_spring = gas_spring(push_force, design.push_rate, pushed, design)
-    # Two springs: the push plate and its bags are left behind.  One shared
-    # assembly: they ride on through the departure as the bowl (below).
-    push_plate = 0.0 if design.shared_spring else push_spring.plate + push_spring.bag
-    rise = push_climb(design.push_g, push_dv) if design.charge_lob_climb else 1.1
-    # 2. Apoapsis: nudge the push plate's perigee down and leave it (the
-    # parent's S39 item 5), raise periapsis and turn the orbit onto the
-    # visible sign's thrust axis (methalox).
-    disposal_dv = plate_disposal_dv(days)
-    disposal = push_plate * (math.exp(disposal_dv / (STORABLE_ISP * _G0)) - 1.0)
-    rotation = abs(
-        math.degrees(wrap_pi(math.radians(push_axis_deg - geometry.thrust_axis_deg)))
-    )
-    methalox_dv = apoapsis_methalox(rotation, days)
-    kept = pushed - push_plate - disposal
-    stack = kept * math.exp(-methalox_dv / VE_METHALOX)
-    lines["methalox"] = kept - stack
-    lines["apoapsis_engine"] = APOAPSIS_ENGINE if design.apoapsis_stage else 0.0
-    lines["apoapsis_tanks"] = (
-        APOAPSIS_TANK_FRACTION * lines["methalox"] if design.apoapsis_stage else 0.0
-    )
-    stack -= lines["apoapsis_engine"] + lines["apoapsis_tanks"]
+    lines = dict(leg.lines)
+    stack, pushed, push_spring = leg.stack, leg.pushed, leg.push_spring
+    push_force, push_charge, push_impulse = leg.force, leg.charge, leg.impulse
+    push_sheets = leg.sheets
     # 3. The departure on the bowl.  Its mean acceleration sets the burn's
     # length, and that finite burn, its thrust held in one direction (the
     # hole slides as the stream turns), loses Oberth at the periapsis.
@@ -1496,37 +1590,27 @@ def fly_earth(
     film_earth = FILM_PER_IMPULSE * (push_impulse + departure_impulse)
     divert = bowl * (math.exp(PLATE_DIVERT / (STORABLE_ISP * _G0)) - 1.0)
     mounts_earth = CHARGE_MOUNT_FRACTION * (push_charge + departure_charge)
+    # A shared assembly re-solves the push's spring on the heavier plate.
     lines.update(
-        push_plate=push_plate,
         push_bag=push_spring.bag,
         push_stroke=push_spring.stroke,
         push_swing=push_spring.swing_speed,
+        spring_peak=push_spring.peak_ratio,
+        push_peak_g=push_spring.peak_g,
         bowl_floor=floor,
         bowl_bag=bags,
         bowl_stroke=bowl_spring.stroke,
-        spring_peak=push_spring.peak_ratio,
-        push_peak_g=push_spring.peak_g,
         departure_peak_g=bowl_spring.peak_g,
-        plate_disposal=disposal,
-        plate_disposal_dv=disposal_dv,
         bowl=bowl,
-        push_charge=push_charge,
         departure_charge=departure_charge,
         film_earth=film_earth,
         plate_divert=divert,
         earth_mounts=mounts_earth,
-        push_pulse=push_pulse,
         departure_pulse=departure_pulse,
         impact_angle=geometry.impact_angle_deg,
         departure_closing=geometry.closing,
-        push_stream=push_stream,
-        lob_rise=rise,
-        lob_climb=lob_climb_factor(rise),
-        mr_push=mr_push,
         mr_earth=mr_earth,
-        ve_push=ve_push,
         ve_earth=ve_earth,
-        methalox_dv=methalox_dv,
         departure_dv=dv,
     )
     # The film and mounts ride up and are spent through the push and the
@@ -1787,9 +1871,9 @@ class SolarDivePrices:
             already lowers its perigee to 100 km) is not charged.
         delivery_plate_uses: The same for the L1 delivery plate and its bags;
             its trip back from L1 is not charged.
-        raptor: Per apoapsis-stage engine, expended with its unit
-            (growth_cost.ESTIMATE's Raptor 3; charged only when
-            ``Design.apoapsis_stage``).
+        raptor: Per Raptor 3, expended with its unit (growth_cost.ESTIMATE):
+            the apoapsis stage's, charged only when ``Design.apoapsis_stage``,
+            and a methalox departure's (:mod:`src.methalox_jupiter_loop`).
         tanks: Per kilogram of expended tank (growth_cost.ESTIMATE).
         operations: Ground handling and operations per lob, growth or
             delivery (0 headline: unpriced; the best-case report quotes it
@@ -1952,11 +2036,14 @@ class Valuation:
         steady_lines: The same by line.
         break_even: The L1 price that repays the seed and growth.
         seed_per_fleet_kg: Seed dollars per kilogram of sheets at the harvest.
-        fleet_multiple: Sheets at the harvest per seed sheet.
+        fleet_multiple: Sheets at the harvest per sheet a one-unit seed
+            returns.
         steady_lofted: Kilograms lofted per kilogram at the target in the
             steady state, by what they are (:func:`delivery_lofted`, plus
             ``growth_lob``, the reinvested growth units' lobs); empty where
             not tallied.
+        seed_mass: The seed's departing ships (kg); 0 where not recorded.
+        seed_outlay: Its launch and contents (dollars); 0 where not recorded.
     """
 
     growth: float
@@ -1967,6 +2054,8 @@ class Valuation:
     seed_per_fleet_kg: float
     fleet_multiple: float
     steady_lofted: Dict[str, float] = field(default_factory=dict)
+    seed_mass: float = 0.0
+    seed_outlay: float = 0.0
 
 
 def _unit_dollars(
@@ -1994,7 +2083,7 @@ def _unit_dollars(
     packages[0] += count
     built = 1.0 / prices.push_plate_uses
     lines = {
-        "lob": lob * m["lob_climb"] * LAUNCH_UNIT,
+        "lob": lob * m["lob_climb"] * m.get("lofted", LAUNCH_UNIT),
         "push_plate": (
             earth_curve.batch_cost(plates["push"], built) * m["push_plate"]
             if lob
@@ -2013,6 +2102,10 @@ def _unit_dollars(
             prices.raptor * (m["apoapsis_engine"] > 0.0)
             + prices.tanks * m["apoapsis_tanks"]
         ),
+        # A Raptor departure's engines and tanks, expended with the unit
+        # (src.methalox_jupiter_loop); none on a bowl departure.
+        "departure_stage": prices.raptor * m.get("departure_engines", 0.0)
+        + prices.tanks * m.get("departure_tanks", 0.0),
         "operations": prices.operations if lob else 0.0,
         "polyethylene": prices.polyethylene * m["sun_charge"]
         + (
@@ -2161,6 +2254,39 @@ def delivery_lofted(delivery: DeliveryUnit) -> Dict[str, float]:
     }
 
 
+def sub_unit(
+    departure: DiveRoute,
+    push: DiveRoute,
+    design: Design,
+    units: float,
+    laws: Optional[StageLaws] = None,
+) -> Tuple[UnitLedger, UnitLedger]:
+    """Push-wave and departure-wave ledgers for one unit ``units`` the size.
+
+    The parent's S29: the unit is lofted at ``units * LAUNCH_UNIT``, so its
+    push, plates and disks shrink with it.  Its pulses would carry less than
+    the disk floor, so the Sun arc is shortened onto it (:func:`floor_arc`):
+    fewer, heavier pulses on the smaller ship.
+
+    Args:
+        departure: The departure-wave route.
+        push: The push-wave route.
+        design: The full-size design.
+        units: The unit's size in launch units.
+        laws: The stage laws; the vendored tables by default.
+
+    Returns:
+        The push-wave ship's ledger and the departure-wave ship's.
+    """
+    d = replace(design, unit_mass=units * LAUNCH_UNIT)
+    if d.disk_floor > 0.0 and pulse_disks(departure, push, d) < d.disk_floor:
+        d = replace(d, arc_hours=floor_arc(departure, push, d))
+    return (
+        fly_unit(push, push, departure, d, laws),
+        fly_unit(departure, push, departure, d, laws),
+    )
+
+
 def value_design(
     departure: DiveRoute,
     push: DiveRoute,
@@ -2171,6 +2297,7 @@ def value_design(
     rate: float = 0.10,
     gates: Optional[Tuple[Gate, ...]] = None,
     growth_synodic: int = GROWTH_SYNODIC,
+    seed_units: float = 1.0,
 ) -> Valuation:
     """Grow from a seed for ``growth_synodic`` synodic periods, then hold level.
 
@@ -2184,6 +2311,12 @@ def value_design(
     ``price x cargo - cost`` and the break-even is the ratio of the two
     present values: no root-finding.
 
+    A seed smaller than one launch unit (``seed_units`` < 1, the parent's
+    S29) flies one smaller unit (:func:`sub_unit`), and so does every
+    generation until the returning sheets fill a whole one.  Attrition
+    learns from the sheets caught, so a small seed keeps the first miss rate
+    until it has caught one whole unit's return.
+
     Args:
         departure: The departure-wave route.
         push: The push-wave route.
@@ -2194,6 +2327,7 @@ def value_design(
         rate: Annual time value of money.
         gates: Milestones; the cycle's own by default.
         growth_synodic: Synodic periods of growth before the first delivery.
+        seed_units: The seed's size in launch units (1 headline).
 
     Returns:
         The valuation.
@@ -2221,10 +2355,20 @@ def value_design(
 
     plates = {"push": 0.0, "bowl": 0.0, "sun": 0.0}
     packages = [0.0]
-    s = steady.push_share
-    seed_mass = s * p_unit.lines["departing"] + (1 - s) * d_unit.lines["departing"]
+    small = seed_units < 1.0
+    seed_p, seed_d = (
+        sub_unit(departure, push, design, seed_units, laws)
+        if small
+        else (p_unit, d_unit)
+    )
+    s = (
+        balance(seed_p, seed_d, 1.0 - MISS_FLOOR).push_share
+        if small
+        else steady.push_share
+    )
+    seed_mass = s * seed_p.lines["departing"] + (1 - s) * seed_d.lines["departing"]
     seed_contents = 0.0
-    for unit, share, body in ((p_unit, s, bodies[0]), (d_unit, 1 - s, bodies[1])):
+    for unit, share, body in ((seed_p, s, bodies[0]), (seed_d, 1 - s, bodies[1])):
         lines = _unit_dollars(unit, prices, plates, packages, guidance, 0.0, body)
         seed_contents += share * sum(lines.values())
     seed_outlay = seed_price * seed_mass + seed_contents
@@ -2233,7 +2377,11 @@ def value_design(
     per_unit = s * p_unit.returned + (1 - s) * d_unit.returned
     if per_unit <= 0.0:
         raise ValueError("the launch unit returns no sheets")
-    units, cumulative, fleet = 1.0, 0.0, 0.0
+    # A sub-unit generation's own return (kg), or None once units are whole.
+    small_return: Optional[float] = (
+        s * seed_p.returned + (1 - s) * seed_d.returned if small else None
+    )
+    units, cumulative, fleet = (seed_units if small else 1.0), 0.0, 0.0
     tally: Dict[str, float] = {}
     tally_cargo = 0.0
     tally_units = 0.0
@@ -2242,7 +2390,7 @@ def value_design(
         years = n * cycle_years - gap_years
         if years > HORIZON_YEARS:
             break
-        returned = units * per_unit
+        returned = units * per_unit if small_return is None else small_return
         cumulative += returned
         arrives = 1.0 - miss_fraction(cumulative, per_unit)
         growth = balance(p_unit, d_unit, arrives)
@@ -2251,18 +2399,34 @@ def value_design(
         if n == harvest:
             fleet = caught
         new_units = units * (min(growth.growth, 1.0) if harvesting else growth.growth)
+        if small_return is not None:
+            new_units = caught / growth.sheets_per_unit
+        flown, count = (p_unit, d_unit), new_units
+        small_return = None
+        if new_units < 1.0 and not harvesting:
+            # One smaller unit, sized so its push and departure spend the
+            # sheets caught (fixed point: the sheets go nearly as its size).
+            for _ in range(3):
+                flown = sub_unit(departure, push, design, new_units, laws)
+                sized = balance(*flown, arrives)
+                new_units *= caught / sized.sheets_per_unit
+            growth, count = sized, 1.0
+            small_return = (
+                sized.push_share * flown[0].returned
+                + (1 - sized.push_share) * flown[1].returned
+            )
         surplus = (
             max(caught - new_units * growth.sheets_per_unit, 0.0) if harvesting else 0.0
         )
         cost: Dict[str, float] = {}
         for unit, share, body in (
-            (p_unit, growth.push_share, bodies[0]),
-            (d_unit, 1 - growth.push_share, bodies[1]),
+            (flown[0], growth.push_share, bodies[0]),
+            (flown[1], 1 - growth.push_share, bodies[1]),
         ):
             for key, value in _unit_dollars(
                 unit, prices, plates, packages, guidance, lob, body
             ).items():
-                cost[key] = cost.get(key, 0.0) + share * value * new_units
+                cost[key] = cost.get(key, 0.0) + share * value * count
         deliveries = surplus / delivery.sheets
         cost.update(delivery_dollars(delivery, deliveries, prices, plates, lob))
         cargo = deliveries * delivery.cargo
@@ -2295,6 +2459,8 @@ def value_design(
             if tally_cargo
             else {}
         ),
+        seed_mass=seed_mass,
+        seed_outlay=seed_outlay,
     )
 
 

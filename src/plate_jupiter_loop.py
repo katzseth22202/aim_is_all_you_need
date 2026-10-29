@@ -29,7 +29,7 @@ import argparse
 import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from astropy import units as u
@@ -302,16 +302,28 @@ def fly_carrier(
     return UnitLedger(earth.push_sheets, earth.departure_sheets, returned, 0.0, lines)
 
 
-def window_growth(
-    window: LoopWindow, design: Design, arrives: float = 1.0 - MISS_FLOOR
-) -> CycleGrowth:
-    """The window's growth, split by role (ADR 0069, 0071)."""
-    law = StageLaws.load(bonds=design.bonds)
-    return balance(
+#: A window's two flown unit types, ``(window, design, law) -> (growth, rods)``.
+Fly = Callable[[LoopWindow, Design, StageLaws], Tuple[UnitLedger, UnitLedger]]
+
+
+def bowl_pair(
+    window: LoopWindow, design: Design, law: StageLaws
+) -> Tuple[UnitLedger, UnitLedger]:
+    """The growth and rod carriers departed on the bowl (ADR 0075)."""
+    return (
         fly_carrier(window, window.growth, design, law),
         fly_carrier(window, window.rods, design, law),
-        arrives,
     )
+
+
+def window_growth(
+    window: LoopWindow,
+    design: Design,
+    arrives: float = 1.0 - MISS_FLOOR,
+    fly: Fly = bowl_pair,
+) -> CycleGrowth:
+    """The window's growth, split by role (ADR 0069, 0071)."""
+    return balance(*fly(window, design, StageLaws.load(bonds=design.bonds)), arrives)
 
 
 @dataclass(frozen=True)
@@ -337,9 +349,11 @@ _THREE_SYNODIC_YEARS = (
 )
 
 
-def chain_rate(windows: Sequence[LoopWindow], design: Design) -> ChainRate:
+def chain_rate(
+    windows: Sequence[LoopWindow], design: Design, fly: Fly = bowl_pair
+) -> ChainRate:
     """Growth over the chain at the floor miss rate."""
-    growths = tuple(window_growth(w, design).growth for w in windows)
+    growths = tuple(window_growth(w, design, fly=fly).growth for w in windows)
     if min(growths) <= 0.0:
         return ChainRate(-math.inf, math.inf, 0.0, growths)
     rate = sum(math.log(g) for g in growths) / sum(w.period_years for w in windows)
@@ -386,6 +400,7 @@ def value_chain(
     gates: Optional[Tuple[Gate, ...]] = None,
     growth_synodic: int = GROWTH_SYNODIC,
     delay_years: float = 0.0,
+    fly: Fly = bowl_pair,
 ) -> Valuation:
     """Grow from a seed for ``growth_synodic`` synodic periods, then hold level.
 
@@ -396,7 +411,9 @@ def value_chain(
     Its return is window 0's arrival; units pushed by window ``k``'s waves
     return at window ``k + 1``'s end; the chain repeats past its stored
     horizon.  ``delay_years`` shifts every
-    flow after the seed's outlay (a seed route that arrives later).
+    flow after the seed's outlay (a seed route that arrives later).  ``fly``
+    flies each window's two unit types (the bowl's by default; milestone 1's
+    methalox departure in :mod:`src.methalox_jupiter_loop`).
 
     From the harvest on, the fleet is held at its harvest size: a window that
     grows less than 1x shrinks it, and the next windows rebuild it before any
@@ -411,13 +428,7 @@ def value_chain(
     """
     laws = StageLaws.load(bonds=design.bonds)
     schedule = GatedSchedule(rate, loop_gates(windows[0]) if gates is None else gates)
-    units = [
-        (
-            fly_carrier(w, w.growth, design, laws),
-            fly_carrier(w, w.rods, design, laws),
-        )
-        for w in windows
-    ]
+    units = [fly(w, design, laws) for w in windows]
     n_windows = len(windows)
     lob = prices.lob * prices.lob_climb
     gap_years = PARKING_DAYS / 365.25
@@ -501,7 +512,7 @@ def value_chain(
         if tally_cargo
         else {}
     )
-    chain = chain_rate(windows, design)
+    chain = chain_rate(windows, design, fly)
     return Valuation(
         growth=chain.per_three_synodic,
         doubling=chain.doubling,
@@ -510,6 +521,8 @@ def value_chain(
         break_even=pv_cost / pv_cargo if pv_cargo > 0 else None,
         seed_per_fleet_kg=seed_outlay / fleet if fleet > 0 else math.inf,
         fleet_multiple=fleet / first_return if first_return > 0 else 0.0,
+        seed_mass=seed_mass,
+        seed_outlay=seed_outlay,
     )
 
 
@@ -534,32 +547,45 @@ def optimize_loop(
     prices: SolarDivePrices = ESTIMATE,
     seed_factor: float = 1.0,
     delay_years: float = 0.0,
+    fly: Fly = bowl_pair,
+    knobs: Sequence[str] = _KNOBS,
+    gates: Optional[Tuple[Gate, ...]] = None,
 ) -> LoopOptimum:
     """Choose the push, departure and delivery slug ratios for the dear break-even.
 
     Nelder-Mead in log space inside :data:`_BOUNDS`, as
     :func:`src.solar_dive_growth.optimize_design` does.  ``seed_factor``
-    scales both seed prices (a seed route's ratio, item 4).
+    scales both seed prices (a seed route's ratio, item 4); ``fly``,
+    ``knobs`` and ``gates`` let another departure reuse the search.
     """
     low, high = (seed_factor * seed_price(windows[0], d) for d in (False, True))
-    lows = np.log([_BOUNDS[k][0] for k in _KNOBS])
-    highs = np.log([_BOUNDS[k][1] for k in _KNOBS])
+    lows = np.log([_BOUNDS[k][0] for k in knobs])
+    highs = np.log([_BOUNDS[k][1] for k in knobs])
+
+    def value(design: Design, seed: float) -> Valuation:
+        return value_chain(
+            windows,
+            design,
+            prices,
+            seed,
+            gates=gates,
+            delay_years=delay_years,
+            fly=fly,
+        )
 
     def design_at(x: np.ndarray) -> Design:
         clipped = np.exp(np.clip(x, lows, highs))
-        return replace(start, **dict(zip(_KNOBS, (float(v) for v in clipped))))  # type: ignore[arg-type]
+        return replace(start, **dict(zip(knobs, (float(v) for v in clipped))))  # type: ignore[arg-type]
 
     def score(x: np.ndarray) -> float:
         penalty = float(np.sum(np.maximum(x - highs, 0.0) + np.maximum(lows - x, 0.0)))
         try:
-            v = value_chain(
-                windows, design_at(x), prices, high, delay_years=delay_years
-            )
+            v = value(design_at(x), high)
         except ValueError:
             return 1e6
         return (v.break_even or 1e5) * (1.0 + penalty)
 
-    x0 = np.log([getattr(start, k) for k in _KNOBS])
+    x0 = np.log([getattr(start, k) for k in knobs])
     result = minimize(
         score,
         x0,
@@ -567,9 +593,7 @@ def optimize_loop(
         options={"xatol": 1e-3, "fatol": 1e-3, "maxiter": 400},
     )
     best = design_at(result.x)
-    cheap = value_chain(windows, best, prices, low, delay_years=delay_years)
-    dear = value_chain(windows, best, prices, high, delay_years=delay_years)
-    return LoopOptimum(best, cheap, dear.break_even)
+    return LoopOptimum(best, value(best, low), value(best, high).break_even)
 
 
 # --------------------------------------------------------------------------

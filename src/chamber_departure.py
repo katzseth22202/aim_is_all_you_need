@@ -342,7 +342,8 @@ def role_growth(
         x O_g a_g = g P
         (1 - x) O_n a_n = g (x R_g + (1 - x) R_n)
 
-    With equal burns this is :func:`src.chamber_departure.growth_per_cycle`.
+    With equal burns this is :func:`src.chamber_departure.growth_per_cycle`;
+    with no rods spent at all, ``x = 1`` and ``g = O_g a_g / P``.
 
     Args:
         puffsats: Growth PuffSats one unit's push consumes, ``P``.
@@ -360,6 +361,10 @@ def role_growth(
     supply = onward_growth * growth_arrives / puffsats
     if supply <= 0.0 or onward_rods * rods_arrive <= 0.0:
         return 0.0
+    if rods_growth == 0.0 and rods_rods == 0.0:
+        # No departure spends returned mass (a methalox departure): every
+        # unit is a growth carrier, x = 1.
+        return float(supply)
 
     def gap(g: float) -> float:
         share = g / supply

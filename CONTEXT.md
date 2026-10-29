@@ -1992,6 +1992,15 @@ and $1.5 at 4 R_sun ($89). The Ceres loop flies it too ($1.488 and $1.741). A 1 
 Sun plate's own rating at 9.86 R_sun.
 _Avoid_: capping the arc by hand; the optimizer holds the floor as a constraint.
 
+**Sub-unit seed**:
+A seed smaller than one launch unit, flown as one smaller unit (`Design.unit_mass`,
+`solar_dive_growth.sub_unit`), and every generation after it until its sheets fill a whole one
+(the parent's S29; `src/small_seed.py`, `make small-seed`, ADR 0088). The **disk floor** keeps
+its Sun pulse, and so its Sun plate, at full size: the one indivisible part. A 2-Starship seed
+costs $3 / $11 at 9.86 R_sun and $1 / $3 at 4 R_sun, and one cycle; a 1-ship seed $12 / $42 and
+$5 / $21. The one-unit seed is 567.5 t (9.86 R_sun) and 673.9 t (4 R_sun).
+_Avoid_: quoting 622 t / 725 t; no aim ledger gives them.
+
 **Disk-train tolerance**:
 How far off centre a Sun-wave disk may arrive: centimetres, set by the bowl's 0.25 m bore, not
 the "meters" `sec:sun_wave_ranging` assumed (the simulation's Result 23, ADR 0086). With one
@@ -2040,6 +2049,17 @@ its slow 55-65 km/s streams (ADR 0076), with nitrogen bags (ADR 0077), it falls 
 1.65x / $1873 at best (0.5 g) and 1.24x / $10505 at 0.25 g, against the Sun dive's 3.36x
 and $146. Its windows are unequal (0.97-2.41x), so its steady cost is one whole chain's,
 and the harvest holds the fleet at its harvest size ($189/kg at 0.5 g).
+
+**Milestone 1** (methalox plate loop):
+The child's first milestone: the Jupiter-only plate loop leaving Earth on Raptor 3s
+(`src/methalox_jupiter_loop.py`, `make methalox-loop`, ADR
+`0088-milestone-one-on-methalox-and-the-smaller-seed`). The push is the plate loop's; its plate
+is left at apoapsis; every ship flies the growth trajectory, so nothing is split by role. It
+grows 1.08x per 3S on the three-synodic windows ($1344 steady, $10,559 / $34,376), at the
+Kapton table's k = 5 floor, and shrinks on the flown chain. No slower departure closes: on 3S
+to 5S clocks the returns stay at 50-60 km/s and anything below 11.5 km/s needs a correction of
+10 km/s or more.
+_Avoid_: reading the spray-cup methalox rows (1.27-1.33x) as milestone 1's growth.
 
 **Departure rate** (plate loop):
 The bowl's mean acceleration. It sets the burn's length and so its stream-in-view loss,

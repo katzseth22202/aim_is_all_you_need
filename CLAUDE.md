@@ -92,6 +92,8 @@ make carbon-equilibrium # B' of graphite in hot hydrogen (companion reply 2026-1
 make solar-dive     # the solar-dive charge-pusher cycle charged and priced, against the chamber (ADR 0072-0077; ARGS="--gaps" sweeps the gap)
 make solar-dive-best # the solar dive's best long-term steady price: mature book, plate reuse, lob sweep to its propellant floor, snow foam, what must fall to $3 (ADR 0082; ~8 min, ARGS="--sweep" adds the deep-closure scan)
 make plate-jupiter-loop # the Jupiter-only chain on the solar dive's plates, no Sun dive: does not pay (ADR 0075; ~10 min)
+make methalox-loop  # milestone 1: the Jupiter-only plate loop on a Raptor 3 departure, barely grows; slower departures do not close (ADR 0088; ~1 min)
+make small-seed     # the headline seed's tonnage, and a 1- or 2-Starship seed: the Sun plate is indivisible (ADR 0088; ~1 min)
 make sun-disk-floor # the 1 kg Sun-disk floor: the harder boost, the disk's gas, a 0.5/2 kg floor, stacking as a comparison (ADR 0085; ~1 min)
 make disk-train-aim # aiming the Sun-wave disk train: centimetre tolerance, the ship's track hold, CME drift, disk thrusters; the 1 Hz 2.5 kg train priced and rejected; the 1 kg disk on the 1.2x charge at 9.86 and 4 R_sun (ADR 0086, 0087; ~70 s)
 make ceres-dive     # the solar dive grown at Ceres: water push, depot rings, steady $/kg at L1, the $1 line (ADR 0083; ~5 min)
@@ -431,6 +433,17 @@ plate_jupiter_loop.py        ← solar_dive_growth.fly_earth + departure_visibil
                                 dive's push plate and bowl, no Sun dive; per-window
                                 ledgers, gated rNPV without the Sun gate, the return
                                 family at fixed epochs (ADR 0075)
+      ↓
+methalox_jupiter_loop.py     ← plate_jupiter_loop (its valuation through `fly`) +
+                                solar_dive_growth.push_and_turn +
+                                growth_ledger.best_methalox_departure: the child's
+                                milestone 1, the plate loop leaving Earth on Raptor 3s,
+                                no role split; slower departures on 3S-5S clocks (ADR 0088)
+
+small_seed.py                ← disk_train_aim + solar_dive_growth (sub_unit,
+                                value_design's seed_units) + seed_cost: the headline
+                                seed's tonnage and a 1- or 2-Starship seed; the Sun plate
+                                is what the disk floor keeps whole (ADR 0088)
 
 free_dsm_bound.py            ← real_orbit_resonance only: relaxes the split's
                                 correction into a free-burn MGA-nDSM problem
